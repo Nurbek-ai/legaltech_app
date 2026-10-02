@@ -31,7 +31,7 @@ class DashboardBackground extends StatelessWidget {
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFF557AC2).withValues(alpha: 0.12),
+                      const Color(0xFF557AC2).withOpacity(0.12),
                       Colors.transparent,
                     ],
                   ),
@@ -48,7 +48,7 @@ class DashboardBackground extends StatelessWidget {
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFF355B9C).withValues(alpha: 0.10),
+                      const Color(0xFF355B9C).withOpacity(0.10),
                       Colors.transparent,
                     ],
                   ),

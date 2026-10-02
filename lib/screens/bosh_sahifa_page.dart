@@ -126,10 +126,10 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.075),
+              color: Colors.white.withOpacity(0.075),
               shape: BoxShape.circle,
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.10),
+                color: Colors.white.withOpacity(0.10),
               ),
             ),
             child: Stack(
@@ -138,7 +138,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                 Icon(
                   CupertinoIcons.bell,
                   size: 19,
-                  color: Colors.white.withValues(alpha: 0.82),
+                  color: Colors.white.withOpacity(0.82),
                 ),
                 Positioned(
                   top: 9,
@@ -204,124 +204,10 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
         ),
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF273546).withValues(alpha: 0.88),
+        color: const Color(0xFF273546).withOpacity(0.88),
         borderRadius: BorderRadius.circular(17),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.105),
-        ),
-      ),
-      cursorColor: const Color(0xFFADC4FF),
-    );
-  }
-
-
-
-  Widget _buildTopBar() {
-    return Row(
-      children: [
-        const Text(
-          'YAN360',
-          style: TextStyle(
-            color: Color(0xFFF3F6FF),
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.4,
-          ),
-        ),
-        const Spacer(),
-        Semantics(
-          button: true,
-          label: 'Bildirishnomalar',
-          child: Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.075),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.10),
-              ),
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(
-                  CupertinoIcons.bell,
-                  size: 19,
-                  color: Colors.white.withValues(alpha: 0.82),
-                ),
-                Positioned(
-                  top: 9,
-                  right: 10,
-                  child: Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEF7D7D),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-
-
-  Widget _buildGreeting() {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Xush\nkelibsiz',
-          style: TextStyle(
-            color: Color(0xFFF5F3F0),
-            fontFamily: 'serif',
-            fontSize: 33,
-            fontWeight: FontWeight.w400,
-            height: 0.98,
-            letterSpacing: -0.9,
-          ),
-        ),
-      ],
-    );
-  }
-
-
-
-  Widget _buildSearch() {
-    return CupertinoTextField(
-      controller: _searchController,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      keyboardType: TextInputType.text,
-      textInputAction: TextInputAction.search,
-      style: const TextStyle(
-        color: Color(0xFFF2F5FA),
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-      ),
-      placeholder: 'Xizmatni izlang',
-      placeholderStyle: const TextStyle(
-        color: Color(0xFF8793A3),
-        fontSize: 14,
-      ),
-      prefix: const Padding(
-        padding: EdgeInsets.only(left: 16, right: 11),
-        child: Icon(
-          CupertinoIcons.search,
-          color: Color(0xFF8A98AA),
-          size: 18,
-        ),
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFF273546).withValues(alpha: 0.88),
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.105),
+          color: Colors.white.withOpacity(0.105),
         ),
       ),
       cursorColor: const Color(0xFFADC4FF),
@@ -387,11 +273,11 @@ class _ServiceCard extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(19),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.12),
+              color: Colors.white.withOpacity(0.12),
             ),
             boxShadow: [
               BoxShadow(
-                color: data.colors.last.withValues(alpha: 0.28),
+                color: data.colors.last.withOpacity(0.28),
                 blurRadius: 13,
                 offset: const Offset(0, 7),
               ),
@@ -407,10 +293,10 @@ class _ServiceCard extends StatelessWidget {
                     width: 37,
                     height: 37,
                     decoration: BoxDecoration(
-                      color: data.iconColor.withValues(alpha: 0.19),
+                      color: data.iconColor.withOpacity(0.19),
                       borderRadius: BorderRadius.circular(11),
                       border: Border.all(
-                        color: data.iconColor.withValues(alpha: 0.24),
+                        color: data.iconColor.withOpacity(0.24),
                       ),
                     ),
                     child: Icon(
@@ -423,7 +309,7 @@ class _ServiceCard extends StatelessWidget {
                   Icon(
                     CupertinoIcons.arrow_up_right,
                     size: 15,
-                    color: Colors.white.withValues(alpha: 0.42),
+                    color: Colors.white.withOpacity(0.42),
                   ),
                 ],
               ),
@@ -446,7 +332,7 @@ class _ServiceCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.58),
+                  color: Colors.white.withOpacity(0.58),
                   fontSize: 9.2,
                   height: 1.14,
                 ),

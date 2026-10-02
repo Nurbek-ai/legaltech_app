@@ -238,22 +238,22 @@ class _IntroScreenState extends State<IntroScreen>
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Colors.white.withValues(alpha: 0.12),
-                    const Color(0xFF6E96F5).withValues(alpha: 0.055),
-                    Colors.white.withValues(alpha: 0.018),
+                    Colors.white.withOpacity(0.12),
+                    const Color(0xFF6E96F5).withOpacity(0.055),
+                    Colors.white.withOpacity(0.018),
                   ],
                 ),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.15),
+                  color: Colors.white.withOpacity(0.15),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF4B78E8).withValues(alpha: 0.16),
+                    color: const Color(0xFF4B78E8).withOpacity(0.16),
                     blurRadius: 48,
                     spreadRadius: 2,
                   ),
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.45),
+                    color: Colors.black.withOpacity(0.45),
                     blurRadius: 30,
                     offset: const Offset(0, 16),
                   ),
@@ -295,7 +295,7 @@ class _IntroScreenState extends State<IntroScreen>
               style: TextStyle(
                 fontSize: 12,
                 letterSpacing: 0.15,
-                color: Colors.white.withValues(alpha: 0.43),
+                color: Colors.white.withOpacity(0.43),
               ),
             ),
           ],
@@ -313,14 +313,14 @@ class _IntroScreenState extends State<IntroScreen>
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(17, 19, 17, 17),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.052),
+            color: Colors.white.withOpacity(0.052),
             borderRadius: BorderRadius.circular(28),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.105),
+              color: Colors.white.withOpacity(0.105),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.34),
+                color: Colors.black.withOpacity(0.34),
                 blurRadius: 35,
                 offset: const Offset(0, 18),
               ),
@@ -350,7 +350,7 @@ class _IntroScreenState extends State<IntroScreen>
                       _subtitle,
                       style: TextStyle(
                         fontSize: 12.8,
-                        color: Colors.white.withValues(alpha: 0.45),
+                        color: Colors.white.withOpacity(0.45),
                       ),
                     ),
                   ],
@@ -394,7 +394,7 @@ class _IntroScreenState extends State<IntroScreen>
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF91B0FF).withValues(alpha: 0.9),
+                color: const Color(0xFF91B0FF).withOpacity(0.9),
               ),
             ),
           ],
@@ -766,7 +766,7 @@ class _IntroScreenState extends State<IntroScreen>
             fontSize: 10,
             fontWeight: FontWeight.w600,
             letterSpacing: 2.6,
-            color: Colors.white.withValues(alpha: 0.24),
+            color: Colors.white.withOpacity(0.24),
           ),
         ),
         const SizedBox(height: 6),
@@ -775,7 +775,7 @@ class _IntroScreenState extends State<IntroScreen>
           style: TextStyle(
             fontSize: 9.5,
             letterSpacing: 0.7,
-            color: Colors.white.withValues(alpha: 0.18),
+            color: Colors.white.withOpacity(0.18),
           ),
         ),
       ],
@@ -856,19 +856,19 @@ class _MainDashboardState extends State<MainDashboard> {
     return Positioned(
       left: 20,
       right: 20,
-      bottom: 18 + MediaQuery.paddingOf(context).bottom,
+      bottom: 18 + MediaQuery.of(context).padding.bottom,
       child: Container(
         height: 70,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFF283746).withValues(alpha: 0.96),
+          color: const Color(0xFF283746).withOpacity(0.96),
           borderRadius: BorderRadius.circular(23),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.12),
+            color: Colors.white.withOpacity(0.12),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.28),
+              color: Colors.black.withOpacity(0.28),
               blurRadius: 28,
               offset: const Offset(0, 12),
             ),
@@ -923,8 +923,8 @@ class _ProfessionalBackground extends StatelessWidget {
                 borderRadius: BorderRadius.circular(240),
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFF3269D8).withValues(alpha: 0.16),
-                    const Color(0xFF3269D8).withValues(alpha: 0.035),
+                    const Color(0xFF3269D8).withOpacity(0.16),
+                    const Color(0xFF3269D8).withOpacity(0.035),
                     Colors.transparent,
                   ],
                 ),
@@ -943,7 +943,7 @@ class _ProfessionalBackground extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFF214EAD).withValues(alpha: 0.075),
+                    const Color(0xFF214EAD).withOpacity(0.075),
                     Colors.transparent,
                   ],
                 ),
@@ -1015,7 +1015,7 @@ class _UzbekPhoneField extends StatelessWidget {
       ),
       placeholder: '** *** ** **',
       placeholderStyle: TextStyle(
-        color: Colors.white.withValues(alpha: 0.35),
+        color: Colors.white.withOpacity(0.35),
         fontSize: 14.5,
       ),
       prefix: Padding(
@@ -1023,14 +1023,14 @@ class _UzbekPhoneField extends StatelessWidget {
         child: Icon(
           CupertinoIcons.phone,
           size: 18,
-          color: Colors.white.withValues(alpha: 0.52),
+          color: Colors.white.withOpacity(0.52),
         ),
       ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.052),
+        color: Colors.white.withOpacity(0.052),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.095),
+          color: Colors.white.withOpacity(0.095),
         ),
       ),
       cursorColor: const Color(0xFF86A9FF),
@@ -1067,7 +1067,7 @@ class _LiquidTextField extends StatelessWidget {
       ),
       placeholder: hintText,
       placeholderStyle: TextStyle(
-        color: Colors.white.withValues(alpha: 0.35),
+        color: Colors.white.withOpacity(0.35),
         fontSize: 14.5,
       ),
       prefix: Padding(
@@ -1075,14 +1075,14 @@ class _LiquidTextField extends StatelessWidget {
         child: Icon(
           icon,
           size: 18,
-          color: Colors.white.withValues(alpha: 0.52),
+          color: Colors.white.withOpacity(0.52),
         ),
       ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.052),
+        color: Colors.white.withOpacity(0.052),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.095),
+          color: Colors.white.withOpacity(0.095),
         ),
       ),
       cursorColor: const Color(0xFF86A9FF),
@@ -1134,11 +1134,11 @@ class _LiquidPrimaryButtonState extends State<_LiquidPrimaryButton> {
             ),
             borderRadius: BorderRadius.circular(17),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.19),
+              color: Colors.white.withOpacity(0.19),
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF3E70E2).withValues(alpha: 0.27),
+                color: const Color(0xFF3E70E2).withOpacity(0.27),
                 blurRadius: 21,
                 offset: const Offset(0, 8),
               ),
@@ -1206,13 +1206,13 @@ class _LiquidSecondaryButtonState extends State<_LiquidSecondaryButton> {
           ),
           decoration: BoxDecoration(
             color: widget.active
-                ? const Color(0xFF5E88F5).withValues(alpha: 0.12)
-                : Colors.white.withValues(alpha: 0.042),
+                ? const Color(0xFF5E88F5).withOpacity(0.12)
+                : Colors.white.withOpacity(0.042),
             borderRadius: BorderRadius.circular(15),
             border: Border.all(
               color: widget.active
-                  ? const Color(0xFF769CFF).withValues(alpha: 0.43)
-                  : Colors.white.withValues(alpha: 0.095),
+                  ? const Color(0xFF769CFF).withOpacity(0.43)
+                  : Colors.white.withOpacity(0.095),
             ),
           ),
           child: Row(
@@ -1223,7 +1223,7 @@ class _LiquidSecondaryButtonState extends State<_LiquidSecondaryButton> {
                 size: 16,
                 color: widget.active
                     ? const Color(0xFFA8BEFF)
-                    : Colors.white.withValues(alpha: 0.61),
+                    : Colors.white.withOpacity(0.61),
               ),
               const SizedBox(width: 7),
               Flexible(
@@ -1236,7 +1236,7 @@ class _LiquidSecondaryButtonState extends State<_LiquidSecondaryButton> {
                     fontWeight: FontWeight.w600,
                     color: widget.active
                         ? const Color(0xFFBBD0FF)
-                        : Colors.white.withValues(alpha: 0.70),
+                        : Colors.white.withOpacity(0.70),
                   ),
                 ),
               ),

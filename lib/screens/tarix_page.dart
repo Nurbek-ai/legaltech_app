@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 class TarixPage extends StatefulWidget {
-  const _HistoryPage({super.key});
+  const TarixPage({super.key});
 
   @override
   State<TarixPage> createState() => _TarixPageState();
@@ -189,10 +189,10 @@ class _TarixPageState extends State<TarixPage> {
             height: 40,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.07),
+              color: Colors.white.withOpacity(0.07),
               borderRadius: BorderRadius.circular(13),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.11),
+                color: Colors.white.withOpacity(0.11),
               ),
             ),
             child: Row(
@@ -201,7 +201,7 @@ class _TarixPageState extends State<TarixPage> {
                   CupertinoIcons.trash,
                   size: 14,
                   color: _history.isEmpty
-                      ? Colors.white.withValues(alpha: 0.25)
+                      ? Colors.white.withOpacity(0.25)
                       : const Color(0xFFFFA4A4),
                 ),
                 const SizedBox(width: 6),
@@ -209,8 +209,8 @@ class _TarixPageState extends State<TarixPage> {
                   'Tozalash',
                   style: TextStyle(
                     color: _history.isEmpty
-                        ? Colors.white.withValues(alpha: 0.25)
-                        : Colors.white.withValues(alpha: 0.70),
+                        ? Colors.white.withOpacity(0.25)
+                        : Colors.white.withOpacity(0.70),
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -261,10 +261,10 @@ class _TarixPageState extends State<TarixPage> {
               ),
             ),
       decoration: BoxDecoration(
-        color: const Color(0xFF273546).withValues(alpha: 0.88),
+        color: const Color(0xFF273546).withOpacity(0.88),
         borderRadius: BorderRadius.circular(17),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.105),
+          color: Colors.white.withOpacity(0.105),
         ),
       ),
       cursorColor: const Color(0xFFADC4FF),
@@ -341,7 +341,7 @@ class _TarixPageState extends State<TarixPage> {
                 child: Text(
                   entry.key,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.52),
+                    color: Colors.white.withOpacity(0.52),
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.15,
@@ -368,10 +368,10 @@ class _TarixPageState extends State<TarixPage> {
     return Container(
       padding: const EdgeInsets.fromLTRB(22, 30, 22, 31),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.045),
+        color: Colors.white.withOpacity(0.045),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
+          color: Colors.white.withOpacity(0.08),
         ),
       ),
       child: Column(
@@ -380,7 +380,7 @@ class _TarixPageState extends State<TarixPage> {
             width: 58,
             height: 58,
             decoration: BoxDecoration(
-              color: const Color(0xFF6D8FD7).withValues(alpha: 0.13),
+              color: const Color(0xFF6D8FD7).withOpacity(0.13),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -403,7 +403,7 @@ class _TarixPageState extends State<TarixPage> {
             'Qidiruv so‘zini yoki filtrni o‘zgartirib ko‘ring.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.49),
+              color: Colors.white.withOpacity(0.49),
               fontSize: 12,
               height: 1.35,
             ),
@@ -456,9 +456,8 @@ class _TarixPageState extends State<TarixPage> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF18283A),
-      barrierColor: Colors.black.withValues(alpha: 0.62),
-      showDragHandle: true,
-      builder: (sheetContext) {
+      barrierColor: Colors.black.withOpacity(0.62),
+            builder: (sheetContext) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 2, 20, 22),
@@ -498,7 +497,7 @@ class _TarixPageState extends State<TarixPage> {
                           Text(
                             '${item.group}  •  ${item.time}',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.50),
+                              color: Colors.white.withOpacity(0.50),
                               fontSize: 11.5,
                             ),
                           ),
@@ -511,7 +510,7 @@ class _TarixPageState extends State<TarixPage> {
                 Text(
                   item.description,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.63),
+                    color: Colors.white.withOpacity(0.63),
                     fontSize: 13,
                     height: 1.35,
                   ),
@@ -560,7 +559,7 @@ class _TarixPageState extends State<TarixPage> {
           20,
           0,
           20,
-          98 + MediaQuery.paddingOf(context).bottom,
+          98 + MediaQuery.of(context).padding.bottom,
         ),
         backgroundColor: const Color(0xFF2A3D58),
         shape: RoundedRectangleBorder(
@@ -611,10 +610,10 @@ class _HistoryStat extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 10, 11),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.052),
+        color: Colors.white.withOpacity(0.052),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
+          color: Colors.white.withOpacity(0.08),
         ),
       ),
       child: Column(
@@ -635,7 +634,7 @@ class _HistoryStat extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.48),
+              color: Colors.white.withOpacity(0.48),
               fontSize: 10.5,
               fontWeight: FontWeight.w600,
             ),
@@ -666,13 +665,13 @@ class _HistoryFilterChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? const Color(0xFF557CD3).withValues(alpha: 0.30)
-              : Colors.white.withValues(alpha: 0.055),
+              ? const Color(0xFF557CD3).withOpacity(0.30)
+              : Colors.white.withOpacity(0.055),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: selected
-                ? const Color(0xFF88A9FF).withValues(alpha: 0.58)
-                : Colors.white.withValues(alpha: 0.08),
+                ? const Color(0xFF88A9FF).withOpacity(0.58)
+                : Colors.white.withOpacity(0.08),
           ),
         ),
         child: Text(
@@ -680,7 +679,7 @@ class _HistoryFilterChip extends StatelessWidget {
           style: TextStyle(
             color: selected
                 ? const Color(0xFFDCE6FF)
-                : Colors.white.withValues(alpha: 0.59),
+                : Colors.white.withOpacity(0.59),
             fontSize: 11.5,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
           ),
@@ -713,7 +712,7 @@ class _HistoryTimelineItem extends StatelessWidget {
                 color: data.iconBackground,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: data.color.withValues(alpha: 0.18),
+                  color: data.color.withOpacity(0.18),
                 ),
               ),
               child: Icon(
@@ -726,7 +725,7 @@ class _HistoryTimelineItem extends StatelessWidget {
             Container(
               width: 1,
               height: 23,
-              color: Colors.white.withValues(alpha: 0.10),
+              color: Colors.white.withOpacity(0.10),
             ),
           ],
         ),
@@ -738,10 +737,10 @@ class _HistoryTimelineItem extends StatelessWidget {
               constraints: const BoxConstraints(minHeight: 84),
               padding: const EdgeInsets.fromLTRB(13, 12, 11, 11),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.055),
+                color: Colors.white.withOpacity(0.055),
                 borderRadius: BorderRadius.circular(17),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.085),
+                  color: Colors.white.withOpacity(0.085),
                 ),
               ),
               child: Column(
@@ -767,7 +766,7 @@ class _HistoryTimelineItem extends StatelessWidget {
                       Text(
                         data.time,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.40),
+                          color: Colors.white.withOpacity(0.40),
                           fontSize: 10,
                         ),
                       ),
@@ -779,7 +778,7 @@ class _HistoryTimelineItem extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.45),
+                      color: Colors.white.withOpacity(0.45),
                       fontSize: 10.5,
                     ),
                   ),
@@ -806,7 +805,7 @@ class _HistoryTimelineItem extends StatelessWidget {
                       const Spacer(),
                       Icon(
                         CupertinoIcons.chevron_right,
-                        color: Colors.white.withValues(alpha: 0.34),
+                        color: Colors.white.withOpacity(0.34),
                         size: 14,
                       ),
                     ],
@@ -843,10 +842,10 @@ class _HistoryDetailAction extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 13),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: Colors.white.withOpacity(0.06),
           borderRadius: BorderRadius.circular(13),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.09),
+            color: Colors.white.withOpacity(0.09),
           ),
         ),
         child: Column(
@@ -856,7 +855,7 @@ class _HistoryDetailAction extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.68),
+                color: Colors.white.withOpacity(0.68),
                 fontSize: 10.5,
                 fontWeight: FontWeight.w600,
               ),

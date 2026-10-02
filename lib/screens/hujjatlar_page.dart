@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 class HujjatlarPage extends StatefulWidget {
-  const _DocumentsPage({super.key});
+  const HujjatlarPage({super.key});
 
   @override
   State<HujjatlarPage> createState() => _HujjatlarPageState();
@@ -72,7 +72,7 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
       date: '02-sentabr, 2026',
       status: 'Arxivlangan',
       statusColor: Color(0xFF9CA8B8),
-      icon: CupertinoIcons.archivebox,
+      icon: CupertinoIcons.folder,
       iconColor: Color(0xFFB9C3D2),
       iconBackground: Color(0xFF3C4654),
     ),
@@ -241,7 +241,7 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF527EEA).withValues(alpha: 0.25),
+                  color: const Color(0xFF527EEA).withOpacity(0.25),
                   blurRadius: 14,
                   offset: const Offset(0, 7),
                 ),
@@ -296,10 +296,10 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
               ),
             ),
       decoration: BoxDecoration(
-        color: const Color(0xFF273546).withValues(alpha: 0.88),
+        color: const Color(0xFF273546).withOpacity(0.88),
         borderRadius: BorderRadius.circular(17),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.105),
+          color: Colors.white.withOpacity(0.105),
         ),
       ),
       cursorColor: const Color(0xFFADC4FF),
@@ -361,10 +361,10 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
     return Container(
       padding: const EdgeInsets.fromLTRB(22, 29, 22, 30),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.045),
+        color: Colors.white.withOpacity(0.045),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
+          color: Colors.white.withOpacity(0.08),
         ),
       ),
       child: Column(
@@ -373,7 +373,7 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
             width: 58,
             height: 58,
             decoration: BoxDecoration(
-              color: const Color(0xFF6D8FD7).withValues(alpha: 0.13),
+              color: const Color(0xFF6D8FD7).withOpacity(0.13),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -396,7 +396,7 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
             'Qidiruv so‘zini yoki filtrni o‘zgartirib ko‘ring.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.49),
+              color: Colors.white.withOpacity(0.49),
               fontSize: 12,
               height: 1.35,
             ),
@@ -414,9 +414,8 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF18283A),
-      barrierColor: Colors.black.withValues(alpha: 0.62),
-      showDragHandle: true,
-      builder: (sheetContext) {
+      barrierColor: Colors.black.withOpacity(0.62),
+            builder: (sheetContext) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 2, 20, 20),
@@ -436,7 +435,7 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
                 Text(
                   'Boshlash usulini tanlang.',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.55),
+                    color: Colors.white.withOpacity(0.55),
                     fontSize: 12.5,
                   ),
                 ),
@@ -485,9 +484,8 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF18283A),
-      barrierColor: Colors.black.withValues(alpha: 0.62),
-      showDragHandle: true,
-      builder: (sheetContext) {
+      barrierColor: Colors.black.withOpacity(0.62),
+            builder: (sheetContext) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 2, 20, 22),
@@ -527,7 +525,7 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
                           Text(
                             '${document.type}  •  ${document.date}',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.50),
+                              color: Colors.white.withOpacity(0.50),
                               fontSize: 11.5,
                             ),
                           ),
@@ -590,7 +588,7 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
           20,
           0,
           20,
-          98 + MediaQuery.paddingOf(context).bottom,
+          98 + MediaQuery.of(context).padding.bottom,
         ),
         backgroundColor: const Color(0xFF2A3D58),
         shape: RoundedRectangleBorder(
@@ -641,10 +639,10 @@ class _DocumentStat extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 10, 11),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.052),
+        color: Colors.white.withOpacity(0.052),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
+          color: Colors.white.withOpacity(0.08),
         ),
       ),
       child: Column(
@@ -665,7 +663,7 @@ class _DocumentStat extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.48),
+              color: Colors.white.withOpacity(0.48),
               fontSize: 10.5,
               fontWeight: FontWeight.w600,
             ),
@@ -696,13 +694,13 @@ class _DocumentFilterChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? const Color(0xFF557CD3).withValues(alpha: 0.30)
-              : Colors.white.withValues(alpha: 0.055),
+              ? const Color(0xFF557CD3).withOpacity(0.30)
+              : Colors.white.withOpacity(0.055),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: selected
-                ? const Color(0xFF88A9FF).withValues(alpha: 0.58)
-                : Colors.white.withValues(alpha: 0.08),
+                ? const Color(0xFF88A9FF).withOpacity(0.58)
+                : Colors.white.withOpacity(0.08),
           ),
         ),
         child: Text(
@@ -710,7 +708,7 @@ class _DocumentFilterChip extends StatelessWidget {
           style: TextStyle(
             color: selected
                 ? const Color(0xFFDCE6FF)
-                : Colors.white.withValues(alpha: 0.59),
+                : Colors.white.withOpacity(0.59),
             fontSize: 11.5,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
           ),
@@ -740,10 +738,10 @@ class _DocumentListItem extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 84),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.055),
+            color: Colors.white.withOpacity(0.055),
             borderRadius: BorderRadius.circular(17),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.085),
+              color: Colors.white.withOpacity(0.085),
             ),
           ),
           child: Row(
@@ -755,7 +753,7 @@ class _DocumentListItem extends StatelessWidget {
                   color: document.iconBackground,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: document.iconColor.withValues(alpha: 0.18),
+                    color: document.iconColor.withOpacity(0.18),
                   ),
                 ),
                 child: Icon(
@@ -785,7 +783,7 @@ class _DocumentListItem extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.45),
+                        color: Colors.white.withOpacity(0.45),
                         fontSize: 10.5,
                       ),
                     ),
@@ -817,7 +815,7 @@ class _DocumentListItem extends StatelessWidget {
               const SizedBox(width: 8),
               Icon(
                 CupertinoIcons.chevron_right,
-                color: Colors.white.withValues(alpha: 0.38),
+                color: Colors.white.withOpacity(0.38),
                 size: 16,
               ),
             ],
@@ -851,10 +849,10 @@ class _DocumentCreateOption extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.055),
+          color: Colors.white.withOpacity(0.055),
           borderRadius: BorderRadius.circular(15),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.085),
+            color: Colors.white.withOpacity(0.085),
           ),
         ),
         child: Row(
@@ -863,7 +861,7 @@ class _DocumentCreateOption extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.13),
+                color: color.withOpacity(0.13),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: color, size: 20),
@@ -885,7 +883,7 @@ class _DocumentCreateOption extends StatelessWidget {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.48),
+                      color: Colors.white.withOpacity(0.48),
                       fontSize: 10.5,
                     ),
                   ),
@@ -895,7 +893,7 @@ class _DocumentCreateOption extends StatelessWidget {
             Icon(
               CupertinoIcons.chevron_right,
               size: 15,
-              color: Colors.white.withValues(alpha: 0.42),
+              color: Colors.white.withOpacity(0.42),
             ),
           ],
         ),
@@ -922,10 +920,10 @@ class _DocumentDetailAction extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 13),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: Colors.white.withOpacity(0.06),
           borderRadius: BorderRadius.circular(13),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.09),
+            color: Colors.white.withOpacity(0.09),
           ),
         ),
         child: Column(
@@ -939,7 +937,7 @@ class _DocumentDetailAction extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.68),
+                color: Colors.white.withOpacity(0.68),
                 fontSize: 10.5,
                 fontWeight: FontWeight.w600,
               ),

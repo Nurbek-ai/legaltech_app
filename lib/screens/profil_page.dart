@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 class ProfilPage extends StatefulWidget {
-  const _ProfilePage({super.key});
+  const ProfilPage({super.key});
 
   @override
   State<ProfilPage> createState() => _ProfilPageState();
@@ -71,7 +71,7 @@ class _ProfilPageState extends State<ProfilPage> {
                 Text(
                   '4 bo‘lim',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.43),
+                    color: Colors.white.withOpacity(0.43),
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                   ),
@@ -135,10 +135,10 @@ class _ProfilPageState extends State<ProfilPage> {
             height: 40,
             padding: const EdgeInsets.symmetric(horizontal: 13),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.07),
+              color: Colors.white.withOpacity(0.07),
               borderRadius: BorderRadius.circular(13),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.11),
+                color: Colors.white.withOpacity(0.11),
               ),
             ),
             child: Row(
@@ -146,13 +146,13 @@ class _ProfilPageState extends State<ProfilPage> {
                 Icon(
                   CupertinoIcons.pencil,
                   size: 15,
-                  color: Colors.white.withValues(alpha: 0.78),
+                  color: Colors.white.withOpacity(0.78),
                 ),
                 const SizedBox(width: 7),
                 Text(
                   'Tahrirlash',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.80),
+                    color: Colors.white.withOpacity(0.80),
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                   ),
@@ -169,10 +169,9 @@ class _ProfilPageState extends State<ProfilPage> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF18283A),
-      barrierColor: Colors.black.withValues(alpha: 0.62),
+      barrierColor: Colors.black.withOpacity(0.62),
       isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) {
+            builder: (sheetContext) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 2, 20, 20),
@@ -192,7 +191,7 @@ class _ProfilPageState extends State<ProfilPage> {
                 Text(
                   'Profilingiz uchun rasm tanlang yoki yangi suratga oling.',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.55),
+                    color: Colors.white.withOpacity(0.55),
                     fontSize: 12.5,
                   ),
                 ),
@@ -248,7 +247,7 @@ class _ProfilPageState extends State<ProfilPage> {
           20,
           0,
           20,
-          98 + MediaQuery.paddingOf(context).bottom,
+          98 + MediaQuery.of(context).padding.bottom,
         ),
         backgroundColor: const Color(0xFF2A3D58),
         shape: RoundedRectangleBorder(
@@ -282,12 +281,12 @@ class _ProfileIdentityCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.78),
+          color: Colors.white.withOpacity(0.78),
           width: 1.3,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6E92C8).withValues(alpha: 0.18),
+            color: const Color(0xFF6E92C8).withOpacity(0.18),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -305,7 +304,7 @@ class _ProfileIdentityCard extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFF7897C6).withValues(alpha: 0.22),
+                    const Color(0xFF7897C6).withOpacity(0.22),
                     Colors.transparent,
                   ],
                 ),
@@ -324,8 +323,8 @@ class _ProfileIdentityCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFFC1D3EA).withValues(alpha: 0.58),
-                      const Color(0xFF8EA8C8).withValues(alpha: 0.10),
+                      const Color(0xFFC1D3EA).withOpacity(0.58),
+                      const Color(0xFF8EA8C8).withOpacity(0.10),
                     ],
                   ),
                 ),
@@ -369,16 +368,16 @@ class _ProfileIdentityCard extends StatelessWidget {
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1A7A5D).withValues(alpha: 0.12),
+                        color: const Color(0xFF1A7A5D).withOpacity(0.12),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: const Color(0xFF1A7A5D).withValues(alpha: 0.22),
+                          color: const Color(0xFF1A7A5D).withOpacity(0.22),
                         ),
                       ),
                       child: const Row(
                         children: [
                           Icon(
-                            CupertinoIcons.checkmark_seal_fill,
+                            CupertinoIcons.check_mark_circled_solid,
                             size: 12,
                             color: Color(0xFF1A7A5D),
                           ),
@@ -451,10 +450,10 @@ class _ProfileIdentityCard extends StatelessWidget {
                       width: 47,
                       height: 47,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7C92B5).withValues(alpha: 0.16),
+                        color: const Color(0xFF7C92B5).withOpacity(0.16),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: const Color(0xFF7189AF).withValues(alpha: 0.23),
+                          color: const Color(0xFF7189AF).withOpacity(0.23),
                         ),
                       ),
                       child: const Icon(
@@ -471,7 +470,7 @@ class _ProfileIdentityCard extends StatelessWidget {
                     Text(
                       'RAQAMLI HUQUQIY PROFIL',
                       style: TextStyle(
-                        color: const Color(0xFF536783).withValues(alpha: 0.78),
+                        color: const Color(0xFF536783).withOpacity(0.78),
                         fontSize: 8.5,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.1,
@@ -481,7 +480,7 @@ class _ProfileIdentityCard extends StatelessWidget {
                     Icon(
                       CupertinoIcons.checkmark,
                       size: 18,
-                      color: const Color(0xFF6680A4).withValues(alpha: 0.72),
+                      color: const Color(0xFF6680A4).withOpacity(0.72),
                     ),
                   ],
                 ),
@@ -522,7 +521,7 @@ class _ProfileAvatar extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(15),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.70),
+                color: Colors.white.withOpacity(0.70),
                 width: 2,
               ),
             ),
@@ -553,7 +552,7 @@ class _ProfileAvatar extends StatelessWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.16),
+                    color: Colors.black.withOpacity(0.16),
                     blurRadius: 7,
                   ),
                 ],
@@ -605,10 +604,10 @@ class _ProfileMenuItem extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 75),
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.055),
+            color: Colors.white.withOpacity(0.055),
             borderRadius: BorderRadius.circular(17),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.085),
+              color: Colors.white.withOpacity(0.085),
             ),
           ),
           child: Row(
@@ -617,10 +616,10 @@ class _ProfileMenuItem extends StatelessWidget {
                 width: 47,
                 height: 47,
                 decoration: BoxDecoration(
-                  color: data.color.withValues(alpha: 0.13),
+                  color: data.color.withOpacity(0.13),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: data.color.withValues(alpha: 0.18),
+                    color: data.color.withOpacity(0.18),
                   ),
                 ),
                 child: Icon(
@@ -650,7 +649,7 @@ class _ProfileMenuItem extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.45),
+                        color: Colors.white.withOpacity(0.45),
                         fontSize: 10.5,
                       ),
                     ),
@@ -660,7 +659,7 @@ class _ProfileMenuItem extends StatelessWidget {
               const SizedBox(width: 8),
               Icon(
                 CupertinoIcons.chevron_right,
-                color: Colors.white.withValues(alpha: 0.42),
+                color: Colors.white.withOpacity(0.42),
                 size: 16,
               ),
             ],
@@ -698,10 +697,10 @@ class _ProfilePhotoAction extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.055),
+          color: Colors.white.withOpacity(0.055),
           borderRadius: BorderRadius.circular(15),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.085),
+            color: Colors.white.withOpacity(0.085),
           ),
         ),
         child: Row(
@@ -710,7 +709,7 @@ class _ProfilePhotoAction extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.13),
+                color: color.withOpacity(0.13),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: color, size: 20),
@@ -732,7 +731,7 @@ class _ProfilePhotoAction extends StatelessWidget {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.48),
+                      color: Colors.white.withOpacity(0.48),
                       fontSize: 10.5,
                     ),
                   ),
@@ -742,7 +741,7 @@ class _ProfilePhotoAction extends StatelessWidget {
             Icon(
               CupertinoIcons.chevron_right,
               size: 15,
-              color: Colors.white.withValues(alpha: 0.42),
+              color: Colors.white.withOpacity(0.42),
             ),
           ],
         ),
