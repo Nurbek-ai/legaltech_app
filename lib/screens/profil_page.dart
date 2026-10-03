@@ -9,388 +9,714 @@ class ProfilPage extends StatefulWidget {
 }
 
 class _ProfilPageState extends State<ProfilPage> {
-  static const _profileItems = <_ProfileItemData>[
-    _ProfileItemData(
-      icon: CupertinoIcons.folder,
-      title: 'Mening arizalarim',
-      subtitle: 'Yuborilgan va saqlangan arizalar',
-      color: Color(0xFF79A9FF),
+  static const _serviceItems = <_ProfileServiceData>[
+    _ProfileServiceData(
+      icon: CupertinoIcons.folder_fill,
+      title: 'Arizalarim',
+      subtitle: '3 ta ariza ko‘rib chiqilmoqda',
+      badge: '3 faol',
+      color: Color(0xFF78A7FF),
+      detail: 'Arizalaringizning holatini kuzating va kerakli hujjatlarni bir joydan boshqaring.',
     ),
-    _ProfileItemData(
-      icon: CupertinoIcons.doc_text,
-      title: 'Mening shartnomalarim',
-      subtitle: 'Shartnomalar va kelishuvlar',
-      color: Color(0xFFB994FF),
+    _ProfileServiceData(
+      icon: CupertinoIcons.doc_text_fill,
+      title: 'Shartnomalarim',
+      subtitle: '8 ta saqlangan kelishuv',
+      badge: '8 ta',
+      color: Color(0xFFB89AFF),
+      detail:
+          'Tayyorlangan shartnomalar va kelishuvlaringiz shu yerda saqlanadi.',
     ),
-    _ProfileItemData(
-      icon: CupertinoIcons.doc_text,
+    _ProfileServiceData(
+      icon: CupertinoIcons.building_2_fill,
       title: 'Sud ishlari',
-      subtitle: 'Sud jarayonlari va hujjatlar',
-      color: Color(0xFFFFB66E),
-    ),
-    _ProfileItemData(
-      icon: CupertinoIcons.briefcase,
-      title: 'Mehnat faoliyati',
-      subtitle: 'Mehnat hujjatlari va ma’lumotlar',
-      color: Color(0xFF6ED9B2),
+      subtitle: '1 ta ish bo‘yicha yangilanish bor',
+      badge: 'Yangilik',
+      color: Color(0xFFFFBC75),
+      detail: 'Sud jarayonlari, keyingi qadamlar va muhim hujjatlarni kuzatib boring.',
     ),
   ];
+
+  String _displayName = 'Nurbek Otamurodov';
+  bool _notificationsEnabled = true;
+  bool _biometricEnabled = true;
 
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
+      key: const ValueKey('profile-page'),
       physics: const BouncingScrollPhysics(),
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-          sliver: SliverToBoxAdapter(child: _buildHeader()),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
           sliver: SliverToBoxAdapter(
-            child: _ProfileIdentityCard(
-              onPhotoTap: _showPhotoOptions,
+            child: _ProfileBrandHeader(
+              notificationsEnabled: _notificationsEnabled,
+              onNotificationTap: _toggleNotifications,
+              onSettingsTap: _showSecuritySheet,
             ),
           ),
         ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 27, 20, 13),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: _ProfileHero(
+              name: _displayName,
+              onEditTap: _showEditProfileSheet,
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 26, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: _SectionHeader(
+              title: 'Faoliyat statistikasi',
+              trailing: 'Joriy oy',
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
           sliver: SliverToBoxAdapter(
             child: Row(
               children: [
-                const Text(
-                  'Faoliyatim',
-                  style: TextStyle(
-                    color: Color(0xFFF1F5FC),
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
+                Expanded(
+                  child: _ProfileStat(
+                    value: '03',
+                    label: 'Faol ariza',
+                    accent: const Color(0xFF83AAFF),
+                    icon: CupertinoIcons.folder,
+                    onTap: () => _showStatSheet(
+                      title: 'Faol arizalar',
+                      value: '03',
+                      description: 'Uchta arizangiz hozir mutaxassislar tomonidan ko‘rib chiqilmoqda.',
+                      icon: CupertinoIcons.folder_fill,
+                      color: const Color(0xFF83AAFF),
+                    ),
                   ),
                 ),
-                const Spacer(),
-                Text(
-                  '4 bo‘lim',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.43),
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _ProfileStat(
+                    value: '08',
+                    label: 'Hujjatlar',
+                    accent: const Color(0xFFD0B7FF),
+                    icon: CupertinoIcons.doc,
+                    onTap: () => _showStatSheet(
+                      title: 'Saqlangan hujjatlar',
+                      value: '08',
+                      description: 'Muhim hujjatlaringiz xavfsiz profilda tartibli saqlanmoqda.',
+                      icon: CupertinoIcons.doc_fill,
+                      color: const Color(0xFFD0B7FF),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _ProfileStat(
+                    value: '86%',
+                    label: 'Profil tayyor',
+                    accent: const Color(0xFF75DAB2),
+                    icon: CupertinoIcons.check_mark_circled,
+                    onTap: _showEditProfileSheet,
                   ),
                 ),
               ],
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 26, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: _SectionHeader(
+              title: 'Profil boshqaruvi',
+              trailing: 'Himoyalangan',
+              trailingIcon: CupertinoIcons.shield_lefthalf_fill,
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: _SecurityStatusCard(
+              biometricEnabled: _biometricEnabled,
+              onTap: _showSecuritySheet,
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 26, 20, 12),
+          sliver: SliverToBoxAdapter(
+            child: _SectionHeader(
+              title: 'Mening xizmatlarim',
+              trailing: '${_serviceItems.length} bo‘lim',
             ),
           ),
         ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 122),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) => Padding(
-                padding: EdgeInsets.only(
-                  bottom: index == _profileItems.length - 1 ? 0 : 10,
-                ),
-                child: _ProfileMenuItem(
-                  data: _profileItems[index],
-                  onTap: () => _showComingSoon(_profileItems[index].title),
-                ),
-              ),
-              childCount: _profileItems.length,
-            ),
+          sliver: SliverList.separated(
+            itemCount: _serviceItems.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final item = _serviceItems[index];
+              return _ProfileServiceTile(
+                data: item,
+                onTap: () => _showServiceSheet(item),
+              );
+            },
           ),
         ),
       ],
     );
   }
 
-  Widget _buildHeader() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Profil',
-                style: TextStyle(
-                  color: Color(0xFFF5F7FC),
-                  fontSize: 31,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.9,
-                ),
-              ),
-              SizedBox(height: 5),
-              Text(
-                'Shaxsiy ma’lumotlaringiz bir joyda',
-                style: TextStyle(
-                  color: Color(0xFF8F9CAE),
-                  fontSize: 12.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-        GestureDetector(
-          onTap: _showEditProfileMessage,
-          child: Container(
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 13),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.07),
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.11),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  CupertinoIcons.pencil,
-                  size: 15,
-                  color: Colors.white.withOpacity(0.78),
-                ),
-                const SizedBox(width: 7),
-                Text(
-                  'Tahrirlash',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.80),
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+  void _toggleNotifications() {
+    setState(() => _notificationsEnabled = !_notificationsEnabled);
+    _showMessage(
+      _notificationsEnabled
+          ? 'Bildirishnomalar yoqildi'
+          : 'Bildirishnomalar vaqtincha o‘chirildi',
     );
   }
 
-  void _showPhotoOptions() {
-    showModalBottomSheet<void>(
+  Future<void> _showEditProfileSheet() async {
+    final nameController = TextEditingController(text: _displayName);
+
+    await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF18283A),
-      barrierColor: Colors.black.withOpacity(0.62),
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-            builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 2, 20, 20),
+      builder: (sheetContext) {
+        final bottomInset = MediaQuery.viewInsetsOf(sheetContext).bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: bottomInset),
+          child: _ProfileBottomSheet(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Profil rasmini yangilash',
-                  style: TextStyle(
-                    color: Color(0xFFF4F7FD),
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 7),
-                Text(
-                  'Profilingiz uchun rasm tanlang yoki yangi suratga oling.',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.55),
-                    fontSize: 12.5,
-                  ),
-                ),
+                const _SheetHandle(),
                 const SizedBox(height: 18),
-                _ProfilePhotoAction(
-                  icon: CupertinoIcons.photo,
-                  title: 'Galereyadan tanlash',
-                  subtitle: 'Qurilmangizdagi rasmni yuklash',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _showComingSoon('Galereyadan rasm tanlash');
-                  },
+                const _SheetBrandMark(),
+                const SizedBox(height: 15),
+                const Text(
+                  'Profilni yangilash',
+                  style: TextStyle(
+                    color: Color(0xFFF5F8FF),
+                    fontSize: 23,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-                const SizedBox(height: 10),
-                _ProfilePhotoAction(
-                  icon: CupertinoIcons.camera,
-                  title: 'Kamera orqali suratga olish',
-                  subtitle: 'Yangi profil rasmi yarating',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _showComingSoon('Kamera orqali suratga olish');
-                  },
+                const SizedBox(height: 6),
+                Text(
+                  'Ismingiz profil kartasi va yuridik xizmatlarda aks etadi.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.56),
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
                 ),
-                const SizedBox(height: 10),
-                _ProfilePhotoAction(
-                  icon: CupertinoIcons.trash,
-                  title: 'Rasmni olib tashlash',
-                  subtitle: 'Standart avatarni qayta tiklash',
-                  destructive: true,
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _showComingSoon('Rasmni olib tashlash');
-                  },
+                const SizedBox(height: 20),
+                TextField(
+                  controller: nameController,
+                  textCapitalization: TextCapitalization.words,
+                  cursorColor: const Color(0xFF9DBBFF),
+                  style: const TextStyle(
+                    color: Color(0xFFF4F7FC),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'To‘liq ism',
+                    labelStyle: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.48),
+                    ),
+                    prefixIcon: const Icon(
+                      CupertinoIcons.person_fill,
+                      color: Color(0xFF9DBBFF),
+                      size: 19,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.055),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 17,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.11),
+                      ),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(14)),
+                      borderSide: BorderSide(color: Color(0xFF84A9FF)),
+                    ),
+                  ),
                 ),
+                const SizedBox(height: 12),
+                const _SheetInfoLine(
+                  icon: CupertinoIcons.checkmark_seal_fill,
+                  color: Color(0xFF6BD5AA),
+                  text: 'Shaxsingiz tasdiqlangan',
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      final newName = nameController.text.trim();
+                      if (newName.isEmpty) return;
+                      setState(() => _displayName = newName);
+                      Navigator.of(sheetContext).pop();
+                      _showMessage('Profil ma’lumotlari yangilandi');
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF4A79E0),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(CupertinoIcons.checkmark_alt),
+                    label: const Text(
+                      'O‘zgarishlarni saqlash',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
               ],
             ),
           ),
         );
       },
     );
+
+    nameController.dispose();
   }
 
-  void _showEditProfileMessage() {
-    _showComingSoon('Profil ma’lumotlarini tahrirlash');
+  Future<void> _showSecuritySheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return _ProfileBottomSheet(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _SheetHandle(),
+                  const SizedBox(height: 18),
+                  const _SheetBrandMark(),
+                  const SizedBox(height: 15),
+                  const Text(
+                    'Xavfsizlik markazi',
+                    style: TextStyle(
+                      color: Color(0xFFF5F8FF),
+                      fontSize: 23,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Profilingiz va hujjatlaringiz bir necha qatlamli himoya bilan saqlanadi.',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.56),
+                      fontSize: 13,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  _SecuritySetting(
+                    icon: CupertinoIcons.lock_shield_fill,
+                    title: 'Biometrik himoya',
+                    subtitle: 'Ilovaga kirishda Face ID yoki barmoq izi',
+                    value: _biometricEnabled,
+                    onChanged: (value) {
+                      setState(() => _biometricEnabled = value);
+                      setSheetState(() {});
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  const _SecuritySetting(
+                    icon: CupertinoIcons.checkmark_shield_fill,
+                    title: 'Tasdiqlangan akkaunt',
+                    subtitle: 'Shaxsiy ma’lumotlar tekshiruvdan o‘tgan',
+                    value: true,
+                    onChanged: null,
+                  ),
+                  const SizedBox(height: 18),
+                  const _SheetInfoLine(
+                    icon: CupertinoIcons.lock_fill,
+                    color: Color(0xFF9DBBFF),
+                    text: 'Ma’lumotlar uzatishda shifrlanadi',
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
-  void _showComingSoon(String action) {
+  void _showStatSheet({
+    required String title,
+    required String value,
+    required String description,
+    required IconData icon,
+    required Color color,
+  }) {
+    _showInsightSheet(
+      title: title,
+      value: value,
+      description: description,
+      icon: icon,
+      color: color,
+      footer: 'Ma’lumotlar profilingizdagi faoliyat asosida yangilanadi.',
+    );
+  }
+
+  void _showServiceSheet(_ProfileServiceData service) {
+    _showInsightSheet(
+      title: service.title,
+      value: service.badge,
+      description: service.detail,
+      icon: service.icon,
+      color: service.color,
+      footer: 'Yangi o‘zgarishlar bo‘lsa, sizga bildirishnoma yuboramiz.',
+    );
+  }
+
+  void _showInsightSheet({
+    required String title,
+    required String value,
+    required String description,
+    required IconData icon,
+    required Color color,
+    required String footer,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return _ProfileBottomSheet(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _SheetHandle(),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: color.withValues(alpha: 0.24)),
+                    ),
+                    child: Icon(icon, color: color, size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: Color(0xFFF5F8FF),
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                description,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.63),
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 18),
+              _SheetInfoLine(
+                icon: CupertinoIcons.bell_fill,
+                color: color,
+                text: footer,
+              ),
+              const SizedBox(height: 15),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$action — tez orada'),
+        content: Text(message),
         behavior: SnackBarBehavior.floating,
         margin: EdgeInsets.fromLTRB(
           20,
           0,
           20,
-          98 + MediaQuery.of(context).padding.bottom,
+          98 + MediaQuery.paddingOf(context).bottom,
         ),
-        backgroundColor: const Color(0xFF2A3D58),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+        backgroundColor: const Color(0xFF23364C),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
+}
+
+class _ProfileBrandHeader extends StatelessWidget {
+  final bool notificationsEnabled;
+  final VoidCallback onNotificationTap;
+  final VoidCallback onSettingsTap;
+
+  const _ProfileBrandHeader({
+    required this.notificationsEnabled,
+    required this.onNotificationTap,
+    required this.onSettingsTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+          ),
+          child: Image.asset('assets/logo.png', fit: BoxFit.contain),
+        ),
+        const SizedBox(width: 11),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'YAN360',
+                style: TextStyle(
+                  color: Color(0xFFF3F6FC),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.3,
+                ),
+              ),
+              SizedBox(height: 2),
+              Text(
+                'SHAXSIY YURIDIK PROFIL',
+                style: TextStyle(
+                  color: Color(0xFF8190A5),
+                  fontSize: 8,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.9,
+                ),
+              ),
+            ],
+          ),
+        ),
+        _HeaderIconButton(
+          icon: notificationsEnabled
+              ? CupertinoIcons.bell_fill
+              : CupertinoIcons.bell_slash,
+          tooltip: 'Bildirishnomalar',
+          showBadge: notificationsEnabled,
+          onTap: onNotificationTap,
+        ),
+        const SizedBox(width: 8),
+        _HeaderIconButton(
+          icon: CupertinoIcons.shield_fill,
+          tooltip: 'Xavfsizlik sozlamalari',
+          onTap: onSettingsTap,
+        ),
+      ],
+    );
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final bool showBadge;
+  final VoidCallback onTap;
+
+  const _HeaderIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.showBadge = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(13),
+          child: Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.065),
+              borderRadius: BorderRadius.circular(13),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.11)),
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(icon, color: const Color(0xFFB8C7DC), size: 19),
+                if (showBadge)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF73D9AF),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-class _ProfileIdentityCard extends StatelessWidget {
-  final VoidCallback onPhotoTap;
+class _ProfileHero extends StatelessWidget {
+  final String name;
+  final VoidCallback onEditTap;
 
-  const _ProfileIdentityCard({
-    required this.onPhotoTap,
-  });
+  const _ProfileHero({required this.name, required this.onEditTap});
 
   @override
   Widget build(BuildContext context) {
+    final nameParts = name.split(RegExp(r'\s+'));
+    final initials = nameParts
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .map((part) => part[0])
+        .join()
+        .toUpperCase();
+
     return Container(
-      height: 194,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFF4F7FB),
-            Color(0xFFD8E2F0),
-          ],
-        ),
+        color: const Color(0xFF17375C),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: Colors.white.withOpacity(0.78),
-          width: 1.3,
+          color: const Color(0xFF8DB1F0).withValues(alpha: 0.23),
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6E92C8).withOpacity(0.18),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
+            color: const Color(0xFF1D4A84).withValues(alpha: 0.26),
+            blurRadius: 26,
+            offset: const Offset(0, 14),
           ),
         ],
       ),
       child: Stack(
         children: [
           Positioned(
-            top: -70,
-            right: -45,
-            child: Container(
-              width: 190,
-              height: 190,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFF7897C6).withOpacity(0.22),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -72,
-            right: 28,
-            child: Transform.rotate(
-              angle: -0.2,
-              child: Container(
-                width: 106,
-                height: 60,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFFC1D3EA).withOpacity(0.58),
-                      const Color(0xFF8EA8C8).withOpacity(0.10),
-                    ],
-                  ),
-                ),
+            right: -33,
+            top: -18,
+            child: Opacity(
+              opacity: 0.10,
+              child: Image.asset(
+                'assets/logo.png',
+                width: 188,
+                height: 188,
+                fit: BoxFit.contain,
               ),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 17),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF17283D),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.lock,
-                        color: Color(0xFFBBD0EF),
-                        size: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 9),
-                    const Text(
-                      'YAN360',
-                      style: TextStyle(
-                        color: Color(0xFF17283D),
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 9,
-                        vertical: 5,
+                        vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1A7A5D).withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(8),
+                        color: const Color(0xFF7AE0B5).withValues(alpha: 0.13),
+                        borderRadius: BorderRadius.circular(9),
                         border: Border.all(
-                          color: const Color(0xFF1A7A5D).withOpacity(0.22),
+                          color: const Color(0xFF86E7BD)
+                              .withValues(alpha: 0.22),
                         ),
                       ),
                       child: const Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            CupertinoIcons.check_mark_circled_solid,
-                            size: 12,
-                            color: Color(0xFF1A7A5D),
+                            CupertinoIcons.checkmark_seal_fill,
+                            color: Color(0xFF80E2B5),
+                            size: 13,
                           ),
                           SizedBox(width: 5),
                           Text(
-                            'Tasdiqlangan',
+                            'TASDIQLANGAN',
                             style: TextStyle(
-                              color: Color(0xFF1A7A5D),
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFC3F3DC),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.65,
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                    const Spacer(),
+                    Tooltip(
+                      message: 'Profilni tahrirlash',
+                      child: IconButton(
+                        onPressed: onEditTap,
+                        icon: const Icon(CupertinoIcons.pencil),
+                        color: const Color(0xFFD8E5F9),
+                        iconSize: 18,
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.10),
+                          fixedSize: const Size(38, 38),
+                        ),
                       ),
                     ),
                   ],
@@ -399,90 +725,99 @@ class _ProfileIdentityCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _ProfileAvatar(onTap: onPhotoTap),
-                    const SizedBox(width: 14),
-                    const Expanded(
+                    Container(
+                      width: 66,
+                      height: 66,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0C1F3A),
+                        borderRadius: BorderRadius.circular(19),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.23),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          initials,
+                          style: const TextStyle(
+                            color: Color(0xFFDCEAFF),
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 13),
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Nurbek',
-                            style: TextStyle(
-                              color: Color(0xFF152338),
+                            name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFFF7F9FF),
                               fontSize: 21,
                               fontWeight: FontWeight.w800,
-                              height: 1.0,
-                              letterSpacing: -0.5,
+                              height: 1.06,
                             ),
                           ),
+                          const SizedBox(height: 6),
                           Text(
-                            'Otamurodov',
+                            'Raqamli huquqiy profil',
                             style: TextStyle(
-                              color: Color(0xFF152338),
-                              fontSize: 21,
-                              fontWeight: FontWeight.w800,
-                              height: 1.0,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          SizedBox(height: 9),
-                          Text(
-                            'A’zo bo‘lgan sana',
-                            style: TextStyle(
-                              color: Color(0xFF66748A),
-                              fontSize: 10.5,
+                              color: Colors.white.withValues(alpha: 0.65),
+                              fontSize: 12,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          SizedBox(height: 2),
+                          const SizedBox(height: 3),
                           Text(
-                            '2026',
+                            'A’zo bo‘lgan: 2026',
                             style: TextStyle(
-                              color: Color(0xFF263A55),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
+                              color: Colors.white.withValues(alpha: 0.43),
+                              fontSize: 10.5,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Container(
-                      width: 47,
-                      height: 47,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF7C92B5).withOpacity(0.16),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: const Color(0xFF7189AF).withOpacity(0.23),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Profil to‘liqligi',
+                        style: TextStyle(
+                          color: Color(0xFFD9E7FC),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      child: const Icon(
-                        CupertinoIcons.lock,
-                        color: Color(0xFF50698F),
-                        size: 23,
+                    ),
+                    Text(
+                      '86%',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.78),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
                 ),
-                const Spacer(),
-                Row(
-                  children: [
-                    Text(
-                      'RAQAMLI HUQUQIY PROFIL',
-                      style: TextStyle(
-                        color: const Color(0xFF536783).withOpacity(0.78),
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                    const Spacer(),
-                    Icon(
-                      CupertinoIcons.checkmark,
-                      size: 18,
-                      color: const Color(0xFF6680A4).withOpacity(0.72),
-                    ),
-                  ],
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: const LinearProgressIndicator(
+                    value: 0.86,
+                    minHeight: 7,
+                    color: Color(0xFF7CE0B4),
+                    backgroundColor: Color(0xFF315273),
+                  ),
                 ),
               ],
             ),
@@ -493,103 +828,60 @@ class _ProfileIdentityCard extends StatelessWidget {
   }
 }
 
-class _ProfileAvatar extends StatelessWidget {
-  final VoidCallback onTap;
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final String trailing;
+  final IconData? trailingIcon;
 
-  const _ProfileAvatar({
-    required this.onTap,
+  const _SectionHeader({
+    required this.title,
+    required this.trailing,
+    this.trailingIcon,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 82,
-            height: 94,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF2D4565),
-                  Color(0xFF14263D),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.70),
-                width: 2,
-              ),
-            ),
-            child: const Center(
-              child: Text(
-                'NO',
-                style: TextStyle(
-                  color: Color(0xFFDBE8FC),
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -1,
-                ),
-              ),
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: Color(0xFFF0F4FA),
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
             ),
           ),
-          Positioned(
-            right: -8,
-            bottom: -8,
-            child: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: const Color(0xFF315B91),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: const Color(0xFFF0F4FB),
-                  width: 2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.16),
-                    blurRadius: 7,
-                  ),
-                ],
-              ),
-              child: const Icon(
-                CupertinoIcons.camera_fill,
-                color: Colors.white,
-                size: 14,
-              ),
-            ),
-          ),
+        ),
+        if (trailingIcon != null) ...[
+          Icon(trailingIcon, color: const Color(0xFF79D8AE), size: 13),
+          const SizedBox(width: 5),
         ],
-      ),
+        Text(
+          trailing,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.44),
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _ProfileItemData {
+class _ProfileStat extends StatelessWidget {
+  final String value;
+  final String label;
+  final Color accent;
   final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-
-  const _ProfileItemData({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-  });
-}
-
-class _ProfileMenuItem extends StatelessWidget {
-  final _ProfileItemData data;
   final VoidCallback onTap;
 
-  const _ProfileMenuItem({
-    required this.data,
+  const _ProfileStat({
+    required this.value,
+    required this.label,
+    required this.accent,
+    required this.icon,
     required this.onTap,
   });
 
@@ -599,68 +891,41 @@ class _ProfileMenuItem extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(17),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 75),
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          height: 113,
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.055),
-            borderRadius: BorderRadius.circular(17),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.085),
-            ),
+            color: Colors.white.withValues(alpha: 0.055),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 47,
-                height: 47,
-                decoration: BoxDecoration(
-                  color: data.color.withOpacity(0.13),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: data.color.withOpacity(0.18),
-                  ),
-                ),
-                child: Icon(
-                  data.icon,
-                  color: data.color,
-                  size: 23,
+              Icon(icon, color: accent, size: 18),
+              const Spacer(),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: accent,
+                  fontSize: value.length > 2 ? 19 : 24,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
                 ),
               ),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      data.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFFF1F4FA),
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      data.subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.45),
-                        fontSize: 10.5,
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 5),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.52),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
                 ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                CupertinoIcons.chevron_right,
-                color: Colors.white.withOpacity(0.42),
-                size: 16,
               ),
             ],
           ),
@@ -670,83 +935,380 @@ class _ProfileMenuItem extends StatelessWidget {
   }
 }
 
-class _ProfilePhotoAction extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
+class _SecurityStatusCard extends StatelessWidget {
+  final bool biometricEnabled;
   final VoidCallback onTap;
-  final bool destructive;
 
-  const _ProfilePhotoAction({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
+  const _SecurityStatusCard({
+    required this.biometricEnabled,
     required this.onTap,
-    this.destructive = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = destructive
-        ? const Color(0xFFFF8B8B)
-        : const Color(0xFF9DBBFF);
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.055),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.085),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            color: const Color(0xFF153329).withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: const Color(0xFF75D9AF).withValues(alpha: 0.18),
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.13),
-                borderRadius: BorderRadius.circular(12),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF75D9AF).withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  CupertinoIcons.lock_shield_fill,
+                  color: Color(0xFF83DEB7),
+                  size: 22,
+                ),
               ),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Color(0xFFF2F5FB),
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w700,
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      biometricEnabled
+                          ? 'Biometrik himoya faol'
+                          : 'Biometrik himoyani yoqing',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFFE9F8F0),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.48),
-                      fontSize: 10.5,
+                    const SizedBox(height: 4),
+                    Text(
+                      biometricEnabled
+                          ? 'Profilingiz qo‘shimcha himoyalangan'
+                          : 'Hujjatlarni yanada ishonchli saqlang',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.52),
+                        fontSize: 10.5,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Icon(
-              CupertinoIcons.chevron_right,
-              size: 15,
-              color: Colors.white.withOpacity(0.42),
-            ),
-          ],
+              const SizedBox(width: 8),
+              const Icon(
+                CupertinoIcons.chevron_right,
+                color: Color(0xFF9BDCBF),
+                size: 17,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
+class _ProfileServiceData {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String badge;
+  final Color color;
+  final String detail;
+
+  const _ProfileServiceData({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.badge,
+    required this.color,
+    required this.detail,
+  });
+}
+
+class _ProfileServiceTile extends StatelessWidget {
+  final _ProfileServiceData data;
+  final VoidCallback onTap;
+
+  const _ProfileServiceTile({required this.data, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(17),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.055),
+            borderRadius: BorderRadius.circular(17),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.085)),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 78),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: data.color.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: data.color.withValues(alpha: 0.20),
+                    ),
+                  ),
+                  child: Icon(data.icon, color: data.color, size: 21),
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        data.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFFF0F4FA),
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        data.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.46),
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 9),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: data.color.withValues(alpha: 0.11),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Text(
+                        data.badge,
+                        style: TextStyle(
+                          color: data.color,
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Icon(
+                      CupertinoIcons.chevron_right,
+                      color: Colors.white.withValues(alpha: 0.37),
+                      size: 14,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileBottomSheet extends StatelessWidget {
+  final Widget child;
+
+  const _ProfileBottomSheet({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        8,
+        20,
+        20 + MediaQuery.paddingOf(context).bottom,
+      ),
+      decoration: const BoxDecoration(
+        color: Color(0xFF17283A),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 38,
+        height: 4,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.20),
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetBrandMark extends StatelessWidget {
+  const _SheetBrandMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 38,
+      height: 38,
+      padding: const EdgeInsets.all(7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF4A79E0).withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF9DBBFF).withValues(alpha: 0.22),
+        ),
+      ),
+      child: Image.asset('assets/logo.png', fit: BoxFit.contain),
+    );
+  }
+}
+
+class _SheetInfoLine extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  const _SheetInfoLine({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: color, size: 16),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.56),
+              fontSize: 11.5,
+              height: 1.35,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SecuritySetting extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  const _SecuritySetting({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.055),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.085)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFF7BE0B4).withValues(alpha: 0.13),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: const Color(0xFF86E5BA), size: 19),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Color(0xFFF1F5FA),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.46),
+                    fontSize: 10.5,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          CupertinoSwitch(
+            value: value,
+            activeTrackColor: const Color(0xFF57B88D),
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
