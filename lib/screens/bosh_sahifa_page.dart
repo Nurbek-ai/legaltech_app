@@ -1,7 +1,10 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+
+import '../shared/user_profile.dart';
+import '../shared/profile_widgets.dart';
 
 class BoshSahifaPage extends StatefulWidget {
   const BoshSahifaPage({super.key});
@@ -23,7 +26,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
     ),
     _ServiceCardData(
       title: 'Konsultatsiya',
-      caption: 'Masalangiz bo‘yicha yuridik maslahat',
+      caption: 'Masalangiz bo\'yicha yuridik maslahat',
       artwork: 'assets/service_artwork/consultation.png',
       colors: [Color(0xFF876B3E), Color(0xFF51402E)],
       glow: Color(0xFFFFD18B),
@@ -43,8 +46,8 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
       glow: Color(0xFFFFB4C4),
     ),
     _ServiceCardData(
-      title: 'Ona ta’minoti uchun aliment undirish',
-      caption: 'Ona ta’minoti uchun huquqiy yordam',
+      title: 'Ona ta\'minoti uchun aliment undirish',
+      caption: 'Ona ta\'minoti uchun huquqiy yordam',
       artwork: 'assets/service_artwork/mother_support.png',
       colors: [Color(0xFF327D79), Color(0xFF24545A)],
       glow: Color(0xFF9DE9D9),
@@ -57,8 +60,8 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
       glow: Color(0xFFA9DFFF),
     ),
     _ServiceCardData(
-      title: 'Bola bilan ko‘rishish tartibini belgilash',
-      caption: 'Ko‘rishish tartibini huquqiy belgilash',
+      title: 'Bola bilan ko\'rishish tartibini belgilash',
+      caption: 'Ko\'rishish tartibini huquqiy belgilash',
       artwork: 'assets/service_artwork/visitation.png',
       colors: [Color(0xFF76538A), Color(0xFF4D3A68)],
       glow: Color(0xFFD9B8FF),
@@ -111,8 +114,13 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           sliver: SliverToBoxAdapter(child: _buildBrandHeader()),
         ),
+        // ── Mini profile card ──────────────────────────────────────────────
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+          sliver: SliverToBoxAdapter(child: _buildMiniProfileCard()),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
           sliver: SliverToBoxAdapter(child: _buildSectionHeading()),
         ),
         SliverPadding(
@@ -146,6 +154,23 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
       ],
     );
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Mini profile card
+  // ─────────────────────────────────────────────────────────────────────────
+
+  Widget _buildMiniProfileCard() {
+    return ValueListenableBuilder<UserProfileData>(
+      valueListenable: userProfile,
+      builder: (context, profile, _) {
+        return _MiniProfileCard(profile: profile);
+      },
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Rest of the page (unchanged logic)
+  // ─────────────────────────────────────────────────────────────────────────
 
   Widget _buildBrandHeader() {
     return Row(
@@ -362,7 +387,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
           ),
           const SizedBox(height: 7),
           Text(
-            'Qidiruv so‘zini o‘zgartirib ko‘ring.',
+            "Qidiruv so\'zini o\'zgartirib ko'ring.",
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white.withOpacity(0.49),
@@ -396,6 +421,247 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
     );
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Mini Profile Card
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _MiniProfileCard extends StatelessWidget {
+  final UserProfileData profile;
+
+  const _MiniProfileCard({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          height: 100,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF1C3356).withOpacity(0.92),
+                const Color(0xFF111E35).withOpacity(0.97),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.13),
+              width: 1.1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0B1F44).withOpacity(0.55),
+                blurRadius: 22,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              // Subtle top-left glow
+              Positioned(
+                top: -30,
+                left: -30,
+                child: Container(
+                  width: 110,
+                  height: 90,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xFF4A7CF8).withOpacity(0.18),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Subtle bottom-right glow
+              Positioned(
+                bottom: -25,
+                right: -20,
+                child: Container(
+                  width: 90,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xFF6DD5C0).withOpacity(0.12),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Top shine line
+              Positioned(
+                top: 0,
+                left: 30,
+                right: 30,
+                child: Container(
+                  height: 1,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        Colors.white.withOpacity(0.28),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Main content: [left stats] — [avatar] — [right stats]
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // ── Left stat ──────────────────────────────────────────
+                    Expanded(
+                      child: _MiniStatColumn(
+                        value: profile.activeApplications.toString(),
+                        label: 'Arizalar',
+                        accent: const Color(0xFF83AAFF),
+                        icon: CupertinoIcons.doc_text_fill,
+                      ),
+                    ),
+                    // ── Center: avatar ─────────────────────────────────────
+                    _MiniAvatarBubble(profile: profile),
+                    // ── Right stat ─────────────────────────────────────────
+                    Expanded(
+                      child: _MiniStatColumn(
+                        value: profile.completionPercent,
+                        label: 'Profil',
+                        accent: const Color(0xFF74DDB0),
+                        icon: CupertinoIcons.checkmark_seal_fill,
+                        alignRight: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The big circular avatar in the centre of the mini card.
+class _MiniAvatarBubble extends StatelessWidget {
+  final UserProfileData profile;
+
+  const _MiniAvatarBubble({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _openFullScreen(context),
+      child: Container(
+        width: 72,
+        height: 72,
+        margin: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF3A6ADE), Color(0xFF1A3D8A)],
+          ),
+          border: Border.all(
+            color: const Color(0xFF6A9EFF).withOpacity(0.55),
+            width: 2.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF3060D0).withOpacity(0.45),
+              blurRadius: 16,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: ClipOval(
+          child: buildAvatarContent(profile),
+        ),
+      ),
+    );
+  }
+
+  void _openFullScreen(BuildContext context) {
+    if (profile.avatarFile == null) return;
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        opaque: false,
+        pageBuilder: (_, __, ___) =>
+            FullScreenPhotoPage(file: profile.avatarFile!),
+      ),
+    );
+  }
+}
+
+/// Left or right statistic column inside the mini card.
+class _MiniStatColumn extends StatelessWidget {
+  final String value;
+  final String label;
+  final Color accent;
+  final IconData icon;
+  final bool alignRight;
+
+  const _MiniStatColumn({
+    required this.value,
+    required this.label,
+    required this.accent,
+    required this.icon,
+    this.alignRight = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crossAxis =
+        alignRight ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: crossAxis,
+      children: [
+        Icon(icon, color: accent, size: 13),
+        const SizedBox(height: 5),
+        Text(
+          value,
+          style: TextStyle(
+            color: accent,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            height: 1,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          maxLines: 1,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.52),
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Service card (unchanged)
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _ServiceCardData {
   final String title;

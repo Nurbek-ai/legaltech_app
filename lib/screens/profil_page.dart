@@ -1,5 +1,14 @@
+﻿import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../shared/user_profile.dart';
+import '../shared/profile_widgets.dart';
+
+// Re-export the helpers needed by bosh_sahifa_page.dart
+export '../shared/user_profile.dart';
 
 class ProfilPage extends StatefulWidget {
   const ProfilPage({super.key});
@@ -13,10 +22,11 @@ class _ProfilPageState extends State<ProfilPage> {
     _ProfileServiceData(
       icon: CupertinoIcons.folder_fill,
       title: 'Arizalarim',
-      subtitle: '3 ta ariza ko‘rib chiqilmoqda',
+      subtitle: '3 ta ariza ko\'rib chiqilmoqda',
       badge: '3 faol',
       color: Color(0xFF78A7FF),
-      detail: 'Arizalaringizning holatini kuzating va kerakli hujjatlarni bir joydan boshqaring.',
+      detail:
+          'Arizalaringizning holatini kuzating va kerakli hujjatlarni bir joydan boshqaring.',
     ),
     _ProfileServiceData(
       icon: CupertinoIcons.doc_text_fill,
@@ -30,158 +40,273 @@ class _ProfilPageState extends State<ProfilPage> {
     _ProfileServiceData(
       icon: CupertinoIcons.building_2_fill,
       title: 'Sud ishlari',
-      subtitle: '1 ta ish bo‘yicha yangilanish bor',
+      subtitle: '1 ta ish bo\'yicha yangilanish bor',
       badge: 'Yangilik',
       color: Color(0xFFFFBC75),
-      detail: 'Sud jarayonlari, keyingi qadamlar va muhim hujjatlarni kuzatib boring.',
+      detail:
+          'Sud jarayonlari, keyingi qadamlar va muhim hujjatlarni kuzatib boring.',
     ),
   ];
 
-  String _displayName = 'Nurbek Otamurodov';
   bool _notificationsEnabled = true;
   bool _biometricEnabled = true;
 
+  final _picker = ImagePicker();
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Build
+  // ──────────────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      key: const ValueKey('profile-page'),
-      physics: const BouncingScrollPhysics(),
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-          sliver: SliverToBoxAdapter(
-            child: _ProfileBrandHeader(
-              notificationsEnabled: _notificationsEnabled,
-              onNotificationTap: _toggleNotifications,
-              onSettingsTap: _showSecuritySheet,
+    return ValueListenableBuilder<UserProfileData>(
+      valueListenable: userProfile,
+      builder: (context, profile, _) {
+        return CustomScrollView(
+          key: const ValueKey('profile-page'),
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: _ProfileBrandHeader(
+                  notificationsEnabled: _notificationsEnabled,
+                  onNotificationTap: _toggleNotifications,
+                  onSettingsTap: _showSecuritySheet,
+                ),
+              ),
             ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-          sliver: SliverToBoxAdapter(
-            child: _ProfileHero(
-              name: _displayName,
-              onEditTap: _showEditProfileSheet,
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: _ProfileHero(
+                  profile: profile,
+                  onEditTap: () => _showEditProfileSheet(profile),
+                  onAvatarTap: () => _openAvatarViewer(profile),
+                  onAvatarUploadTap: _pickAvatarImage,
+                ),
+              ),
             ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 26, 20, 0),
-          sliver: SliverToBoxAdapter(
-            child: _SectionHeader(
-              title: 'Faoliyat statistikasi',
-              trailing: 'Joriy oy',
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 26, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: _SectionHeader(
+                  title: 'Faoliyat statistikasi',
+                  trailing: 'Joriy oy',
+                ),
+              ),
             ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-          sliver: SliverToBoxAdapter(
-            child: Row(
-              children: [
-                Expanded(
-                  child: _ProfileStat(
-                    value: '03',
-                    label: 'Faol ariza',
-                    accent: const Color(0xFF83AAFF),
-                    icon: CupertinoIcons.folder,
-                    onTap: () => _showStatSheet(
-                      title: 'Faol arizalar',
-                      value: '03',
-                      description: 'Uchta arizangiz hozir mutaxassislar tomonidan ko‘rib chiqilmoqda.',
-                      icon: CupertinoIcons.folder_fill,
-                      color: const Color(0xFF83AAFF),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _ProfileStat(
+                        value: profile.activeApplications.toString(),
+                        label: 'Faol ariza',
+                        accent: const Color(0xFF83AAFF),
+                        icon: CupertinoIcons.folder,
+                        onTap: () => _showStatSheet(
+                          title: 'Faol arizalar',
+                          value: profile.activeApplications.toString(),
+                          description:
+                              'Arizalaringiz hozir mutaxassislar tomonidan ko\'rib chiqilmoqda.',
+                          icon: CupertinoIcons.folder_fill,
+                          color: const Color(0xFF83AAFF),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _ProfileStat(
-                    value: '08',
-                    label: 'Hujjatlar',
-                    accent: const Color(0xFFD0B7FF),
-                    icon: CupertinoIcons.doc,
-                    onTap: () => _showStatSheet(
-                      title: 'Saqlangan hujjatlar',
-                      value: '08',
-                      description: 'Muhim hujjatlaringiz xavfsiz profilda tartibli saqlanmoqda.',
-                      icon: CupertinoIcons.doc_fill,
-                      color: const Color(0xFFD0B7FF),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _ProfileStat(
+                        value: profile.savedDocuments.toString(),
+                        label: 'Hujjatlar',
+                        accent: const Color(0xFFD0B7FF),
+                        icon: CupertinoIcons.doc,
+                        onTap: () => _showStatSheet(
+                          title: 'Saqlangan hujjatlar',
+                          value: profile.savedDocuments.toString(),
+                          description:
+                              'Muhim hujjatlaringiz xavfsiz profilda tartibli saqlanmoqda.',
+                          icon: CupertinoIcons.doc_fill,
+                          color: const Color(0xFFD0B7FF),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _ProfileStat(
+                        value: profile.completionPercent,
+                        label: 'Profil tayyor',
+                        accent: const Color(0xFF75DAB2),
+                        icon: CupertinoIcons.check_mark_circled,
+                        onTap: () => _showEditProfileSheet(profile),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _ProfileStat(
-                    value: '86%',
-                    label: 'Profil tayyor',
-                    accent: const Color(0xFF75DAB2),
-                    icon: CupertinoIcons.check_mark_circled,
-                    onTap: _showEditProfileSheet,
-                  ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 26, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: _SectionHeader(
+                  title: 'Profil boshqaruvi',
+                  trailing: 'Himoyalangan',
+                  trailingIcon: CupertinoIcons.shield_lefthalf_fill,
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 26, 20, 0),
-          sliver: SliverToBoxAdapter(
-            child: _SectionHeader(
-              title: 'Profil boshqaruvi',
-              trailing: 'Himoyalangan',
-              trailingIcon: CupertinoIcons.shield_lefthalf_fill,
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: _SecurityStatusCard(
+                  biometricEnabled: _biometricEnabled,
+                  onTap: _showSecuritySheet,
+                ),
+              ),
             ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-          sliver: SliverToBoxAdapter(
-            child: _SecurityStatusCard(
-              biometricEnabled: _biometricEnabled,
-              onTap: _showSecuritySheet,
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 26, 20, 12),
+              sliver: SliverToBoxAdapter(
+                child: _SectionHeader(
+                  title: 'Mening xizmatlarim',
+                  trailing: '${_serviceItems.length} bo\'lim',
+                ),
+              ),
             ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 26, 20, 12),
-          sliver: SliverToBoxAdapter(
-            child: _SectionHeader(
-              title: 'Mening xizmatlarim',
-              trailing: '${_serviceItems.length} bo‘lim',
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 122),
+              sliver: SliverList.separated(
+                itemCount: _serviceItems.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final item = _serviceItems[index];
+                  return _ProfileServiceTile(
+                    data: item,
+                    onTap: () => _showServiceSheet(item),
+                  );
+                },
+              ),
             ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 122),
-          sliver: SliverList.separated(
-            itemCount: _serviceItems.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final item = _serviceItems[index];
-              return _ProfileServiceTile(
-                data: item,
-                onTap: () => _showServiceSheet(item),
-              );
-            },
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Avatar actions
+  // ──────────────────────────────────────────────────────────────────────────
+
+  Future<void> _pickAvatarImage() async {
+    final choice = await _showImageSourceSheet();
+    if (choice == null) return;
+
+    final XFile? picked;
+    try {
+      picked = await _picker.pickImage(
+        source: choice,
+        imageQuality: 85,
+        maxWidth: 1024,
+        maxHeight: 1024,
+      );
+    } catch (_) {
+      _showMessage('Rasm tanlashda xatolik yuz berdi.');
+      return;
+    }
+
+    if (picked == null) return;
+
+    final file = File(picked.path);
+    userProfile.value = userProfile.value.copyWith(avatarFile: file);
+    _showMessage('Profil rasmi yangilandi ✓');
+  }
+
+  Future<ImageSource?> _showImageSourceSheet() async {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return _ProfileBottomSheet(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _SheetHandle(),
+              const SizedBox(height: 18),
+              const _SheetBrandMark(),
+              const SizedBox(height: 14),
+              const Text(
+                'Profil rasmini tanlash',
+                style: TextStyle(
+                  color: Color(0xFFF5F8FF),
+                  fontSize: 21,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Manba tanlang: galereya, kamera yoki fayl.',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.52),
+                  fontSize: 13,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 22),
+              _SourceButton(
+                icon: CupertinoIcons.photo_on_rectangle,
+                label: 'Galereya',
+                subtitle: 'Telefondan rasm tanlash',
+                color: const Color(0xFF83AAFF),
+                onTap: () => Navigator.pop(sheetCtx, ImageSource.gallery),
+              ),
+              const SizedBox(height: 10),
+              _SourceButton(
+                icon: CupertinoIcons.camera_fill,
+                label: 'Kamera',
+                subtitle: 'Hozir suratga olish',
+                color: const Color(0xFF74DDB0),
+                onTap: () => Navigator.pop(sheetCtx, ImageSource.camera),
+              ),
+              const SizedBox(height: 14),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _openAvatarViewer(UserProfileData profile) {
+    if (profile.avatarFile == null) {
+      _showMessage('Rasm yuklanmagan. Avval rasm tanlang.');
+      return;
+    }
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        opaque: false,
+        pageBuilder: (_, __, ___) =>
+            FullScreenPhotoPage(file: profile.avatarFile!),
+      ),
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Other actions
+  // ──────────────────────────────────────────────────────────────────────────
 
   void _toggleNotifications() {
     setState(() => _notificationsEnabled = !_notificationsEnabled);
     _showMessage(
       _notificationsEnabled
           ? 'Bildirishnomalar yoqildi'
-          : 'Bildirishnomalar vaqtincha o‘chirildi',
+          : 'Bildirishnomalar vaqtincha o\'chirildi',
     );
   }
 
-  Future<void> _showEditProfileSheet() async {
-    final nameController = TextEditingController(text: _displayName);
+  Future<void> _showEditProfileSheet(UserProfileData profile) async {
+    final nameController = TextEditingController(text: profile.displayName);
 
     await showModalBottomSheet<void>(
       context: context,
@@ -228,7 +353,7 @@ class _ProfilPageState extends State<ProfilPage> {
                     fontWeight: FontWeight.w600,
                   ),
                   decoration: InputDecoration(
-                    labelText: 'To‘liq ism',
+                    labelText: 'To\'liq ism',
                     labelStyle: TextStyle(
                       color: Colors.white.withValues(alpha: 0.48),
                     ),
@@ -269,9 +394,10 @@ class _ProfilPageState extends State<ProfilPage> {
                     onPressed: () {
                       final newName = nameController.text.trim();
                       if (newName.isEmpty) return;
-                      setState(() => _displayName = newName);
+                      userProfile.value =
+                          userProfile.value.copyWith(displayName: newName);
                       Navigator.of(sheetContext).pop();
-                      _showMessage('Profil ma’lumotlari yangilandi');
+                      _showMessage('Profil ma\'lumotlari yangilandi');
                     },
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFF4A79E0),
@@ -282,7 +408,7 @@ class _ProfilPageState extends State<ProfilPage> {
                     ),
                     icon: const Icon(CupertinoIcons.checkmark_alt),
                     label: const Text(
-                      'O‘zgarishlarni saqlash',
+                      'O\'zgarishlarni saqlash',
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
@@ -347,7 +473,7 @@ class _ProfilPageState extends State<ProfilPage> {
                   const _SecuritySetting(
                     icon: CupertinoIcons.checkmark_shield_fill,
                     title: 'Tasdiqlangan akkaunt',
-                    subtitle: 'Shaxsiy ma’lumotlar tekshiruvdan o‘tgan',
+                    subtitle: 'Shaxsiy ma\'lumotlar tekshiruvdan o\'tgan',
                     value: true,
                     onChanged: null,
                   ),
@@ -355,7 +481,7 @@ class _ProfilPageState extends State<ProfilPage> {
                   const _SheetInfoLine(
                     icon: CupertinoIcons.lock_fill,
                     color: Color(0xFF9DBBFF),
-                    text: 'Ma’lumotlar uzatishda shifrlanadi',
+                    text: 'Ma\'lumotlar uzatishda shifrlanadi',
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -380,7 +506,7 @@ class _ProfilPageState extends State<ProfilPage> {
       description: description,
       icon: icon,
       color: color,
-      footer: 'Ma’lumotlar profilingizdagi faoliyat asosida yangilanadi.',
+      footer: 'Ma\'lumotlar profilingizdagi faoliyat asosida yangilanadi.',
     );
   }
 
@@ -391,7 +517,7 @@ class _ProfilPageState extends State<ProfilPage> {
       description: service.detail,
       icon: service.icon,
       color: service.color,
-      footer: 'Yangi o‘zgarishlar bo‘lsa, sizga bildirishnoma yuboramiz.',
+      footer: 'Yangi o\'zgarishlar bo\'lsa, sizga bildirishnoma yuboramiz.',
     );
   }
 
@@ -488,6 +614,360 @@ class _ProfilPageState extends State<ProfilPage> {
     );
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Profile Hero Card (enlarged photo, prominent avatar)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _ProfileHero extends StatelessWidget {
+  final UserProfileData profile;
+  final VoidCallback onEditTap;
+  final VoidCallback onAvatarTap;
+  final VoidCallback onAvatarUploadTap;
+
+  const _ProfileHero({
+    required this.profile,
+    required this.onEditTap,
+    required this.onAvatarTap,
+    required this.onAvatarUploadTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: const Color(0xFF17375C),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: const Color(0xFF8DB1F0).withValues(alpha: 0.23),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1D4A84).withValues(alpha: 0.30),
+            blurRadius: 30,
+            offset: const Offset(0, 16),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          // Watermark logo
+          Positioned(
+            right: -33,
+            top: -18,
+            child: Opacity(
+              opacity: 0.09,
+              child: Image.asset(
+                'assets/logo.png',
+                width: 200,
+                height: 200,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top row: verified badge + edit button
+                Row(
+                  children: [
+                    if (profile.isVerified)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              const Color(0xFF7AE0B5).withValues(alpha: 0.13),
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(
+                            color: const Color(0xFF86E7BD)
+                                .withValues(alpha: 0.22),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              CupertinoIcons.checkmark_seal_fill,
+                              color: Color(0xFF80E2B5),
+                              size: 13,
+                            ),
+                            SizedBox(width: 5),
+                            Text(
+                              'TASDIQLANGAN',
+                              style: TextStyle(
+                                color: Color(0xFFC3F3DC),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.65,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const Spacer(),
+                    Tooltip(
+                      message: 'Profilni tahrirlash',
+                      child: IconButton(
+                        onPressed: onEditTap,
+                        icon: const Icon(CupertinoIcons.pencil),
+                        color: const Color(0xFFD8E5F9),
+                        iconSize: 18,
+                        style: IconButton.styleFrom(
+                          backgroundColor:
+                              Colors.white.withValues(alpha: 0.10),
+                          fixedSize: const Size(38, 38),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                // ── Centered avatar + name row ──────────────────────────────
+                Center(
+                  child: Column(
+                    children: [
+                      // Avatar with upload button overlay
+                      Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          // The actual avatar
+                          GestureDetector(
+                            onTap: onAvatarTap,
+                            child: Hero(
+                              tag: 'profile-avatar',
+                              child: Container(
+                                width: 110,
+                                height: 110,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFF3A6ADE),
+                                      Color(0xFF1A3D8A),
+                                    ],
+                                  ),
+                                  border: Border.all(
+                                    color: const Color(0xFF6A9EFF)
+                                        .withValues(alpha: 0.55),
+                                    width: 3,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF3060D0)
+                                          .withValues(alpha: 0.50),
+                                      blurRadius: 22,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                                child: ClipOval(
+                                  child: buildAvatarContent(profile, initialsSize: 34),
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Upload button (camera icon bubble)
+                          GestureDetector(
+                            onTap: onAvatarUploadTap,
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF4A79E0),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFF17375C),
+                                  width: 2.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color:
+                                        const Color(0xFF4A79E0).withValues(alpha: 0.4),
+                                    blurRadius: 8,
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                CupertinoIcons.camera_fill,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      // Name
+                      Text(
+                        profile.displayName,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFFF7F9FF),
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        profile.role,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.62),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'A\'zo bo\'lgan: ${profile.memberSince}',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.40),
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                // Completion bar
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Profil to\'liqligi',
+                        style: TextStyle(
+                          color: Color(0xFFD9E7FC),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      profile.completionPercent,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.78),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: profile.profileCompletion,
+                    minHeight: 7,
+                    color: const Color(0xFF7CE0B4),
+                    backgroundColor: const Color(0xFF315273),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Image source button
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SourceButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _SourceButton({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.085),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: 0.22)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(icon, color: color, size: 21),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: Color(0xFFF3F6FC),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.46),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                CupertinoIcons.chevron_right,
+                color: color.withValues(alpha: 0.60),
+                size: 15,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Supporting widgets (largely unchanged, kept for completeness)
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _ProfileBrandHeader extends StatelessWidget {
   final bool notificationsEnabled;
@@ -612,217 +1092,6 @@ class _HeaderIconButton extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ProfileHero extends StatelessWidget {
-  final String name;
-  final VoidCallback onEditTap;
-
-  const _ProfileHero({required this.name, required this.onEditTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final nameParts = name.split(RegExp(r'\s+'));
-    final initials = nameParts
-        .where((part) => part.isNotEmpty)
-        .take(2)
-        .map((part) => part[0])
-        .join()
-        .toUpperCase();
-
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: const Color(0xFF17375C),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: const Color(0xFF8DB1F0).withValues(alpha: 0.23),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1D4A84).withValues(alpha: 0.26),
-            blurRadius: 26,
-            offset: const Offset(0, 14),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -33,
-            top: -18,
-            child: Opacity(
-              opacity: 0.10,
-              child: Image.asset(
-                'assets/logo.png',
-                width: 188,
-                height: 188,
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 17),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF7AE0B5).withValues(alpha: 0.13),
-                        borderRadius: BorderRadius.circular(9),
-                        border: Border.all(
-                          color: const Color(0xFF86E7BD)
-                              .withValues(alpha: 0.22),
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            CupertinoIcons.checkmark_seal_fill,
-                            color: Color(0xFF80E2B5),
-                            size: 13,
-                          ),
-                          SizedBox(width: 5),
-                          Text(
-                            'TASDIQLANGAN',
-                            style: TextStyle(
-                              color: Color(0xFFC3F3DC),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.65,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Spacer(),
-                    Tooltip(
-                      message: 'Profilni tahrirlash',
-                      child: IconButton(
-                        onPressed: onEditTap,
-                        icon: const Icon(CupertinoIcons.pencil),
-                        color: const Color(0xFFD8E5F9),
-                        iconSize: 18,
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.10),
-                          fixedSize: const Size(38, 38),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 66,
-                      height: 66,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0C1F3A),
-                        borderRadius: BorderRadius.circular(19),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.23),
-                          width: 1.2,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          initials,
-                          style: const TextStyle(
-                            color: Color(0xFFDCEAFF),
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 13),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFFF7F9FF),
-                              fontSize: 21,
-                              fontWeight: FontWeight.w800,
-                              height: 1.06,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Raqamli huquqiy profil',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.65),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            'A’zo bo‘lgan: 2026',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.43),
-                              fontSize: 10.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Profil to‘liqligi',
-                        style: TextStyle(
-                          color: Color(0xFFD9E7FC),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '86%',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.78),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: const LinearProgressIndicator(
-                    value: 0.86,
-                    minHeight: 7,
-                    color: Color(0xFF7CE0B4),
-                    backgroundColor: Color(0xFF315273),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -995,7 +1264,7 @@ class _SecurityStatusCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       biometricEnabled
-                          ? 'Profilingiz qo‘shimcha himoyalangan'
+                          ? 'Profilingiz qo\'shimcha himoyalangan'
                           : 'Hujjatlarni yanada ishonchli saqlang',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
