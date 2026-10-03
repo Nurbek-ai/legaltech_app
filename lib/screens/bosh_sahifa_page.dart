@@ -15,68 +15,60 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
 
   static const _services = <_ServiceCardData>[
     _ServiceCardData(
-      title: 'Sudga ariza\nyozish',
+      title: 'Sudga ariza yozish',
       caption: 'Sudga murojaat uchun ariza tayyorlash',
-      icon: CupertinoIcons.doc_text_search,
-      accentIcon: CupertinoIcons.checkmark,
+      artwork: 'assets/service_artwork/court_filing.png',
       colors: [Color(0xFF405EA8), Color(0xFF263967)],
-      iconColor: Color(0xFFC1C9FF),
+      glow: Color(0xFF8EA7FF),
     ),
     _ServiceCardData(
       title: 'Konsultatsiya',
       caption: 'Masalangiz bo‘yicha yuridik maslahat',
-      icon: CupertinoIcons.person_2,
-      accentIcon: CupertinoIcons.chat_bubble,
+      artwork: 'assets/service_artwork/consultation.png',
       colors: [Color(0xFF876B3E), Color(0xFF51402E)],
-      iconColor: Color(0xFFFFD18B),
+      glow: Color(0xFFFFD18B),
     ),
     _ServiceCardData(
-      title: 'Advokat\nyollash',
+      title: 'Advokat yollash',
       caption: 'Sizga mos advokatni topish',
-      icon: CupertinoIcons.briefcase,
-      accentIcon: CupertinoIcons.checkmark,
+      artwork: 'assets/service_artwork/lawyer.png',
       colors: [Color(0xFF634D9C), Color(0xFF3E326D)],
-      iconColor: Color(0xFFDCC8FF),
+      glow: Color(0xFFDCC8FF),
     ),
     _ServiceCardData(
-      title: 'Bolaga aliment\nundirish',
+      title: 'Bolaga aliment undirish',
       caption: 'Farzandingiz uchun aliment talab qilish',
-      icon: CupertinoIcons.heart_fill,
-      accentIcon: CupertinoIcons.person_fill,
+      artwork: 'assets/service_artwork/child_support.png',
       colors: [Color(0xFF854463), Color(0xFF552F4C)],
-      iconColor: Color(0xFFFFB4C4),
+      glow: Color(0xFFFFB4C4),
     ),
     _ServiceCardData(
-      title: 'Ona ta’minoti uchun\naliment undirish',
+      title: 'Ona ta’minoti uchun aliment undirish',
       caption: 'Ona ta’minoti uchun huquqiy yordam',
-      icon: CupertinoIcons.heart,
-      accentIcon: CupertinoIcons.person,
+      artwork: 'assets/service_artwork/mother_support.png',
       colors: [Color(0xFF327D79), Color(0xFF24545A)],
-      iconColor: Color(0xFF9DE9D9),
+      glow: Color(0xFF9DE9D9),
     ),
     _ServiceCardData(
-      title: 'Bolaning yashash\njoyini belgilash',
+      title: 'Bolaning yashash joyini belgilash',
       caption: 'Bola yashash joyini rasmiy belgilash',
-      icon: CupertinoIcons.house_fill,
-      accentIcon: CupertinoIcons.location,
+      artwork: 'assets/service_artwork/child_residence.png',
       colors: [Color(0xFF386D8D), Color(0xFF294A6A)],
-      iconColor: Color(0xFFA9DFFF),
+      glow: Color(0xFFA9DFFF),
     ),
     _ServiceCardData(
-      title: 'Bola bilan ko‘rishish\ntartibini belgilash',
+      title: 'Bola bilan ko‘rishish tartibini belgilash',
       caption: 'Ko‘rishish tartibini huquqiy belgilash',
-      icon: CupertinoIcons.person_2,
-      accentIcon: CupertinoIcons.heart_fill,
+      artwork: 'assets/service_artwork/visitation.png',
       colors: [Color(0xFF76538A), Color(0xFF4D3A68)],
-      iconColor: Color(0xFFD9B8FF),
+      glow: Color(0xFFD9B8FF),
     ),
     _ServiceCardData(
-      title: 'Nikohdan\najrashish',
+      title: 'Nikohdan ajrashish',
       caption: 'Ajrashish arizasini tayyorlash',
-      icon: CupertinoIcons.doc_text,
-      accentIcon: CupertinoIcons.checkmark,
+      artwork: 'assets/service_artwork/divorce.png',
       colors: [Color(0xFF8A6541), Color(0xFF583F34)],
-      iconColor: Color(0xFFFFD09B),
+      glow: Color(0xFFFFD09B),
     ),
   ];
 
@@ -116,19 +108,19 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
       physics: const BouncingScrollPhysics(),
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-          sliver: SliverToBoxAdapter(child: _buildTopBar()),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+          sliver: SliverToBoxAdapter(child: _buildBrandHeader()),
         ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 29, 20, 0),
-          sliver: SliverToBoxAdapter(child: _buildGreeting()),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+          sliver: SliverToBoxAdapter(child: _buildSectionHeading()),
         ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+          padding: const EdgeInsets.fromLTRB(20, 11, 20, 0),
           sliver: SliverToBoxAdapter(child: _buildSearch()),
         ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 122),
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 122),
           sliver: visibleServices.isEmpty
               ? SliverToBoxAdapter(child: _buildEmptyState())
               : SliverGrid(
@@ -145,9 +137,9 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                   gridDelegate:
                       const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    mainAxisExtent: 176,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    mainAxisExtent: 145,
                   ),
                 ),
         ),
@@ -155,48 +147,82 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildBrandHeader() {
     return Row(
       children: [
-        const Text(
-          'YAN360',
-          style: TextStyle(
-            color: Color(0xFFF3F6FF),
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.4,
+        Container(
+          width: 34,
+          height: 34,
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.075),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withOpacity(0.17)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF7599F7).withOpacity(0.18),
+                blurRadius: 16,
+              ),
+            ],
           ),
+          child: Image.asset('assets/logo.png', fit: BoxFit.contain),
+        ),
+        const SizedBox(width: 10),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'YAN360',
+              style: TextStyle(
+                color: Color(0xFFF4F7FF),
+                fontSize: 13.5,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.55,
+                height: 1,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'YURIDIK XIZMATLAR',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.47),
+                fontSize: 7,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.4,
+                height: 1,
+              ),
+            ),
+          ],
         ),
         const Spacer(),
         Semantics(
           button: true,
           label: 'Bildirishnomalar',
           child: Container(
-            width: 42,
-            height: 42,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.075),
               shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withOpacity(0.10),
-              ),
+              border: Border.all(color: Colors.white.withOpacity(0.12)),
             ),
             child: Stack(
               alignment: Alignment.center,
               children: [
                 Icon(
                   CupertinoIcons.bell,
-                  size: 19,
+                  size: 17,
                   color: Colors.white.withOpacity(0.82),
                 ),
                 Positioned(
-                  top: 9,
-                  right: 10,
+                  top: 8,
+                  right: 9,
                   child: Container(
                     width: 6,
                     height: 6,
                     decoration: const BoxDecoration(
-                      color: Color(0xFFEF7D7D),
+                      color: Color(0xFF8FB4FF),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -209,19 +235,37 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
     );
   }
 
-  Widget _buildGreeting() {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildSectionHeading() {
+    return Row(
       children: [
-        Text(
-          'Xush\nkelibsiz',
+        const Text(
+          'Kerakli xizmatni tanlang',
           style: TextStyle(
-            color: Color(0xFFF5F3F0),
-            fontFamily: 'serif',
-            fontSize: 33,
-            fontWeight: FontWeight.w400,
-            height: 0.98,
-            letterSpacing: -0.9,
+            color: Color(0xFFF6F8FF),
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.35,
+            height: 1.1,
+          ),
+        ),
+        const Spacer(),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            color: const Color(0xFF8EACF8).withOpacity(0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFF9FB7F7).withOpacity(0.20),
+            ),
+          ),
+          child: Text(
+            '08 XIZMAT',
+            style: TextStyle(
+              color: const Color(0xFFC7D5FF).withOpacity(0.88),
+              fontSize: 7.4,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.75,
+            ),
           ),
         ),
       ],
@@ -229,50 +273,58 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
   }
 
   Widget _buildSearch() {
-    return CupertinoTextField(
-      controller: _searchController,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      keyboardType: TextInputType.text,
-      textInputAction: TextInputAction.search,
-      style: const TextStyle(
-        color: Color(0xFFF2F5FA),
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-      ),
-      placeholder: 'Xizmatni izlang',
-      placeholderStyle: const TextStyle(
-        color: Color(0xFF8793A3),
-        fontSize: 14,
-      ),
-      prefix: const Padding(
-        padding: EdgeInsets.only(left: 16, right: 11),
-        child: Icon(
-          CupertinoIcons.search,
-          color: Color(0xFF8A98AA),
-          size: 18,
+    return SizedBox(
+      height: 46,
+      child: CupertinoTextField(
+        controller: _searchController,
+        padding: const EdgeInsets.symmetric(horizontal: 13),
+        keyboardType: TextInputType.text,
+        textInputAction: TextInputAction.search,
+        style: const TextStyle(
+          color: Color(0xFFF2F5FA),
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
         ),
-      ),
-      suffix: _searchController.text.isEmpty
-          ? null
-          : GestureDetector(
-              onTap: _searchController.clear,
-              child: const Padding(
-                padding: EdgeInsets.only(right: 14),
-                child: Icon(
-                  CupertinoIcons.xmark_circle_fill,
-                  color: Color(0xFF738197),
-                  size: 17,
+        placeholder: 'Xizmatni izlang',
+        placeholderStyle: const TextStyle(
+          color: Color(0xFF8793A3),
+          fontSize: 12,
+        ),
+        prefix: const Padding(
+          padding: EdgeInsets.only(left: 3, right: 9),
+          child: Icon(
+            CupertinoIcons.search,
+            color: Color(0xFF9AA9BC),
+            size: 17,
+          ),
+        ),
+        suffix: _searchController.text.isEmpty
+            ? null
+            : GestureDetector(
+                onTap: _searchController.clear,
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 8, right: 2),
+                  child: Icon(
+                    CupertinoIcons.xmark_circle_fill,
+                    color: Color(0xFF8793A3),
+                    size: 16,
+                  ),
                 ),
               ),
+        decoration: BoxDecoration(
+          color: const Color(0xFF273546).withOpacity(0.91),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.13)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.12),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
             ),
-      decoration: BoxDecoration(
-        color: const Color(0xFF273546).withOpacity(0.88),
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.105),
+          ],
         ),
+        cursorColor: const Color(0xFFADC4FF),
       ),
-      cursorColor: const Color(0xFFADC4FF),
     );
   }
 
@@ -282,9 +334,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.045),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.08),
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
       child: Column(
         children: [
@@ -332,7 +382,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
   void _showServiceMessage(_ServiceCardData service) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${service.title.replaceAll('\n', ' ')} — tez orada'),
+        content: Text('${service.title} — tez orada'),
         behavior: SnackBarBehavior.floating,
         margin: EdgeInsets.fromLTRB(
           20,
@@ -341,9 +391,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
           98 + MediaQuery.of(context).padding.bottom,
         ),
         backgroundColor: const Color(0xFF2A3D58),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
   }
@@ -352,18 +400,16 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
 class _ServiceCardData {
   final String title;
   final String caption;
-  final IconData icon;
-  final IconData accentIcon;
+  final String artwork;
   final List<Color> colors;
-  final Color iconColor;
+  final Color glow;
 
   const _ServiceCardData({
     required this.title,
     required this.caption,
-    required this.icon,
-    required this.accentIcon,
+    required this.artwork,
     required this.colors,
-    required this.iconColor,
+    required this.glow,
   });
 }
 
@@ -371,10 +417,7 @@ class _LiquidServiceCard extends StatefulWidget {
   final _ServiceCardData data;
   final VoidCallback onTap;
 
-  const _LiquidServiceCard({
-    required this.data,
-    required this.onTap,
-  });
+  const _LiquidServiceCard({required this.data, required this.onTap});
 
   @override
   State<_LiquidServiceCard> createState() => _LiquidServiceCardState();
@@ -386,10 +429,11 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
   @override
   Widget build(BuildContext context) {
     final data = widget.data;
+    final radius = BorderRadius.circular(20);
 
     return Semantics(
       button: true,
-      label: data.title.replaceAll('\n', ' '),
+      label: data.title,
       child: GestureDetector(
         onTapDown: (_) => setState(() => _pressed = true),
         onTapCancel: () => setState(() => _pressed = false),
@@ -399,332 +443,177 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
         },
         child: AnimatedScale(
           scale: _pressed ? 0.975 : 1,
-          duration: const Duration(milliseconds: 120),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(21),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(14, 13, 13, 13),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    data.colors.first.withOpacity(0.90),
-                    Color.lerp(data.colors.first, data.colors.last, 0.52)!
-                        .withOpacity(0.94),
-                    data.colors.last.withOpacity(0.97),
-                  ],
-                  stops: const [0, 0.48, 1],
+          duration: const Duration(milliseconds: 130),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              boxShadow: [
+                BoxShadow(
+                  color: data.colors.last.withOpacity(0.34),
+                  blurRadius: 17,
+                  offset: const Offset(0, 7),
                 ),
-                borderRadius: BorderRadius.circular(21),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.22),
-                  width: 1.15,
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.16),
+                  blurRadius: 3,
+                  offset: const Offset(0, 2),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: data.colors.last.withOpacity(0.32),
-                    blurRadius: 19,
-                    offset: const Offset(0, 9),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: radius,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 9, sigmaY: 9),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(11, 8, 10, 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        data.colors.first.withOpacity(0.95),
+                        Color.lerp(data.colors.first, data.colors.last, 0.48)!
+                            .withOpacity(0.96),
+                        data.colors.last.withOpacity(0.99),
+                      ],
+                      stops: const [0, 0.52, 1],
+                    ),
+                    borderRadius: radius,
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.24),
+                      width: 1.1,
+                    ),
                   ),
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.14),
-                    blurRadius: 3,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      top: -59,
-                      left: -48,
-                      child: Container(
-                        width: 150,
-                        height: 125,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              data.iconColor.withOpacity(0.30),
-                              data.iconColor.withOpacity(0.04),
-                              Colors.transparent,
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: -48,
-                      bottom: -62,
-                      child: Container(
-                        width: 142,
-                        height: 126,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              Colors.white.withOpacity(0.14),
-                              Colors.transparent,
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 0,
-                      left: 25,
-                      right: 25,
-                      child: Container(
-                        height: 1,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.transparent,
-                              Colors.white.withOpacity(0.30),
-                              Colors.transparent,
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _LiquidServiceArtwork(
-                              icon: data.icon,
-                              accentIcon: data.accentIcon,
-                              color: data.iconColor,
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: -55,
+                        left: -49,
+                        child: Container(
+                          width: 125,
+                          height: 108,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                data.glow.withOpacity(0.30),
+                                data.glow.withOpacity(0.07),
+                                Colors.transparent,
+                              ],
+                              stops: const [0, 0.52, 1],
                             ),
-                            const Spacer(),
-                            Container(
-                              width: 25,
-                              height: 25,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.10),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.18),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: -37,
+                        bottom: -53,
+                        child: Container(
+                          width: 112,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                Colors.white.withOpacity(0.14),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 0,
+                        left: 24,
+                        right: 24,
+                        child: Container(
+                          height: 1,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.transparent,
+                                Colors.white.withOpacity(0.34),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Image.asset(
+                                data.artwork,
+                                width: 91,
+                                height: 69,
+                                alignment: Alignment.centerLeft,
+                                fit: BoxFit.contain,
+                                filterQuality: FilterQuality.medium,
+                                cacheWidth: 300,
+                              ),
+                              const Spacer(),
+                              Container(
+                                width: 23,
+                                height: 23,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.10),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.22),
+                                  ),
+                                ),
+                                child: Icon(
+                                  CupertinoIcons.arrow_up_right,
+                                  size: 12,
+                                  color: Colors.white.withOpacity(0.78),
                                 ),
                               ),
-                              child: Icon(
-                                CupertinoIcons.arrow_up_right,
-                                size: 13,
-                                color: Colors.white.withOpacity(0.76),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        Text(
-                          data.title,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFFF7F9FF),
-                            fontSize: 13.2,
-                            fontWeight: FontWeight.w800,
-                            height: 1.08,
-                            letterSpacing: -0.15,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black26,
-                                blurRadius: 5,
-                                offset: Offset(0, 1),
-                              ),
                             ],
                           ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          data.caption,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                          color: Colors.white.withOpacity(0.72),
-                          fontSize: 8.8,
-                            height: 1.16,
-                            letterSpacing: 0.02,
+                          const Spacer(),
+                          Text(
+                            data.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFFFAFBFF),
+                              fontSize: 11.2,
+                              fontWeight: FontWeight.w800,
+                              height: 1.06,
+                              letterSpacing: -0.08,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black38,
+                                  blurRadius: 5,
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                          const SizedBox(height: 3),
+                          Text(
+                            data.caption,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.72),
+                              fontSize: 7.2,
+                              height: 1.05,
+                              letterSpacing: 0.02,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _LiquidServiceArtwork extends StatelessWidget {
-  final IconData icon;
-  final IconData accentIcon;
-  final Color color;
-
-  const _LiquidServiceArtwork({
-    required this.icon,
-    required this.accentIcon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 91,
-      height: 75,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            left: 9,
-            top: 4,
-            child: Container(
-              width: 63,
-              height: 63,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    color.withOpacity(0.35),
-                    color.withOpacity(0.09),
-                    Colors.transparent,
-                  ],
-                  stops: const [0, 0.48, 1],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 11,
-            top: 11,
-            child: Transform.rotate(
-              angle: -0.13,
-              child: Container(
-                width: 48,
-                height: 51,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.29),
-                      color.withOpacity(0.25),
-                      Colors.white.withOpacity(0.08),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.44),
-                    width: 1.1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withOpacity(0.42),
-                      blurRadius: 15,
-                      offset: const Offset(0, 7),
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.16),
-                      blurRadius: 6,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Positioned(
-                      top: 5,
-                      left: 7,
-                      right: 7,
-                      child: Container(
-                        height: 1,
-                        color: Colors.white.withOpacity(0.40),
-                      ),
-                    ),
-                    Icon(
-                      icon,
-                      size: 27,
-                      color: Colors.white.withOpacity(0.95),
-                      shadows: [
-                        Shadow(
-                          color: color.withOpacity(0.9),
-                          blurRadius: 11,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 49,
-            top: 34,
-            child: Transform.rotate(
-              angle: 0.12,
-              child: Container(
-                width: 31,
-                height: 34,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color.lerp(color, Colors.white, 0.48)!,
-                      color.withOpacity(0.72),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.58),
-                    width: 1.1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.24),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  accentIcon,
-                  size: 17,
-                  color: const Color(0xFF172439).withOpacity(0.88),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 1,
-            top: 8,
-            child: Container(
-              width: 5,
-              height: 5,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.83),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withOpacity(0.95),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
