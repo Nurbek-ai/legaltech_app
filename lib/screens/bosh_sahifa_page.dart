@@ -180,12 +180,12 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
           height: 34,
           padding: const EdgeInsets.all(5),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.075),
+            color: Colors.white.withValues(alpha: 0.075),
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withOpacity(0.17)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.17)),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF7599F7).withOpacity(0.18),
+                color: const Color(0xFF7599F7).withValues(alpha: 0.18),
                 blurRadius: 16,
               ),
             ],
@@ -211,7 +211,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
             Text(
               'YURIDIK XIZMATLAR',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.47),
+                color: Colors.white.withValues(alpha: 0.47),
                 fontSize: 7,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1.4,
@@ -228,9 +228,9 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.075),
+              color: Colors.white.withValues(alpha: 0.075),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withOpacity(0.12)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
             ),
             child: Stack(
               alignment: Alignment.center,
@@ -238,7 +238,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                 Icon(
                   CupertinoIcons.bell,
                   size: 17,
-                  color: Colors.white.withOpacity(0.82),
+                  color: Colors.white.withValues(alpha: 0.82),
                 ),
                 Positioned(
                   top: 8,
@@ -277,16 +277,16 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
           decoration: BoxDecoration(
-            color: const Color(0xFF8EACF8).withOpacity(0.12),
+            color: const Color(0xFF8EACF8).withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: const Color(0xFF9FB7F7).withOpacity(0.20),
+              color: const Color(0xFF9FB7F7).withValues(alpha: 0.20),
             ),
           ),
           child: Text(
             '08 XIZMAT',
             style: TextStyle(
-              color: const Color(0xFFC7D5FF).withOpacity(0.88),
+              color: const Color(0xFFC7D5FF).withValues(alpha: 0.88),
               fontSize: 7.4,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.75,
@@ -337,12 +337,12 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                 ),
               ),
         decoration: BoxDecoration(
-          color: const Color(0xFF273546).withOpacity(0.91),
+          color: const Color(0xFF273546).withValues(alpha: 0.91),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.13)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.12),
+              color: Colors.black.withValues(alpha: 0.12),
               blurRadius: 15,
               offset: const Offset(0, 5),
             ),
@@ -357,9 +357,9 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
     return Container(
       padding: const EdgeInsets.fromLTRB(22, 30, 22, 31),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.045),
+        color: Colors.white.withValues(alpha: 0.045),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         children: [
@@ -367,7 +367,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
             width: 58,
             height: 58,
             decoration: BoxDecoration(
-              color: const Color(0xFF6D8FD7).withOpacity(0.13),
+              color: const Color(0xFF6D8FD7).withValues(alpha: 0.13),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -387,10 +387,10 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
           ),
           const SizedBox(height: 7),
           Text(
-            "Qidiruv so\'zini o\'zgartirib ko'ring.",
+            "Qidiruv so'zini o'zgartirib ko'ring.",
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.49),
+              color: Colors.white.withValues(alpha: 0.49),
               fontSize: 12,
               height: 1.35,
             ),
@@ -444,18 +444,18 @@ class _MiniProfileCard extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                const Color(0xFF1C3356).withOpacity(0.92),
-                const Color(0xFF111E35).withOpacity(0.97),
+                const Color(0xFF1C3356).withValues(alpha: 0.92),
+                const Color(0xFF111E35).withValues(alpha: 0.97),
               ],
             ),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-              color: Colors.white.withOpacity(0.13),
+              color: Colors.white.withValues(alpha: 0.13),
               width: 1.1,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF0B1F44).withOpacity(0.55),
+                color: const Color(0xFF0B1F44).withValues(alpha: 0.55),
                 blurRadius: 22,
                 offset: const Offset(0, 10),
               ),
@@ -474,7 +474,7 @@ class _MiniProfileCard extends StatelessWidget {
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        const Color(0xFF4A7CF8).withOpacity(0.18),
+                        const Color(0xFF4A7CF8).withValues(alpha: 0.18),
                         Colors.transparent,
                       ],
                     ),
@@ -492,7 +492,7 @@ class _MiniProfileCard extends StatelessWidget {
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        const Color(0xFF6DD5C0).withOpacity(0.12),
+                        const Color(0xFF6DD5C0).withValues(alpha: 0.12),
                         Colors.transparent,
                       ],
                     ),
@@ -510,7 +510,7 @@ class _MiniProfileCard extends StatelessWidget {
                     gradient: LinearGradient(
                       colors: [
                         Colors.transparent,
-                        Colors.white.withOpacity(0.28),
+                        Colors.white.withValues(alpha: 0.28),
                         Colors.transparent,
                       ],
                     ),
@@ -577,12 +577,12 @@ class _MiniAvatarBubble extends StatelessWidget {
             colors: [Color(0xFF3A6ADE), Color(0xFF1A3D8A)],
           ),
           border: Border.all(
-            color: const Color(0xFF6A9EFF).withOpacity(0.55),
+            color: const Color(0xFF6A9EFF).withValues(alpha: 0.55),
             width: 2.5,
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF3060D0).withOpacity(0.45),
+              color: const Color(0xFF3060D0).withValues(alpha: 0.45),
               blurRadius: 16,
               spreadRadius: 1,
             ),
@@ -600,7 +600,7 @@ class _MiniAvatarBubble extends StatelessWidget {
     Navigator.of(context).push(
       PageRouteBuilder<void>(
         opaque: false,
-        pageBuilder: (_, __, ___) =>
+        pageBuilder: (_, _, _) =>
             FullScreenPhotoPage(file: profile.avatarFile!),
       ),
     );
@@ -648,7 +648,7 @@ class _MiniStatColumn extends StatelessWidget {
           label,
           maxLines: 1,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.52),
+            color: Colors.white.withValues(alpha: 0.52),
             fontSize: 10,
             fontWeight: FontWeight.w600,
           ),
@@ -715,12 +715,12 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
               borderRadius: radius,
               boxShadow: [
                 BoxShadow(
-                  color: data.colors.last.withOpacity(0.34),
+                  color: data.colors.last.withValues(alpha: 0.34),
                   blurRadius: 17,
                   offset: const Offset(0, 7),
                 ),
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.16),
+                  color: Colors.black.withValues(alpha: 0.16),
                   blurRadius: 3,
                   offset: const Offset(0, 2),
                 ),
@@ -737,16 +737,16 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        data.colors.first.withOpacity(0.95),
+                        data.colors.first.withValues(alpha: 0.95),
                         Color.lerp(data.colors.first, data.colors.last, 0.48)!
-                            .withOpacity(0.96),
-                        data.colors.last.withOpacity(0.99),
+                            .withValues(alpha: 0.96),
+                        data.colors.last.withValues(alpha: 0.99),
                       ],
                       stops: const [0, 0.52, 1],
                     ),
                     borderRadius: radius,
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.24),
+                      color: Colors.white.withValues(alpha: 0.24),
                       width: 1.1,
                     ),
                   ),
@@ -762,8 +762,8 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
                             shape: BoxShape.circle,
                             gradient: RadialGradient(
                               colors: [
-                                data.glow.withOpacity(0.30),
-                                data.glow.withOpacity(0.07),
+                                data.glow.withValues(alpha: 0.30),
+                                data.glow.withValues(alpha: 0.07),
                                 Colors.transparent,
                               ],
                               stops: const [0, 0.52, 1],
@@ -781,7 +781,7 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
                             shape: BoxShape.circle,
                             gradient: RadialGradient(
                               colors: [
-                                Colors.white.withOpacity(0.14),
+                                Colors.white.withValues(alpha: 0.14),
                                 Colors.transparent,
                               ],
                             ),
@@ -798,7 +798,7 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
                             gradient: LinearGradient(
                               colors: [
                                 Colors.transparent,
-                                Colors.white.withOpacity(0.34),
+                                Colors.white.withValues(alpha: 0.34),
                                 Colors.transparent,
                               ],
                             ),
@@ -825,16 +825,16 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
                                 width: 23,
                                 height: 23,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.10),
+                                  color: Colors.white.withValues(alpha: 0.10),
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: Colors.white.withOpacity(0.22),
+                                    color: Colors.white.withValues(alpha: 0.22),
                                   ),
                                 ),
                                 child: Icon(
                                   CupertinoIcons.arrow_up_right,
                                   size: 12,
-                                  color: Colors.white.withOpacity(0.78),
+                                  color: Colors.white.withValues(alpha: 0.78),
                                 ),
                               ),
                             ],
@@ -865,7 +865,7 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.72),
+                              color: Colors.white.withValues(alpha: 0.72),
                               fontSize: 7.2,
                               height: 1.05,
                               letterSpacing: 0.02,
