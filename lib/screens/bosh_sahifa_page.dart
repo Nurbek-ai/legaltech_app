@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../shared/user_profile.dart';
 import '../shared/profile_widgets.dart';
 
+import 'services/alimony_claim_page.dart';
+
 class BoshSahifaPage extends StatefulWidget {
   const BoshSahifaPage({super.key});
 
@@ -137,7 +139,18 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                       final service = visibleServices[index];
                       return _LiquidServiceCard(
                         data: service,
-                        onTap: () => _showServiceMessage(service),
+                        onTap: () {
+                          if (service.title == "Bolaga aliment undirish") {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const AlimonyClaimPage(), 
+                              ),
+                            );
+                            return;
+                          }
+
+                          _showServiceMessage(service);
+                        },
                       );
                     },
                     childCount: visibleServices.length,
