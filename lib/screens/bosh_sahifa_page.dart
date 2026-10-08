@@ -7,6 +7,8 @@ import '../shared/user_profile.dart';
 import '../shared/profile_widgets.dart';
 
 import 'services/alimony_claim_page.dart';
+import 'services/bolaning_yashash_joyi_page.dart';
+import 'services/nikohdan_ajrashish_page.dart';
 
 class BoshSahifaPage extends StatefulWidget {
   const BoshSahifaPage({super.key});
@@ -144,6 +146,25 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => const AlimonyClaimPage(), 
+                              ),
+                            );
+                            return;
+                          }
+
+                          
+                          if (service.title == "Bolaning yashash joyini belgilash") {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ChildLivingPlacePage(), 
+                              ),
+                            );
+                            return;
+                          }
+
+                          if (service.title == "Nikohdan ajrashish") {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const DivorceClaimPage(), 
                               ),
                             );
                             return;
