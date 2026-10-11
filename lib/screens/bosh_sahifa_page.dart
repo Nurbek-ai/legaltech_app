@@ -9,6 +9,8 @@ import '../shared/profile_widgets.dart';
 import 'services/alimony_claim_page.dart';
 import 'services/bolaning_yashash_joyi_page.dart';
 import 'services/nikohdan_ajrashish_page.dart';
+import 'services/lawyer_draft_request_page.dart';
+import 'services/advokat_yollash_page.dart';
 
 class BoshSahifaPage extends StatefulWidget {
   const BoshSahifaPage({super.key});
@@ -22,8 +24,8 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
 
   static const _services = <_ServiceCardData>[
     _ServiceCardData(
-      title: 'Sudga ariza yozish',
-      caption: 'Sudga murojaat uchun ariza tayyorlash',
+      title: 'Advokatga ariza yozdirish',
+      caption: 'Yurist yordamida ariza tayyorlash',
       artwork: 'assets/service_artwork/court_filing.png',
       colors: [Color(0xFF405EA8), Color(0xFF263967)],
       glow: Color(0xFF8EA7FF),
@@ -165,6 +167,24 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => const DivorceClaimPage(), 
+                              ),
+                            );
+                            return;
+                          }
+
+                          if (service.title == "Advokatga ariza yozdirish") {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const LawyerDraftRequestPage(), 
+                              ),
+                            );
+                            return;
+                          }
+                          
+                          if (service.title == "Advokat yollash") {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const AdvokatYollashPage(), 
                               ),
                             );
                             return;
