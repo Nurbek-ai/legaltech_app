@@ -1,5 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
+
+import '../services/alimony_claim_document_service.dart';
 
 class HujjatlarPage extends StatefulWidget {
   const HujjatlarPage({super.key});
@@ -82,10 +85,28 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
   void initState() {
     super.initState();
     _searchController.addListener(_handleSearchChanged);
+    GeneratedDocumentRepository.instance.documents.addListener(_handleDocumentsChanged);
+    _loadGeneratedDocuments();
+  }
+
+  void _handleDocumentsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadGeneratedDocuments() async {
+    try {
+      await GeneratedDocumentRepository.instance.reload();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saqlangan hujjatlarni yuklab boʻlmadi.')),
+      );
+    }
   }
 
   @override
   void dispose() {
+    GeneratedDocumentRepository.instance.documents.removeListener(_handleDocumentsChanged);
     _searchController
       ..removeListener(_handleSearchChanged)
       ..dispose();
@@ -94,7 +115,11 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
 
   List<_DocumentData> get _visibleDocuments {
     final query = _searchController.text.trim().toLowerCase();
-    final result = _documents.where((document) {
+    final allDocuments = <_DocumentData>[
+      ...GeneratedDocumentRepository.instance.documents.value.map(_DocumentData.fromGenerated),
+      ..._documents,
+    ];
+    final result = allDocuments.where((document) {
       final matchesFilter = _selectedFilter == 'Barchasi' ||
           document.category == _selectedFilter;
       final matchesQuery = query.isEmpty ||
@@ -307,11 +332,16 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
   }
 
   Widget _buildStats() {
+    final generatedCount = GeneratedDocumentRepository.instance.documents.value.length;
+    final inProgressCount = _documents.where((document) =>
+        document.status == 'Ko‘rib chiqilmoqda' || document.status == 'Qoralama').length;
+    final completedCount = _documents.where((document) =>
+        document.status == 'Imzolangan' || document.status == 'Tayyor').length + generatedCount;
     return Row(
       children: [
         Expanded(
           child: _DocumentStat(
-            value: '12',
+            value: (_documents.length + generatedCount).toString().padLeft(2, '0'),
             label: 'Jami',
             color: const Color(0xFF8EB0FF),
           ),
@@ -319,7 +349,7 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
         const SizedBox(width: 9),
         Expanded(
           child: _DocumentStat(
-            value: '03',
+            value: inProgressCount.toString().padLeft(2, '0'),
             label: 'Jarayonda',
             color: const Color(0xFFFFC36E),
           ),
@@ -327,7 +357,7 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
         const SizedBox(width: 9),
         Expanded(
           child: _DocumentStat(
-            value: '08',
+            value: completedCount.toString().padLeft(2, '0'),
             label: 'Yakunlangan',
             color: const Color(0xFF6ED9B2),
           ),
@@ -543,7 +573,12 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
                         label: 'Ko‘rish',
                         onTap: () {
                           Navigator.pop(sheetContext);
-                          _showComingSoon('Hujjatni ko‘rish');
+                          final path = document.filePath;
+                          if (path == null) {
+                            _showComingSoon('Hujjatni ko‘rish');
+                          } else {
+                            _openDocument(path);
+                          }
                         },
                       ),
                     ),
@@ -579,6 +614,31 @@ class _HujjatlarPageState extends State<HujjatlarPage> {
     );
   }
 
+  Future<void> _openDocument(String path) async {
+    try {
+      final result = await OpenFilex.open(path);
+      if (result.type == ResultType.done || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.type == ResultType.noAppToOpen
+                ? 'Hujjat saqlangan, ammo DOCX faylini ochadigan ilova topilmadi.'
+                : 'Hujjatni ochib boʻlmadi: ${result.message}',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Hujjatni ochib boʻlmadi. Fayl Hujjatlar boʻlimida saqlangan.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   void _showComingSoon(String action) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -609,6 +669,7 @@ class _DocumentData {
   final IconData icon;
   final Color iconColor;
   final Color iconBackground;
+  final String? filePath;
 
   const _DocumentData({
     required this.title,
@@ -620,7 +681,24 @@ class _DocumentData {
     required this.icon,
     required this.iconColor,
     required this.iconBackground,
+    this.filePath,
   });
+
+  factory _DocumentData.fromGenerated(GeneratedDocument document) {
+    final date = document.createdAt;
+    return _DocumentData(
+      title: document.title,
+      type: 'DOCX ariza',
+      category: 'Arizalar',
+      date: '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}',
+      status: 'Tayyor',
+      statusColor: const Color(0xFF6ED9B2),
+      icon: CupertinoIcons.doc_checkmark,
+      iconColor: const Color(0xFF8EE6BC),
+      iconBackground: const Color(0xFF245546),
+      filePath: document.path,
+    );
+  }
 }
 
 class _DocumentStat extends StatelessWidget {

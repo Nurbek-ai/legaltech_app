@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../services/alimony_location_catalog.dart';
+
 /// ===============================================================
 /// ALIMONY CLAIM — FRONTEND
 /// ===============================================================
@@ -106,7 +108,6 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
   final _respondentPhoneController = TextEditingController();
   final _respondentAddressController = TextEditingController();
 
-  final _marriagePlaceController = TextEditingController();
   final _marriageActNumberController = TextEditingController();
 
   DateTime? _marriageDate;
@@ -116,6 +117,9 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
 
   String? _respondentRegion;
   String? _respondentDistrict;
+
+  String? _fhdyoRegion;
+  String? _fhdyoDistrict;
 
   final List<_ChildData> _children = [
     _ChildData(),
@@ -137,7 +141,6 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
     _respondentPhoneController.dispose();
     _respondentAddressController.dispose();
 
-    _marriagePlaceController.dispose();
     _marriageActNumberController.dispose();
 
     for (final child in _children) {
@@ -207,6 +210,14 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
           _showError('Yashash manzilingizni kiriting.');
           return false;
         }
+        if (_claimantRegion == null || _claimantDistrict == null) {
+          _showError('Viloyat va tumaningizni tanlang.');
+          return false;
+        }
+        if (!_isValidPhone(_claimantPhoneController.text)) {
+          _showError('Telefon raqami 9 ta raqamdan iborat boʻlishi kerak.');
+          return false;
+        }
 
         return true;
 
@@ -220,12 +231,26 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
           _showError('Javobgarning manzilini kiriting.');
           return false;
         }
+        if (_respondentRegion == null || _respondentDistrict == null) {
+          _showError('Javobgarning viloyati va tumanini tanlang.');
+          return false;
+        }
+        if (_respondentPhoneController.text.trim().isNotEmpty &&
+            !_isValidPhone(_respondentPhoneController.text)) {
+          _showError('Javobgarning telefon raqami 9 ta raqam boʻlishi kerak.');
+          return false;
+        }
 
         return true;
 
       case 2:
-        if (_marriagePlaceController.text.trim().isEmpty) {
-          _showError('Nikoh qayd etilgan joyni kiriting.');
+        if (_fhdyoRegion == null || _fhdyoDistrict == null) {
+          _showError('Nikoh qayd etilgan FHDYO viloyati va tumanini tanlang.');
+          return false;
+        }
+        if (_marriageDate == null ||
+            _marriageActNumberController.text.trim().isEmpty) {
+          _showError('Nikoh sanasi va dalolatnoma raqamini kiriting.');
           return false;
         }
 
@@ -239,7 +264,11 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
 
         for (final child in _children) {
           if (child.name.text.trim().isEmpty) {
-            _showError('Farzandning ismini kiriting.');
+            _showError('Farzandning toʻliq ismini kiriting.');
+            return false;
+          }
+          if (child.birthDate == null) {
+            _showError('Har bir farzandning tugʻilgan sanasini tanlang.');
             return false;
           }
         }
@@ -291,8 +320,8 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
   // ===============================================================
 
   void _addChild() {
-    if (_children.length >= 10) {
-      _showError('10 nafargacha farzand qoʻshish mumkin.');
+    if (_children.length >= 15) {
+      _showError('15 nafargacha farzand qoʻshish mumkin.');
       return;
     }
 
@@ -353,42 +382,101 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
         '${date.year}';
   }
 
+  static const _monthNames = <String>[
+    'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+    'iyul', 'avgust', 'sentyabr', 'oktyabr', 'noyabr', 'dekabr',
+  ];
+
+  String _formatTemplateDate(DateTime? date) {
+    if (date == null) return '';
+    return '${date.year}-yil ${date.day}-${_monthNames[date.month - 1]}';
+  }
+
+  bool _isValidPhone(String value) {
+    var digits = value.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('998') && digits.length == 12) {
+      digits = digits.substring(3);
+    }
+    return digits.length == 9;
+  }
+
+  String _formattedPhone(String value) {
+    var digits = value.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('998') && digits.length == 12) {
+      digits = digits.substring(3);
+    }
+    return digits.isEmpty ? '' : '+998 $digits';
+  }
+
+  String _fullAddress(String? region, String? district, String street) =>
+      [region, district, street.trim()].whereType<String>()
+          .where((part) => part.trim().isNotEmpty).join(', ');
+
   // ===============================================================
   // BACKEND-READY PAYLOAD
   // ===============================================================
 
   Map<String, dynamic> buildPayload() {
+    final children = _children.map((child) {
+      return {
+        'full_name': child.name.text.trim(),
+        'birth_date': child.birthDate?.toIso8601String(),
+        'birth_date_formatted': _formatTemplateDate(child.birthDate),
+      };
+    }).toList(growable: false);
+    final courtName = AlimonyLocationCatalog.courtForDistrict(
+      _respondentDistrict!,
+    );
+    final plaintiffAddress = _fullAddress(
+      _claimantRegion, _claimantDistrict, _claimantAddressController.text,
+    );
+    final defendantAddress = _fullAddress(
+      _respondentRegion, _respondentDistrict, _respondentAddressController.text,
+    );
+
     return {
       'type': 'aliment_undirish_new',
-
+      'court_name': courtName,
+      'plaintiff_name': _claimantNameController.text.trim(),
+      'plaintiff_address': plaintiffAddress,
+      'plaintiff_phone': _formattedPhone(_claimantPhoneController.text),
+      'defendant_name': _respondentNameController.text.trim(),
+      'defendant_address': defendantAddress,
+      'defendant_phone': _formattedPhone(_respondentPhoneController.text),
+      'fhdyo_name': _fhdyoDistrict,
+      'marriage_date': _formatTemplateDate(_marriageDate),
+      'marriage_act_number': _marriageActNumberController.text.trim(),
+      'children_count': children.length.toString(),
+      'children_list_full': children.asMap().entries.map((entry) =>
+          '${entry.key + 1}. ${entry.value['full_name']} – '
+          '${entry.value['birth_date_formatted']} da tugʻilgan.'
+      ).join('\n'),
+      'children_benefit_list': children.map((child) =>
+          '${child['birth_date_formatted']} da tugʻilgan ${child['full_name']}'
+      ).join(', '),
+      'date': _formatTemplateDate(DateTime.now()),
       'claimant': {
         'full_name': _claimantNameController.text.trim(),
-        'phone': _claimantPhoneController.text.trim(),
+        'phone': _formattedPhone(_claimantPhoneController.text),
         'region': _claimantRegion,
         'district': _claimantDistrict,
-        'address': _claimantAddressController.text.trim(),
+        'address': plaintiffAddress,
       },
-
       'respondent': {
         'full_name': _respondentNameController.text.trim(),
-        'phone': _respondentPhoneController.text.trim(),
+        'phone': _formattedPhone(_respondentPhoneController.text),
         'region': _respondentRegion,
         'district': _respondentDistrict,
-        'address': _respondentAddressController.text.trim(),
+        'address': defendantAddress,
       },
-
       'marriage': {
-        'place': _marriagePlaceController.text.trim(),
+        'place': _fhdyoDistrict,
+        'region': _fhdyoRegion,
+        'district': _fhdyoDistrict,
         'date': _marriageDate?.toIso8601String(),
         'act_number': _marriageActNumberController.text.trim(),
       },
-
-      'children': _children.map((child) {
-        return {
-          'full_name': child.name.text.trim(),
-          'birth_date': child.birthDate?.toIso8601String(),
-        };
-      }).toList(),
+      'children': children,
     };
   }
 
@@ -405,12 +493,7 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
       if (widget.onSubmit != null) {
         await widget.onSubmit!(payload);
       } else {
-        // FRONTEND ONLY FOR NOW.
-        //
-        // Backend integration will be added here later.
-        await Future<void>.delayed(
-          const Duration(milliseconds: 1200),
-        );
+        throw StateError('Document generation service is not connected.');
       }
 
       if (!mounted) return;
@@ -420,7 +503,7 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
       if (!mounted) return;
 
       _showError(
-        'Maʼlumotlarni yuborishda xatolik yuz berdi.',
+        'Ariza hujjatini yaratib saqlashda xatolik yuz berdi. Qayta urinib koʻring.',
       );
     } finally {
       if (mounted) {
@@ -486,7 +569,7 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
               const SizedBox(height: 22),
 
               const Text(
-                'Ariza maʼlumotlari tayyor',
+                'Ariza hujjati tayyor',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
@@ -498,8 +581,7 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
               const SizedBox(height: 10),
 
               const Text(
-                'Frontend qismi muvaffaqiyatli yakunlandi. '
-                'Keyingi bosqichda maʼlumotlar backendga yuboriladi.',
+                'Tayyor DOCX hujjat Hujjatlar boʻlimiga saqlandi.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: _muted,
@@ -763,27 +845,20 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
           label: 'Viloyat / shahar',
           value: _claimantRegion,
           icon: Icons.location_on_outlined,
-          options: const [
-            'Toshkent shahri',
-            'Toshkent viloyati',
-            'Samarqand viloyati',
-            'Buxoro viloyati',
-            'Fargʻona viloyati',
-            'Andijon viloyati',
-            'Namangan viloyati',
-            'Qashqadaryo viloyati',
-            'Surxondaryo viloyati',
-            'Xorazm viloyati',
-            'Navoiy viloyati',
-            'Jizzax viloyati',
-            'Sirdaryo viloyati',
-            'Qoraqalpogʻiston Respublikasi',
-          ],
+          options: AlimonyLocationCatalog.regions,
           onChanged: (value) {
             setState(() {
               _claimantRegion = value;
+              _claimantDistrict = null;
             });
           },
+        ),
+        _DropdownField(
+          label: 'Tuman',
+          value: _claimantDistrict,
+          icon: Icons.location_city_outlined,
+          options: AlimonyLocationCatalog.districtsFor(_claimantRegion),
+          onChanged: (value) => setState(() => _claimantDistrict = value),
         ),
         _Field(
           controller: _claimantAddressController,
@@ -827,28 +902,27 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
           label: 'Viloyat / shahar',
           value: _respondentRegion,
           icon: Icons.location_on_outlined,
-          options: const [
-            'Toshkent shahri',
-            'Toshkent viloyati',
-            'Samarqand viloyati',
-            'Buxoro viloyati',
-            'Fargʻona viloyati',
-            'Andijon viloyati',
-            'Namangan viloyati',
-            'Qashqadaryo viloyati',
-            'Surxondaryo viloyati',
-            'Xorazm viloyati',
-            'Navoiy viloyati',
-            'Jizzax viloyati',
-            'Sirdaryo viloyati',
-            'Qoraqalpogʻiston Respublikasi',
-          ],
+          options: AlimonyLocationCatalog.regions,
           onChanged: (value) {
             setState(() {
               _respondentRegion = value;
+              _respondentDistrict = null;
             });
           },
         ),
+        _DropdownField(
+          label: 'Tuman (sud hududi)',
+          value: _respondentDistrict,
+          icon: Icons.location_city_outlined,
+          options: AlimonyLocationCatalog.districtsFor(_respondentRegion),
+          onChanged: (value) => setState(() => _respondentDistrict = value),
+        ),
+        if (_respondentDistrict != null)
+          _InfoCard(
+            icon: Icons.account_balance_outlined,
+            title: 'Tegishli sud',
+            text: '${AlimonyLocationCatalog.courtForDistrict(_respondentDistrict!)} sudi javobgar manzili boʻyicha tanlandi.',
+          ),
         _Field(
           controller: _respondentAddressController,
           label: 'Javobgarning manzili',
@@ -873,11 +947,22 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
       description:
           'Nikoh haqidagi maʼlumotlarni imkon qadar aniq kiriting.',
       children: [
-        _Field(
-          controller: _marriagePlaceController,
-          label: 'Nikoh qayd etilgan joy',
-          hint: 'FHDYO bo‘limi nomi',
+        _DropdownField(
+          label: 'FHDYO viloyati / shahri',
+          value: _fhdyoRegion,
           icon: Icons.account_balance_outlined,
+          options: AlimonyLocationCatalog.regions,
+          onChanged: (value) => setState(() {
+            _fhdyoRegion = value;
+            _fhdyoDistrict = null;
+          }),
+        ),
+        _DropdownField(
+          label: 'FHDYO tumani / shahri',
+          value: _fhdyoDistrict,
+          icon: Icons.location_city_outlined,
+          options: AlimonyLocationCatalog.districtsFor(_fhdyoRegion),
+          onChanged: (value) => setState(() => _fhdyoDistrict = value),
         ),
 
         _DateField(
@@ -899,10 +984,8 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
 
         _InfoCard(
           icon: Icons.lightbulb_outline_rounded,
-          title: 'Aniq bilmasangiz',
-          text:
-              'Maydonni hozircha boʻsh qoldirishingiz mumkin. '
-              'Keyinroq tahrirlash imkoniyati boʻladi.',
+          title: 'Aniq maʼlumot kiriting',
+          text: 'FHDYO hududi, nikoh sanasi va dalolatnoma raqami ariza shabloniga kiritiladi.',
         ),
       ],
     );
@@ -1046,7 +1129,7 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
             ),
             _ReviewRow(
               'Manzil',
-              _claimantAddressController.text,
+              _fullAddress(_claimantRegion, _claimantDistrict, _claimantAddressController.text),
             ),
           ],
         ),
@@ -1067,7 +1150,11 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
             ),
             _ReviewRow(
               'Manzil',
-              _respondentAddressController.text,
+              _fullAddress(_respondentRegion, _respondentDistrict, _respondentAddressController.text),
+            ),
+            _ReviewRow(
+              'Sud',
+              _respondentDistrict == null ? '' : '${AlimonyLocationCatalog.courtForDistrict(_respondentDistrict!)} sudi',
             ),
           ],
         ),
@@ -1078,11 +1165,15 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
           rows: [
             _ReviewRow(
               'Joy',
-              _marriagePlaceController.text,
+              _fhdyoDistrict ?? '',
             ),
             _ReviewRow(
               'Sana',
               _formatDate(_marriageDate),
+            ),
+            _ReviewRow(
+              'FHDYO hududi',
+              _fhdyoRegion ?? '',
             ),
             _ReviewRow(
               'Dalolatnoma',
@@ -1101,7 +1192,7 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
             (index) {
               return _ReviewRow(
                 '${index + 1}-farzand',
-                _children[index].name.text,
+                '${_children[index].name.text} • ${_formatDate(_children[index].birthDate)}',
               );
             },
           ),

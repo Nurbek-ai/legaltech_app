@@ -7,6 +7,7 @@ import '../shared/user_profile.dart';
 import '../shared/profile_widgets.dart';
 
 import 'services/alimony_claim_page.dart';
+import '../services/alimony_claim_document_service.dart';
 import 'services/bolaning_yashash_joyi_page.dart';
 import 'services/nikohdan_ajrashish_page.dart';
 import 'services/lawyer_draft_request_page.dart';
@@ -147,7 +148,11 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                           if (service.title == "Bolaga aliment undirish") {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const AlimonyClaimPage(), 
+                                builder: (_) => AlimonyClaimPage(
+                                  onSubmit: (payload) async {
+                                    await AlimonyClaimDocumentService().create(payload);
+                                  },
+                                ),
                               ),
                             );
                             return;
