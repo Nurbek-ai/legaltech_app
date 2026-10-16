@@ -827,7 +827,7 @@ class _FamilyClaimPageState extends State<FamilyClaimPage>
           tween: Tween<double>(begin: 0, end: progress),
           duration: const Duration(milliseconds: 450),
           curve: Curves.easeOutCubic,
-          builder: (_, value, __) {
+          builder: (_, value, _) {
             return LinearProgressIndicator(
               value: value,
               minHeight: 5,
@@ -838,6 +838,29 @@ class _FamilyClaimPageState extends State<FamilyClaimPage>
         ),
       ),
     );
+  }
+
+  void _fillFromProfile() {
+    final p = userProfile.value;
+    setState(() {
+      if (p.displayName.trim().isNotEmpty) {
+        _plaintiffNameController.text = p.displayName.trim();
+      }
+      final digits = p.phone.replaceAll(RegExp(r"\D"), "");
+      if (digits.length >= 9) {
+        _plaintiffPhoneController.text = digits.substring(digits.length - 9);
+      }
+      if (AlimonyLocationCatalog.regions.contains(p.region)) {
+        _plaintiffRegion = p.region;
+        final dists = AlimonyLocationCatalog.districtsFor(p.region);
+        if (dists.contains(p.district)) {
+          _plaintiffDistrict = p.district;
+        }
+      }
+      if (p.streetAddress.trim().isNotEmpty) {
+        _plaintiffStreetController.text = p.streetAddress.trim();
+      }
+    });
   }
 
   // Step 1: Plaintiff
@@ -852,6 +875,25 @@ class _FamilyClaimPageState extends State<FamilyClaimPage>
       accentColor: _primaryColor,
       secondaryColor: _secondaryColor,
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: OutlinedButton.icon(
+            onPressed: _fillFromProfile,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _secondaryColor,
+              side: BorderSide(color: _primaryColor.withValues(alpha: 0.45)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            icon: const Icon(Icons.bolt_rounded, size: 18),
+            label: const Text(
+              'Profil rekvizitlaridan avtomatik to‘ldirish',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ),
         _DropdownField(
           label: 'Viloyat / shaharni tanlang',
           value: _plaintiffRegion,

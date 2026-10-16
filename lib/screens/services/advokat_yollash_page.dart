@@ -7,6 +7,7 @@ class AdvokatYollashPage extends StatefulWidget {
     super.key,
     this.onSubmit,
     this.availableSlots,
+    this.initialRepresentation = false,
     this.lawyerName = "Shohruh Jo'rayev",
     this.lawyerTitle = 'BOSH ADVOKAT · YAN LEGAL FIRM',
     this.biography =
@@ -15,6 +16,7 @@ class AdvokatYollashPage extends StatefulWidget {
   });
 
   final Future<void> Function(Map<String, dynamic> payload)? onSubmit;
+  final bool initialRepresentation;
   /// Example: {'2026-10-12': ['10:00', '10:20']}. Null means preview slots.
   final Map<String, List<String>>? availableSlots;
   final String lawyerName;
@@ -38,7 +40,8 @@ class _AdvokatYollashPageState extends State<AdvokatYollashPage> {
   static const line = Color(0x28C5D9EF);
 
   final _caseController = TextEditingController();
-  _Service _service = _Service.consultation;
+  late _Service _service =
+      widget.initialRepresentation ? _Service.representation : _Service.consultation;
   DateTime _day = _dateOnly(DateTime.now());
   String? _time;
   bool _review = false;

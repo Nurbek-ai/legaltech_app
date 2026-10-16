@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../shared/user_profile.dart';
+
 class GeneratedDocument {
   const GeneratedDocument({
     required this.title,
@@ -48,6 +50,16 @@ class GeneratedDocumentRepository {
     return file;
   }
 
+  Future<void> deleteFile(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {}
+    await reload();
+  }
+
   Future<void> reload() async {
     final directory = await _directory();
     final items = <GeneratedDocument>[];
@@ -66,6 +78,11 @@ class GeneratedDocumentRepository {
     }
     items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     documents.value = List.unmodifiable(items);
+    if (userProfile.value.savedDocuments != items.length) {
+      userProfile.value = userProfile.value.copyWith(
+        savedDocuments: items.length,
+      );
+    }
   }
 
   String _titleForFilename(String filename) {
@@ -128,6 +145,7 @@ class AlimonyClaimDocumentService {
       values[key] = value;
     }
     values['court_name'] = _cleanCourtName(values['court_name']!);
+    values['fhdyo_name'] = _cleanFhdyoName(values['fhdyo_name']!);
     values['children_count'] = children.length.toString();
     values['children_benefit_list'] = children
         .map((child) {
@@ -194,11 +212,32 @@ class AlimonyClaimDocumentService {
         'aliment_undirish_${DateTime.now().microsecondsSinceEpoch}.docx';
     final file = await _repository.createFile(filename, bytes);
     final createdAt = await file.lastModified();
-    return GeneratedDocument(
+    final generated = GeneratedDocument(
       title: 'Bolaga aliment undirish arizasi',
       path: file.path,
       createdAt: createdAt,
     );
+
+    await ActivityHistoryRepository.instance.record(
+      title: generated.title,
+      description:
+          'Fuqarolik ishlari bo‘yicha ${values['court_name']} sudiga • ${values['plaintiff_name']}',
+      category: ActivityCategory.documents,
+      statusLabel: 'Tayyor DOCX',
+      filePath: file.path,
+      createdAt: createdAt,
+      metadata: <String, String>{
+        'Xizmat turi': generated.title,
+        'Tegishli sud':
+            'Fuqarolik ishlari bo‘yicha ${values['court_name']} sudi',
+        'Undiruvchi (Da’vogar)': values['plaintiff_name'] ?? '',
+        'Qarzdor (Javobgar)': values['defendant_name'] ?? '',
+        'Farzandlar soni': '${values['children_count']} nafar',
+        'Fayl nomi': filename,
+      },
+    );
+
+    return generated;
   }
 
   String _replaceChildParagraph(String xml, List<String> lines) {
@@ -231,6 +270,18 @@ class AlimonyClaimDocumentService {
 
   String _cleanCourtName(String value) =>
       value.replaceFirst(RegExp(r'\s+sudi.*', caseSensitive: false), '').trim();
+
+  String _cleanFhdyoName(String value) {
+    var cleaned = value.replaceAll(
+      RegExp(r"(?:FHDYo|FHDYO|Fhdyo)\s*bo['‘`’]?limi", caseSensitive: false),
+      '',
+    );
+    cleaned = cleaned.replaceAll(
+      RegExp(r'(?:FHDYo|FHDYO|Fhdyo)', caseSensitive: false),
+      '',
+    );
+    return cleaned.trim();
+  }
 
   String _xmlEscape(String value) => value
       .replaceAll('&', '&amp;')

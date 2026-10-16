@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:flutter/services.dart';
 
+import '../shared/user_profile.dart';
 import 'alimony_claim_document_service.dart';
 import 'alimony_location_catalog.dart';
 
@@ -343,11 +344,37 @@ class FamilyClaimDocumentService {
     final filename =
         '${definition.filenamePrefix}_${DateTime.now().microsecondsSinceEpoch}.docx';
     final file = await _repository.createFile(filename, bytes);
-    return GeneratedDocument(
+    final createdAt = await file.lastModified();
+    final generated = GeneratedDocument(
       title: definition.title,
       path: file.path,
-      createdAt: await file.lastModified(),
+      createdAt: createdAt,
     );
+
+    await ActivityHistoryRepository.instance.record(
+      title: definition.title,
+      description:
+          'Fuqarolik ishlari bo‘yicha ${values['court_name']} sudiga • ${values['plaintiff_name']}',
+      category: ActivityCategory.documents,
+      statusLabel: 'Tayyor DOCX',
+      filePath: file.path,
+      createdAt: createdAt,
+      metadata: <String, String>{
+        'Xizmat turi': definition.title,
+        'Tegishli sud':
+            'Fuqarolik ishlari bo‘yicha ${values['court_name']} sudi',
+        'Da’vogar': values['plaintiff_name'] ?? '',
+        'Javobgar': values['defendant_name'] ?? '',
+        'FHDYO bo‘limi': '${values['fhdyo_name']} FHDYO bo‘limi',
+        'Farzandlar soni': '${values['children_count']} nafar',
+        if (type == FamilyClaimType.motherSupport &&
+            (values['amount'] ?? '').isNotEmpty)
+          'Oylik ta’minot': '${values['amount']} so‘m',
+        'Fayl nomi': filename,
+      },
+    );
+
+    return generated;
   }
 
   String _replaceChildParagraph(String xml, List<String> lines) {

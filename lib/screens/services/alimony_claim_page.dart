@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/alimony_location_catalog.dart';
+import '../../shared/user_profile.dart';
 
 /// ===============================================================
 /// ALIMONY CLAIM — FRONTEND
@@ -818,6 +819,29 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
   // STEP 1
   // ===============================================================
 
+  void _fillFromProfile() {
+    final p = userProfile.value;
+    setState(() {
+      if (p.displayName.trim().isNotEmpty) {
+        _claimantNameController.text = p.displayName.trim();
+      }
+      final digits = p.phone.replaceAll(RegExp(r"\D"), "");
+      if (digits.length >= 9) {
+        _claimantPhoneController.text = digits.substring(digits.length - 9);
+      }
+      if (AlimonyLocationCatalog.regions.contains(p.region)) {
+        _claimantRegion = p.region;
+        final dists = AlimonyLocationCatalog.districtsFor(p.region);
+        if (dists.contains(p.district)) {
+          _claimantDistrict = p.district;
+        }
+      }
+      if (p.streetAddress.trim().isNotEmpty) {
+        _claimantAddressController.text = p.streetAddress.trim();
+      }
+    });
+  }
+
   Widget _buildClaimantStep() {
     return _StepPage(
       key: const ValueKey('claimant'),
@@ -827,6 +851,25 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
       description:
           'Arizani tayyorlash uchun shaxsiy maʼlumotlaringizni kiriting.',
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: OutlinedButton.icon(
+            onPressed: _fillFromProfile,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _primaryLight,
+              side: BorderSide(color: _primary.withOpacity(0.45)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            icon: const Icon(Icons.bolt_rounded, size: 18),
+            label: const Text(
+              'Profil rekvizitlaridan avtomatik to‘ldirish',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ),
         _Field(
           controller: _claimantNameController,
           label: 'Toʻliq ism',

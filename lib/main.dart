@@ -7,6 +7,7 @@ import 'screens/bosh_sahifa_page.dart';
 import 'screens/tarix_page.dart';
 import 'screens/hujjatlar_page.dart';
 import 'screens/profil_page.dart';
+import 'shared/user_profile.dart';
 import 'shared/dashboard_background.dart';
 import 'shared/dashboard_navigation.dart';
 
@@ -677,6 +678,14 @@ class _IntroScreenState extends State<IntroScreen>
       return;
     }
 
+    final phone = _loginPhoneController.text.trim();
+    userProfile.value = userProfile.value.copyWith(phone: phone);
+    ActivityHistoryRepository.instance.record(
+      title: 'Tizimga telefon orqali kirildi',
+      description: 'Tasdiqlangan raqam: $phone',
+      category: ActivityCategory.profile,
+      statusLabel: 'Tasdiqlandi',
+    );
     _openDashboard();
   }
 
@@ -717,6 +726,20 @@ class _IntroScreenState extends State<IntroScreen>
       return;
     }
 
+    final fullName =
+        '${_phoneRegisterFirstNameController.text.trim()} ${_phoneRegisterSurnameController.text.trim()}'
+            .trim();
+    final phone = _phoneRegisterPhoneController.text.trim();
+    userProfile.value = userProfile.value.copyWith(
+      displayName: fullName.isEmpty ? userProfile.value.displayName : fullName,
+      phone: phone,
+    );
+    ActivityHistoryRepository.instance.record(
+      title: 'Yangi foydalanuvchi ro‘yxatdan o‘tdi',
+      description: '$fullName • $phone',
+      category: ActivityCategory.profile,
+      statusLabel: 'Yangi hisob',
+    );
     _openDashboard();
   }
 

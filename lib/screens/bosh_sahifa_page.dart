@@ -1,17 +1,16 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import '../shared/user_profile.dart';
-import '../shared/profile_widgets.dart';
-
-import 'services/alimony_claim_page.dart';
 import '../services/alimony_claim_document_service.dart';
 import '../services/family_claim_document_service.dart';
+import '../shared/profile_widgets.dart';
+import '../shared/user_profile.dart';
+import 'services/advokat_yollash_page.dart';
+import 'services/alimony_claim_page.dart';
 import 'services/family_claim_page.dart';
 import 'services/lawyer_draft_request_page.dart';
-import 'services/advokat_yollash_page.dart';
 
 class BoshSahifaPage extends StatefulWidget {
   const BoshSahifaPage({super.key});
@@ -86,6 +85,8 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
   void initState() {
     super.initState();
     _searchController.addListener(_handleSearchChanged);
+    GeneratedDocumentRepository.instance.reload();
+    ActivityHistoryRepository.instance.ensureInitialized();
   }
 
   @override
@@ -109,6 +110,73 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
         .toList();
   }
 
+  Future<void> _handleLawyerOrConsultSubmit(
+    Map<String, dynamic> payload,
+  ) async {
+    final type = payload['type']?.toString() ?? '';
+    if (type == 'book_consultation') {
+      final date = payload['date']?.toString() ?? '';
+      final time = payload['time']?.toString() ?? '';
+      await ActivityHistoryRepository.instance.record(
+        title: 'Jonli videokonsultatsiya band qilindi',
+        description:
+            'Bosh advokat Shohruh Jo‘rayev • Sana: $date, soat $time (20 daqiqa)',
+        category: ActivityCategory.consultation,
+        statusLabel: 'Band qilindi',
+        metadata: <String, String>{
+          'Xizmat': '20 daqiqalik jonli videokonsultatsiya',
+          'Advokat': 'Shohruh Jo‘rayev (YAN Legal Firm)',
+          'Sana': date,
+          'Vaqt': '$time (Asia/Tashkent)',
+          'Narxi': '99 000 so‘m',
+        },
+      );
+    } else {
+      final desc = payload['case_description']?.toString() ?? '';
+      await ActivityHistoryRepository.instance.record(
+        title: 'Sud himoyasi uchun advokat yollash so‘rovi',
+        description: desc,
+        category: ActivityCategory.lawyer,
+        statusLabel: 'Ko‘rib chiqilmoqda',
+        metadata: <String, String>{
+          'Xizmat': 'Sud himoyasi va vakillik',
+          'Advokat': 'Shohruh Jo‘rayev (YAN Legal Firm)',
+          'Mijoz': userProfile.value.displayName,
+          'Telefon': userProfile.value.phone,
+          'Ish mazmuni': desc,
+        },
+      );
+    }
+    userProfile.value = userProfile.value.copyWith(
+      activeApplications: userProfile.value.activeApplications + 1,
+    );
+  }
+
+  Future<void> _handleLawyerDraftSubmit(Map<String, dynamic> payload) async {
+    final categoryTitle =
+        payload['category_title']?.toString() ?? 'Yuridik masala';
+    final problem = payload['problem']?.toString() ?? '';
+    final price = payload['base_price']?.toString() ?? '';
+    final files = (payload['files'] as List<dynamic>? ?? const []).length;
+
+    await ActivityHistoryRepository.instance.record(
+      title: 'Advokatga ariza yozdirish: $categoryTitle',
+      description: problem,
+      category: ActivityCategory.lawyer,
+      statusLabel: 'Yuristga yuborildi',
+      metadata: <String, String>{
+        'Yo‘nalish': categoryTitle,
+        'Boshlang‘ich narx': '$price so‘m',
+        'Ilova qilingan fayllar': '$files ta hujjat/rasm',
+        'Mijoz': userProfile.value.displayName,
+        'Muammo bayoni': problem,
+      },
+    );
+    userProfile.value = userProfile.value.copyWith(
+      activeApplications: userProfile.value.activeApplications + 1,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibleServices = _visibleServices;
@@ -121,7 +189,6 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           sliver: SliverToBoxAdapter(child: _buildBrandHeader()),
         ),
-        // ── Mini profile card ──────────────────────────────────────────────
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
           sliver: SliverToBoxAdapter(child: _buildMiniProfileCard()),
@@ -145,12 +212,14 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                       return _LiquidServiceCard(
                         data: service,
                         onTap: () {
-                          if (service.title == "Bolaga aliment undirish") {
+                          if (service.title == 'Bolaga aliment undirish') {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => AlimonyClaimPage(
                                   onSubmit: (payload) async {
-                                    await AlimonyClaimDocumentService().create(payload);
+                                    await AlimonyClaimDocumentService().create(
+                                      payload,
+                                    );
                                   },
                                 ),
                               ),
@@ -158,8 +227,8 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                             return;
                           }
 
-                          
-                          if (service.title == "Bolaning yashash joyini belgilash") {
+                          if (service.title ==
+                              'Bolaning yashash joyini belgilash') {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => const FamilyClaimPage(
@@ -170,7 +239,8 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                             return;
                           }
 
-                          if (service.title == "Ona ta'minoti uchun aliment undirish") {
+                          if (service.title ==
+                              "Ona ta'minoti uchun aliment undirish") {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => const FamilyClaimPage(
@@ -181,7 +251,8 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                             return;
                           }
 
-                          if (service.title == "Bola bilan ko'rishish tartibini belgilash") {
+                          if (service.title ==
+                              "Bola bilan ko'rishish tartibini belgilash") {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => const FamilyClaimPage(
@@ -192,7 +263,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                             return;
                           }
 
-                          if (service.title == "Nikohdan ajrashish") {
+                          if (service.title == 'Nikohdan ajrashish') {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => const FamilyClaimPage(
@@ -203,19 +274,36 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                             return;
                           }
 
-                          if (service.title == "Advokatga ariza yozdirish") {
+                          if (service.title == 'Advokatga ariza yozdirish') {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const LawyerDraftRequestPage(), 
+                                builder: (_) => LawyerDraftRequestPage(
+                                  onSubmit: _handleLawyerDraftSubmit,
+                                ),
                               ),
                             );
                             return;
                           }
-                          
-                          if (service.title == "Advokat yollash") {
+
+                          if (service.title == 'Konsultatsiya') {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const AdvokatYollashPage(), 
+                                builder: (_) => AdvokatYollashPage(
+                                  initialRepresentation: false,
+                                  onSubmit: _handleLawyerOrConsultSubmit,
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          if (service.title == 'Advokat yollash') {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => AdvokatYollashPage(
+                                  initialRepresentation: true,
+                                  onSubmit: _handleLawyerOrConsultSubmit,
+                                ),
                               ),
                             );
                             return;
@@ -227,8 +315,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                     },
                     childCount: visibleServices.length,
                   ),
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 10,
                     mainAxisSpacing: 10,
@@ -240,22 +327,22 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Mini profile card
-  // ─────────────────────────────────────────────────────────────────────────
-
   Widget _buildMiniProfileCard() {
     return ValueListenableBuilder<UserProfileData>(
       valueListenable: userProfile,
       builder: (context, profile, _) {
-        return _MiniProfileCard(profile: profile);
+        return ValueListenableBuilder<List<GeneratedDocument>>(
+          valueListenable: GeneratedDocumentRepository.instance.documents,
+          builder: (context, docs, _) {
+            return _MiniProfileCard(
+              profile: profile,
+              totalArizalarCount: docs.length + profile.activeApplications,
+            );
+          },
+        );
       },
     );
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Rest of the page (unchanged logic)
-  // ─────────────────────────────────────────────────────────────────────────
 
   Widget _buildBrandHeader() {
     return Row(
@@ -507,14 +594,14 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Mini Profile Card
-// ═══════════════════════════════════════════════════════════════════════════
-
 class _MiniProfileCard extends StatelessWidget {
   final UserProfileData profile;
+  final int totalArizalarCount;
 
-  const _MiniProfileCard({required this.profile});
+  const _MiniProfileCard({
+    required this.profile,
+    required this.totalArizalarCount,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -548,7 +635,6 @@ class _MiniProfileCard extends StatelessWidget {
           ),
           child: Stack(
             children: [
-              // Subtle top-left glow
               Positioned(
                 top: -30,
                 left: -30,
@@ -566,7 +652,6 @@ class _MiniProfileCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Subtle bottom-right glow
               Positioned(
                 bottom: -25,
                 right: -20,
@@ -584,7 +669,6 @@ class _MiniProfileCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Top shine line
               Positioned(
                 top: 0,
                 left: 30,
@@ -602,28 +686,24 @@ class _MiniProfileCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Main content: [left stats] — [avatar] — [right stats]
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // ── Left stat ──────────────────────────────────────────
                     Expanded(
                       child: _MiniStatColumn(
-                        value: profile.activeApplications.toString(),
-                        label: 'Arizalar',
+                        value: totalArizalarCount.toString(),
+                        label: 'Arizalar va hujjatlar',
                         accent: const Color(0xFF83AAFF),
                         icon: CupertinoIcons.doc_text_fill,
                       ),
                     ),
-                    // ── Center: avatar ─────────────────────────────────────
                     _MiniAvatarBubble(profile: profile),
-                    // ── Right stat ─────────────────────────────────────────
                     Expanded(
                       child: _MiniStatColumn(
                         value: profile.completionPercent,
-                        label: 'Profil',
+                        label: 'Profil tayyor',
                         accent: const Color(0xFF74DDB0),
                         icon: CupertinoIcons.checkmark_seal_fill,
                         alignRight: true,
@@ -640,7 +720,6 @@ class _MiniProfileCard extends StatelessWidget {
   }
 }
 
-/// The big circular avatar in the centre of the mini card.
 class _MiniAvatarBubble extends StatelessWidget {
   final UserProfileData profile;
 
@@ -692,7 +771,6 @@ class _MiniAvatarBubble extends StatelessWidget {
   }
 }
 
-/// Left or right statistic column inside the mini card.
 class _MiniStatColumn extends StatelessWidget {
   final String value;
   final String label;
@@ -710,8 +788,9 @@ class _MiniStatColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final crossAxis =
-        alignRight ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final crossAxis = alignRight
+        ? CrossAxisAlignment.end
+        : CrossAxisAlignment.start;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -732,6 +811,7 @@ class _MiniStatColumn extends StatelessWidget {
         Text(
           label,
           maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.52),
             fontSize: 10,
@@ -742,11 +822,6 @@ class _MiniStatColumn extends StatelessWidget {
     );
   }
 }
-
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Service card (unchanged)
-// ═══════════════════════════════════════════════════════════════════════════
 
 class _ServiceCardData {
   final String title;
@@ -823,8 +898,11 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
                       end: Alignment.bottomRight,
                       colors: [
                         data.colors.first.withValues(alpha: 0.95),
-                        Color.lerp(data.colors.first, data.colors.last, 0.48)!
-                            .withValues(alpha: 0.96),
+                        Color.lerp(
+                          data.colors.first,
+                          data.colors.last,
+                          0.48,
+                        )!.withValues(alpha: 0.96),
                         data.colors.last.withValues(alpha: 0.99),
                       ],
                       stops: const [0, 0.52, 1],
