@@ -58,7 +58,7 @@ class GeneratedDocumentRepository {
       final modified = await entity.lastModified();
       items.add(
         GeneratedDocument(
-          title: 'Bolaga aliment undirish arizasi',
+          title: _titleForFilename(entity.uri.pathSegments.last),
           path: entity.path,
           createdAt: modified,
         ),
@@ -66,6 +66,23 @@ class GeneratedDocumentRepository {
     }
     items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     documents.value = List.unmodifiable(items);
+  }
+
+  String _titleForFilename(String filename) {
+    final lower = filename.toLowerCase();
+    if (lower.startsWith('ona_taminoti_')) {
+      return 'Ona ta’minoti uchun aliment undirish arizasi';
+    }
+    if (lower.startsWith('bolaning_yashash_joyi_')) {
+      return 'Bolaning yashash joyini belgilash arizasi';
+    }
+    if (lower.startsWith('bola_korishish_')) {
+      return 'Bola bilan ko‘rishish tartibini belgilash arizasi';
+    }
+    if (lower.startsWith('nikohdan_ajrashish_')) {
+      return 'Nikohdan ajrashish arizasi';
+    }
+    return 'Bolaga aliment undirish arizasi';
   }
 }
 

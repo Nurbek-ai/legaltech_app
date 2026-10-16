@@ -8,8 +8,8 @@ import '../shared/profile_widgets.dart';
 
 import 'services/alimony_claim_page.dart';
 import '../services/alimony_claim_document_service.dart';
-import 'services/bolaning_yashash_joyi_page.dart';
-import 'services/nikohdan_ajrashish_page.dart';
+import '../services/family_claim_document_service.dart';
+import 'services/family_claim_page.dart';
 import 'services/lawyer_draft_request_page.dart';
 import 'services/advokat_yollash_page.dart';
 
@@ -162,7 +162,31 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                           if (service.title == "Bolaning yashash joyini belgilash") {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const ChildLivingPlacePage(), 
+                                builder: (_) => const FamilyClaimPage(
+                                  type: FamilyClaimType.childResidence,
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          if (service.title == "Ona ta'minoti uchun aliment undirish") {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const FamilyClaimPage(
+                                  type: FamilyClaimType.motherSupport,
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          if (service.title == "Bola bilan ko'rishish tartibini belgilash") {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const FamilyClaimPage(
+                                  type: FamilyClaimType.childVisitation,
+                                ),
                               ),
                             );
                             return;
@@ -171,7 +195,9 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
                           if (service.title == "Nikohdan ajrashish") {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const DivorceClaimPage(), 
+                                builder: (_) => const FamilyClaimPage(
+                                  type: FamilyClaimType.divorce,
+                                ),
                               ),
                             );
                             return;
