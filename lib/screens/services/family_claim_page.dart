@@ -1781,7 +1781,7 @@ class _DropdownField extends StatelessWidget {
             ),
           ),
           DropdownButtonFormField<String>(
-            value: effectiveValue,
+            initialValue: effectiveValue,
             isExpanded: true,
             dropdownColor: const Color(0xFF102A40),
             iconEnabledColor: Colors.white54,

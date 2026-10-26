@@ -15,7 +15,7 @@ class DashboardNavItem extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const DashboardNavItem({
+  const DashboardNavItem({super.key, 
     required this.icon,
     required this.label,
     required this.selected,
@@ -36,7 +36,7 @@ class DashboardNavItem extends StatelessWidget {
           margin: const EdgeInsets.symmetric(horizontal: 3),
           decoration: BoxDecoration(
             color: selected
-                ? Colors.white.withOpacity(0.15)
+                ? Colors.white.withValues(alpha: 0.15)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(15),
           ),
@@ -48,7 +48,7 @@ class DashboardNavItem extends StatelessWidget {
                 size: 20,
                 color: selected
                     ? const Color(0xFFF1F5FF)
-                    : Colors.white.withOpacity(0.48),
+                    : Colors.white.withValues(alpha: 0.48),
               ),
               const SizedBox(height: 5),
               Text(
@@ -58,7 +58,7 @@ class DashboardNavItem extends StatelessWidget {
                 style: TextStyle(
                   color: selected
                       ? const Color(0xFFF1F5FF)
-                      : Colors.white.withOpacity(0.48),
+                      : Colors.white.withValues(alpha: 0.48),
                   fontSize: 9.5,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                 ),

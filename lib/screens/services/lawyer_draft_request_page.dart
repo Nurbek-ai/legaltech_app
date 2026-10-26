@@ -760,7 +760,7 @@ class _LawyerDraftRequestPageState
                           width: 44,
                           height: 44,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
+                          errorBuilder: (_, _, _) =>
                               const SizedBox(
                             width: 44,
                             height: 44,

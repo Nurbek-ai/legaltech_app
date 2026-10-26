@@ -223,7 +223,7 @@ class _AdvokatYollashPageState extends State<AdvokatYollashPage> {
     _Glass(padding: const EdgeInsets.all(15), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [const Icon(Icons.calendar_month_rounded, color: cyan, size: 19), const SizedBox(width: 8), const Expanded(child: Text('Sana tanlang', style: TextStyle(color: ink, fontWeight: FontWeight.w800, fontSize: 14))), Text(_monthText(_day), style: const TextStyle(color: muted, fontSize: 10))]),
       const SizedBox(height: 13),
-      SizedBox(height: 80, child: ListView.separated(scrollDirection: Axis.horizontal, itemCount: _days.length, separatorBuilder: (_, __) => const SizedBox(width: 8), itemBuilder: (context, i) {
+      SizedBox(height: 80, child: ListView.separated(scrollDirection: Axis.horizontal, itemCount: _days.length, separatorBuilder: (_, _) => const SizedBox(width: 8), itemBuilder: (context, i) {
         final d = _days[i]; const wd = ['DU', 'SE', 'CH', 'PA', 'JU', 'SH', 'YA'];
         return _DateChip(weekday: wd[d.weekday - 1], day: '${d.day}', selected: _dateOnly(d) == _day, onTap: () => setState(() { _day = d; _time = null; }));
       })),

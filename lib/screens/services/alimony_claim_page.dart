@@ -555,7 +555,7 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: _primary.withOpacity(0.35),
+                      color: _primary.withValues(alpha: 0.35),
                       blurRadius: 30,
                     ),
                   ],
@@ -757,10 +757,10 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
               vertical: 8,
             ),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.07),
+              color: Colors.white.withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: Colors.white.withOpacity(0.08),
+                color: Colors.white.withValues(alpha: 0.08),
               ),
             ),
             child: Text(
@@ -795,11 +795,11 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
                     tween: Tween(begin: 0, end: progress),
                     duration: const Duration(milliseconds: 500),
                     curve: Curves.easeOutCubic,
-                    builder: (_, value, __) {
+                    builder: (_, value, _) {
                       return LinearProgressIndicator(
                         value: value,
                         minHeight: 5,
-                        backgroundColor: Colors.white.withOpacity(0.08),
+                        backgroundColor: Colors.white.withValues(alpha: 0.08),
                         valueColor: const AlwaysStoppedAnimation(
                           _primary,
                         ),
@@ -857,7 +857,7 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
             onPressed: _fillFromProfile,
             style: OutlinedButton.styleFrom(
               foregroundColor: _primaryLight,
-              side: BorderSide(color: _primary.withOpacity(0.45)),
+              side: BorderSide(color: _primary.withValues(alpha: 0.45)),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
@@ -1104,10 +1104,10 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
               vertical: 16,
             ),
             decoration: BoxDecoration(
-              color: _primary.withOpacity(0.10),
+              color: _primary.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: _primary.withOpacity(0.35),
+                color: _primary.withValues(alpha: 0.35),
               ),
             ),
             child: const Row(
@@ -1246,10 +1246,10 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.045),
+            color: Colors.white.withValues(alpha: 0.045),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Colors.white.withOpacity(0.08),
+              color: Colors.white.withValues(alpha: 0.08),
             ),
           ),
           child: const Row(
@@ -1293,8 +1293,8 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            _background.withOpacity(0.0),
-            _background.withOpacity(0.97),
+            _background.withValues(alpha: 0.0),
+            _background.withValues(alpha: 0.97),
             _background,
           ],
         ),
@@ -1332,7 +1332,7 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
                   borderRadius: BorderRadius.circular(19),
                   boxShadow: [
                     BoxShadow(
-                      color: _primary.withOpacity(0.25),
+                      color: _primary.withValues(alpha: 0.25),
                       blurRadius: 25,
                       offset: const Offset(0, 10),
                     ),
@@ -1442,7 +1442,7 @@ class _StepPage extends StatelessWidget {
                     boxShadow: [
                       BoxShadow(
                         color: const Color(0xFF7B61FF)
-                            .withOpacity(0.28),
+                            .withValues(alpha: 0.28),
                         blurRadius: 24,
                       ),
                     ],
@@ -1572,7 +1572,7 @@ class _Field extends StatelessWidget {
                 size: 20,
               ),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.055),
+              fillColor: Colors.white.withValues(alpha: 0.055),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 17,
                 vertical: 17,
@@ -1580,7 +1580,7 @@ class _Field extends StatelessWidget {
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(17),
                 borderSide: BorderSide(
-                  color: Colors.white.withOpacity(0.07),
+                  color: Colors.white.withValues(alpha: 0.07),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
@@ -1637,7 +1637,7 @@ class _DropdownField extends StatelessWidget {
           ),
 
           DropdownButtonFormField<String>(
-            value: value,
+            initialValue: value,
             dropdownColor: const Color(0xFF102A40),
             iconEnabledColor: Colors.white54,
             style: const TextStyle(
@@ -1652,7 +1652,7 @@ class _DropdownField extends StatelessWidget {
                 size: 20,
               ),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.055),
+              fillColor: Colors.white.withValues(alpha: 0.055),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 10,
                 vertical: 5,
@@ -1660,7 +1660,7 @@ class _DropdownField extends StatelessWidget {
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(17),
                 borderSide: BorderSide(
-                  color: Colors.white.withOpacity(0.07),
+                  color: Colors.white.withValues(alpha: 0.07),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
@@ -1740,10 +1740,10 @@ class _DateField extends StatelessWidget {
                 vertical: 17,
               ),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.055),
+                color: Colors.white.withValues(alpha: 0.055),
                 borderRadius: BorderRadius.circular(17),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.07),
+                  color: Colors.white.withValues(alpha: 0.07),
                 ),
               ),
               child: Row(
@@ -1808,13 +1808,13 @@ class _ChildCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white.withOpacity(0.075),
-            Colors.white.withOpacity(0.035),
+            Colors.white.withValues(alpha: 0.075),
+            Colors.white.withValues(alpha: 0.035),
           ],
         ),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: Colors.white.withOpacity(0.09),
+          color: Colors.white.withValues(alpha: 0.09),
         ),
       ),
       child: Column(
@@ -1826,7 +1826,7 @@ class _ChildCard extends StatelessWidget {
                 height: 38,
                 decoration: BoxDecoration(
                   color: _AlimonyClaimPageState._pink
-                      .withOpacity(0.16),
+                      .withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(13),
                 ),
                 child: const Icon(
@@ -1907,10 +1907,10 @@ class _ReviewCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.045),
+        color: Colors.white.withValues(alpha: 0.045),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Colors.white.withOpacity(0.075),
+          color: Colors.white.withValues(alpha: 0.075),
         ),
       ),
       child: Column(
@@ -1997,10 +1997,10 @@ class _InfoCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _AlimonyClaimPageState._cyan.withOpacity(0.06),
+        color: _AlimonyClaimPageState._cyan.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: _AlimonyClaimPageState._cyan.withOpacity(0.14),
+          color: _AlimonyClaimPageState._cyan.withValues(alpha: 0.14),
         ),
       ),
       child: Row(
@@ -2065,10 +2065,10 @@ class _GlassButton extends StatelessWidget {
         width: size,
         height: size,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.065),
+          color: Colors.white.withValues(alpha: 0.065),
           borderRadius: BorderRadius.circular(15),
           border: Border.all(
-            color: Colors.white.withOpacity(0.08),
+            color: Colors.white.withValues(alpha: 0.08),
           ),
         ),
         child: Icon(
@@ -2104,7 +2104,7 @@ class _Glow extends StatelessWidget {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.13),
+              color: color.withValues(alpha: 0.13),
               blurRadius: size * 0.65,
               spreadRadius: size * 0.05,
             ),

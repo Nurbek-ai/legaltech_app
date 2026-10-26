@@ -58,7 +58,7 @@ class FullScreenPhotoPage extends StatelessWidget {
             ),
             // Dim overlay
             Positioned.fill(
-              child: ColoredBox(color: Colors.black.withOpacity(0.58)),
+              child: ColoredBox(color: Colors.black.withValues(alpha: 0.58)),
             ),
             // The photo
             Center(
@@ -86,10 +86,10 @@ class FullScreenPhotoPage extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.50),
+                      color: Colors.black.withValues(alpha: 0.50),
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.22),
+                        color: Colors.white.withValues(alpha: 0.22),
                       ),
                     ),
                     child: const Icon(

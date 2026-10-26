@@ -2466,7 +2466,7 @@ class _ProfileDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
-      value: options.contains(value) ? value : null,
+      initialValue: options.contains(value) ? value : null,
       isExpanded: true,
       dropdownColor: const Color(0xFF152940),
       style: const TextStyle(

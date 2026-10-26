@@ -7,7 +7,6 @@ import 'screens/bosh_sahifa_page.dart';
 import 'screens/tarix_page.dart';
 import 'screens/hujjatlar_page.dart';
 import 'screens/profil_page.dart';
-import 'shared/user_profile.dart';
 import 'shared/dashboard_background.dart';
 import 'shared/dashboard_navigation.dart';
 
@@ -1269,4 +1268,4 @@ class _LiquidSecondaryButtonState extends State<_LiquidSecondaryButton> {
       ),
     );
   }
-}
+} 
