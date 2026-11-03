@@ -2,16 +2,44 @@ import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'screens/bosh_sahifa_page.dart';
-import 'screens/tarix_page.dart';
 import 'screens/hujjatlar_page.dart';
 import 'screens/profil_page.dart';
+import 'screens/tarix_page.dart';
 import 'shared/dashboard_background.dart';
 import 'shared/dashboard_navigation.dart';
+import 'shared/user_profile.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+      systemNavigationBarColor: Color(0xFF020610),
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
+  );
   runApp(const YAN360App());
+}
+
+/// Color tokens calibrated to the electric-cyan & deep-sapphire Lady Justice artwork.
+class _AuthTheme {
+  static const Color abyssNavy = Color(0xFF020611);
+  static const Color midnightSapphire = Color(0xFF06132C);
+  static const Color cardGlassTop = Color(0xFF081A3A);
+  static const Color cardGlassBottom = Color(0xFF030B1B);
+  static const Color inputSurface = Color(0xFF030B1A);
+
+  static const Color electricCyan = Color(0xFF00D4FF);
+  static const Color luminousAzure = Color(0xFF0088FF);
+  static const Color royalSapphire = Color(0xFF0051D5);
+  static const Color iceCyan = Color(0xFF6AE6FF);
+  static const Color softSky = Color(0xFFA4C8F0);
+  static const Color crispWhite = Color(0xFFF5FAFF);
 }
 
 class YAN360App extends StatelessWidget {
@@ -24,9 +52,15 @@ class YAN360App extends StatelessWidget {
       title: 'YAN360',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF050A14),
+        scaffoldBackgroundColor: _AuthTheme.abyssNavy,
         fontFamily: 'Roboto',
         useMaterial3: true,
+        colorScheme: const ColorScheme.dark(
+          primary: _AuthTheme.electricCyan,
+          secondary: _AuthTheme.luminousAzure,
+          surface: _AuthTheme.midnightSapphire,
+          onSurface: _AuthTheme.crispWhite,
+        ),
       ),
       home: const IntroScreen(),
     );
@@ -56,8 +90,7 @@ class _IntroScreenState extends State<IntroScreen>
 
   final _phoneRegisterFirstNameController = TextEditingController();
   final _phoneRegisterSurnameController = TextEditingController();
-  final _phoneRegisterPhoneController =
-      TextEditingController(text: '+998 ');
+  final _phoneRegisterPhoneController = TextEditingController(text: '+998 ');
   final _phoneRegisterCodeController = TextEditingController();
 
   final _emailLoginController = TextEditingController();
@@ -76,7 +109,7 @@ class _IntroScreenState extends State<IntroScreen>
 
     _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 950),
     )..forward();
 
     _putCursorAtEnd(_loginPhoneController);
@@ -145,6 +178,18 @@ class _IntroScreenState extends State<IntroScreen>
     });
   }
 
+  String get _badgeText {
+    switch (_mode) {
+      case AuthMode.phoneLogin:
+        return 'RAQAMLI YURIDIK EKOTIZIM';
+      case AuthMode.emailLogin:
+        return 'KORPORATIV VA SHAXSIY KIRISH';
+      case AuthMode.phoneRegister:
+      case AuthMode.emailRegister:
+        return 'YANGI MIJOZ RO‘YXATI';
+    }
+  }
+
   String get _title {
     switch (_mode) {
       case AuthMode.phoneLogin:
@@ -153,52 +198,74 @@ class _IntroScreenState extends State<IntroScreen>
         return 'Email orqali kirish';
       case AuthMode.phoneRegister:
       case AuthMode.emailRegister:
-        return 'Yangi hisob';
+        return 'Yangi hisob yaratish';
     }
   }
 
   String get _subtitle {
     switch (_mode) {
       case AuthMode.phoneLogin:
-        return 'Telefon raqamingiz orqali davom eting';
+        return 'Tasdiqlangan telefon raqamingiz orqali tizimga kiring';
       case AuthMode.emailLogin:
-        return 'Email manzilingiz orqali davom eting';
+        return 'Elektron pochta manzilingiz orqali davom eting';
       case AuthMode.phoneRegister:
-        return 'Telefon raqami orqali yangi hisob yarating';
+        return 'Huquqiy xizmatlardan foydalanish uchun ro‘yxatdan o‘ting';
       case AuthMode.emailRegister:
-        return 'Email orqali yangi hisob yarating';
+        return 'Email manzilingiz orqali shaxsiy kabinet oching';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final mediaQuery = MediaQuery.of(context);
+    final bottomInset = mediaQuery.viewInsets.bottom;
+    final keyboardOpen = bottomInset > 40;
 
     return Scaffold(
+      backgroundColor: _AuthTheme.abyssNavy,
       resizeToAvoidBottomInset: true,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          const _ProfessionalBackground(),
-          const _LogoWatermark(),
-
+          const _LadyJusticeBackground(),
           SafeArea(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                20,
-                22,
-                20,
-                24 + bottomInset,
-              ),
-              child: Column(
-                children: [
-                  _buildBrand(),
-                  const SizedBox(height: 27),
-                  _buildAuthCard(),
-                  const SizedBox(height: 17),
-                  _buildFooter(),
-                ],
-              ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    10,
+                    20,
+                    20 + (bottomInset > 0 ? 12 : 0),
+                  ),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: (constraints.maxHeight - 30).clamp(
+                        0.0,
+                        double.infinity,
+                      ),
+                    ),
+                    child: IntrinsicHeight(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildTopBrandBar(),
+                          if (!keyboardOpen) ...[
+                            const Spacer(),
+                            _buildHeroTagline(),
+                            const SizedBox(height: 16),
+                          ] else
+                            const SizedBox(height: 18),
+                          _buildAuthCard(),
+                          const SizedBox(height: 16),
+                          _buildFooter(),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -206,19 +273,20 @@ class _IntroScreenState extends State<IntroScreen>
     );
   }
 
-  Widget _buildBrand() {
+  /// Prominent, standalone firm emblem with NO circular border or background box.
+  Widget _buildTopBrandBar() {
     final fade = CurvedAnimation(
       parent: _entranceController,
-      curve: Curves.easeOut,
+      curve: const Interval(0.0, 0.65, curve: Curves.easeOut),
     );
 
     final slide = Tween<Offset>(
-      begin: const Offset(0, 0.06),
+      begin: const Offset(0, -0.08),
       end: Offset.zero,
     ).animate(
       CurvedAnimation(
         parent: _entranceController,
-        curve: Curves.easeOutCubic,
+        curve: const Interval(0.0, 0.70, curve: Curves.easeOutCubic),
       ),
     );
 
@@ -226,76 +294,127 @@ class _IntroScreenState extends State<IntroScreen>
       opacity: fade,
       child: SlideTransition(
         position: slide,
-        child: Column(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Container(
-              width: 154,
-              height: 154,
-              padding: const EdgeInsets.all(19),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.12),
-                    const Color(0xFF6E96F5).withValues(alpha: 0.055),
-                    Colors.white.withValues(alpha: 0.018),
-                  ],
-                ),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.15),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF4B78E8).withValues(alpha: 0.16),
-                    blurRadius: 48,
-                    spreadRadius: 2,
+            // Standalone large logo (84x84) with subtle ambient glow — NO circular border
+            SizedBox(
+              width: 84,
+              height: 84,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: _AuthTheme.electricCyan.withValues(alpha: 0.32),
+                          blurRadius: 32,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
                   ),
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    blurRadius: 30,
-                    offset: const Offset(0, 16),
+                  Image.asset(
+                    'assets/logo.png',
+                    width: 84,
+                    height: 84,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                    errorBuilder: (_, _, _) => const Icon(
+                      CupertinoIcons.shield_lefthalf_fill,
+                      color: _AuthTheme.iceCyan,
+                      size: 48,
+                    ),
                   ),
                 ],
               ),
-              child: Image.asset(
-                'assets/logo.png',
-                fit: BoxFit.contain,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      children: [
+                        const TextSpan(
+                          text: 'YAN',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 25,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 3.2,
+                            height: 1.0,
+                          ),
+                        ),
+                        TextSpan(
+                          text: '360',
+                          style: TextStyle(
+                            color: _AuthTheme.electricCyan,
+                            fontSize: 25,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 3.2,
+                            height: 1.0,
+                            shadows: [
+                              Shadow(
+                                color: _AuthTheme.electricCyan.withValues(
+                                  alpha: 0.65,
+                                ),
+                                blurRadius: 14,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    'Yuridik xizmatlar uchun yagona makon',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.2,
+                      color: _AuthTheme.softSky.withValues(alpha: 0.86),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 17),
-            ShaderMask(
-              shaderCallback: (bounds) {
-                return const LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    Color(0xFFFFFFFF),
-                    Color(0xFFDCE7FF),
-                    Color(0xFF86A9FF),
-                  ],
-                ).createShader(bounds);
-              },
-              child: const Text(
-                'YAN360',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 31,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 6.5,
-                  height: 1,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: _AuthTheme.midnightSapphire.withValues(alpha: 0.68),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: _AuthTheme.iceCyan.withValues(alpha: 0.30),
                 ),
               ),
-            ),
-            const SizedBox(height: 9),
-            Text(
-              'Yuridik xizmatlar uchun yagona makon',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                letterSpacing: 0.15,
-                color: Colors.white.withValues(alpha: 0.43),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(
+                    CupertinoIcons.checkmark_shield_fill,
+                    size: 13,
+                    color: _AuthTheme.electricCyan,
+                  ),
+                  SizedBox(width: 5),
+                  Text(
+                    '24/7',
+                    style: TextStyle(
+                      color: _AuthTheme.crispWhite,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -304,71 +423,184 @@ class _IntroScreenState extends State<IntroScreen>
     );
   }
 
-  Widget _buildAuthCard() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+  Widget _buildHeroTagline() {
+    final fade = CurvedAnimation(
+      parent: _entranceController,
+      curve: const Interval(0.18, 0.85, curve: Curves.easeOut),
+    );
+
+    return FadeTransition(
+      opacity: fade,
+      child: Align(
+        alignment: Alignment.centerLeft,
         child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(17, 19, 17, 17),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.052),
-            borderRadius: BorderRadius.circular(28),
+            color: _AuthTheme.abyssNavy.withValues(alpha: 0.58),
+            borderRadius: BorderRadius.circular(30),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.105),
+              color: _AuthTheme.electricCyan.withValues(alpha: 0.32),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.34),
-                blurRadius: 35,
-                offset: const Offset(0, 18),
+                color: _AuthTheme.electricCyan.withValues(alpha: 0.14),
+                blurRadius: 16,
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              if (!_isLogin) _buildBackButton(),
-              if (!_isLogin) const SizedBox(height: 7),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                child: Column(
-                  key: ValueKey(_mode),
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _title,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.45,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      _subtitle,
-                      style: TextStyle(
-                        fontSize: 12.8,
-                        color: Colors.white.withValues(alpha: 0.45),
-                      ),
-                    ),
+              Container(
+                width: 6,
+                height: 6,
+                decoration: const BoxDecoration(
+                  color: _AuthTheme.electricCyan,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Text(
+                _badgeText,
+                style: const TextStyle(
+                  color: _AuthTheme.iceCyan,
+                  fontSize: 9.8,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAuthCard() {
+    final fade = CurvedAnimation(
+      parent: _entranceController,
+      curve: const Interval(0.15, 1.0, curve: Curves.easeOut),
+    );
+
+    final slide = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.15, 1.0, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    return FadeTransition(
+      opacity: fade,
+      child: SlideTransition(
+        position: slide,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(26),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    _AuthTheme.cardGlassTop.withValues(alpha: 0.78),
+                    _AuthTheme.cardGlassBottom.withValues(alpha: 0.88),
                   ],
                 ),
-              ),
-              const SizedBox(height: 19),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 240),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeIn,
-                child: KeyedSubtree(
-                  key: ValueKey('$_mode-$_phoneCodeSent-$_emailCodeSent'),
-                  child: _buildCurrentForm(),
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(
+                  color: _AuthTheme.iceCyan.withValues(alpha: 0.28),
+                  width: 1.1,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    blurRadius: 34,
+                    offset: const Offset(0, 18),
+                  ),
+                  BoxShadow(
+                    color: _AuthTheme.luminousAzure.withValues(alpha: 0.16),
+                    blurRadius: 28,
+                    spreadRadius: -2,
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              _buildNavigationButtons(),
-            ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    height: 1.5,
+                    margin: const EdgeInsets.symmetric(horizontal: 28),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          _AuthTheme.iceCyan.withValues(alpha: 0.75),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (!_isLogin) _buildBackButton(),
+                        if (!_isLogin) const SizedBox(height: 8),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          child: Column(
+                            key: ValueKey(_mode),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _title,
+                                style: const TextStyle(
+                                  color: _AuthTheme.crispWhite,
+                                  fontSize: 23,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.4,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                _subtitle,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  height: 1.3,
+                                  color: _AuthTheme.softSky.withValues(
+                                    alpha: 0.78,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 240),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeIn,
+                          child: KeyedSubtree(
+                            key: ValueKey(
+                              '$_mode-$_phoneCodeSent-$_emailCodeSent',
+                            ),
+                            child: _buildCurrentForm(),
+                          ),
+                        ),
+                        const SizedBox(height: 15),
+                        _buildNavigationButtons(),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -378,23 +610,30 @@ class _IntroScreenState extends State<IntroScreen>
   Widget _buildBackButton() {
     return GestureDetector(
       onTap: _goToLogin,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 2),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: _AuthTheme.electricCyan.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: _AuthTheme.iceCyan.withValues(alpha: 0.30),
+          ),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          children: [
+          children: const [
             Icon(
               CupertinoIcons.chevron_left,
-              size: 15,
-              color: const Color(0xFF91B0FF),
+              size: 14,
+              color: _AuthTheme.iceCyan,
             ),
-            const SizedBox(width: 4),
+            SizedBox(width: 4),
             Text(
               'Kirishga qaytish',
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 12.2,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF91B0FF).withValues(alpha: 0.9),
+                color: _AuthTheme.iceCyan,
               ),
             ),
           ],
@@ -428,19 +667,19 @@ class _IntroScreenState extends State<IntroScreen>
             controller: _loginCodeController,
             hintText: 'Tasdiqlash kodi',
             keyboardType: TextInputType.number,
-            icon: CupertinoIcons.lock,
+            icon: CupertinoIcons.lock_shield,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 15),
           _LiquidPrimaryButton(
-            label: 'Kirish',
+            label: 'Tizimga kirish',
             icon: CupertinoIcons.arrow_right,
             onPressed: _loginWithPhone,
           ),
         ] else ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 15),
           _LiquidPrimaryButton(
             label: 'SMS kodni yuborish',
-            icon: CupertinoIcons.paperplane,
+            icon: CupertinoIcons.paperplane_fill,
             onPressed: _sendPhoneCodeForLogin,
           ),
         ],
@@ -463,19 +702,19 @@ class _IntroScreenState extends State<IntroScreen>
             controller: _loginCodeController,
             hintText: 'Tasdiqlash kodi',
             keyboardType: TextInputType.number,
-            icon: CupertinoIcons.lock,
+            icon: CupertinoIcons.lock_shield,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 15),
           _LiquidPrimaryButton(
-            label: 'Kirish',
+            label: 'Tizimga kirish',
             icon: CupertinoIcons.arrow_right,
             onPressed: _loginWithEmail,
           ),
         ] else ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 15),
           _LiquidPrimaryButton(
             label: 'Kodni yuborish',
-            icon: CupertinoIcons.paperplane,
+            icon: CupertinoIcons.paperplane_fill,
             onPressed: _sendEmailCodeForLogin,
           ),
         ],
@@ -486,18 +725,26 @@ class _IntroScreenState extends State<IntroScreen>
   Widget _buildPhoneRegister() {
     return Column(
       children: [
-        _LiquidTextField(
-          controller: _phoneRegisterFirstNameController,
-          hintText: 'Ism',
-          keyboardType: TextInputType.name,
-          icon: CupertinoIcons.person,
-        ),
-        const SizedBox(height: 10),
-        _LiquidTextField(
-          controller: _phoneRegisterSurnameController,
-          hintText: 'Familiya',
-          keyboardType: TextInputType.name,
-          icon: CupertinoIcons.person,
+        Row(
+          children: [
+            Expanded(
+              child: _LiquidTextField(
+                controller: _phoneRegisterFirstNameController,
+                hintText: 'Ism',
+                keyboardType: TextInputType.name,
+                icon: CupertinoIcons.person,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _LiquidTextField(
+                controller: _phoneRegisterSurnameController,
+                hintText: 'Familiya',
+                keyboardType: TextInputType.name,
+                icon: CupertinoIcons.person,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         _UzbekPhoneField(
@@ -509,19 +756,19 @@ class _IntroScreenState extends State<IntroScreen>
             controller: _phoneRegisterCodeController,
             hintText: 'Tasdiqlash kodi',
             keyboardType: TextInputType.number,
-            icon: CupertinoIcons.lock,
+            icon: CupertinoIcons.lock_shield,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 15),
           _LiquidPrimaryButton(
             label: 'Ro‘yxatdan o‘tish',
-            icon: CupertinoIcons.person_add,
+            icon: CupertinoIcons.person_add_solid,
             onPressed: _completePhoneRegistration,
           ),
         ] else ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 15),
           _LiquidPrimaryButton(
             label: 'SMS kodni yuborish',
-            icon: CupertinoIcons.paperplane,
+            icon: CupertinoIcons.paperplane_fill,
             onPressed: _sendPhoneCodeForRegistration,
           ),
         ],
@@ -532,18 +779,26 @@ class _IntroScreenState extends State<IntroScreen>
   Widget _buildEmailRegister() {
     return Column(
       children: [
-        _LiquidTextField(
-          controller: _emailRegisterFirstNameController,
-          hintText: 'Ism',
-          keyboardType: TextInputType.name,
-          icon: CupertinoIcons.person,
-        ),
-        const SizedBox(height: 10),
-        _LiquidTextField(
-          controller: _emailRegisterSurnameController,
-          hintText: 'Familiya',
-          keyboardType: TextInputType.name,
-          icon: CupertinoIcons.person,
+        Row(
+          children: [
+            Expanded(
+              child: _LiquidTextField(
+                controller: _emailRegisterFirstNameController,
+                hintText: 'Ism',
+                keyboardType: TextInputType.name,
+                icon: CupertinoIcons.person,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _LiquidTextField(
+                controller: _emailRegisterSurnameController,
+                hintText: 'Familiya',
+                keyboardType: TextInputType.name,
+                icon: CupertinoIcons.person,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         _LiquidTextField(
@@ -558,19 +813,19 @@ class _IntroScreenState extends State<IntroScreen>
             controller: _emailRegisterCodeController,
             hintText: 'Tasdiqlash kodi',
             keyboardType: TextInputType.number,
-            icon: CupertinoIcons.lock,
+            icon: CupertinoIcons.lock_shield,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 15),
           _LiquidPrimaryButton(
             label: 'Ro‘yxatdan o‘tish',
-            icon: CupertinoIcons.person_add,
+            icon: CupertinoIcons.person_add_solid,
             onPressed: _completeEmailRegistration,
           ),
         ] else ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 15),
           _LiquidPrimaryButton(
             label: 'Kodni yuborish',
-            icon: CupertinoIcons.paperplane,
+            icon: CupertinoIcons.paperplane_fill,
             onPressed: _sendEmailCodeForRegistration,
           ),
         ],
@@ -579,8 +834,7 @@ class _IntroScreenState extends State<IntroScreen>
   }
 
   Widget _buildNavigationButtons() {
-    if (_mode == AuthMode.phoneRegister ||
-        _mode == AuthMode.emailRegister) {
+    if (_mode == AuthMode.phoneRegister || _mode == AuthMode.emailRegister) {
       return Row(
         children: [
           Expanded(
@@ -608,10 +862,16 @@ class _IntroScreenState extends State<IntroScreen>
       children: [
         Expanded(
           child: _LiquidSecondaryButton(
-            icon: CupertinoIcons.mail,
-            label: 'Email orqali',
+            icon: _mode == AuthMode.emailLogin
+                ? CupertinoIcons.phone
+                : CupertinoIcons.mail,
+            label: _mode == AuthMode.emailLogin
+                ? 'Telefon orqali'
+                : 'Email orqali',
             active: _mode == AuthMode.emailLogin,
-            onPressed: _goToEmailLogin,
+            onPressed: _mode == AuthMode.emailLogin
+                ? _goToLogin
+                : _goToEmailLogin,
           ),
         ),
         const SizedBox(width: 9),
@@ -704,6 +964,16 @@ class _IntroScreenState extends State<IntroScreen>
       return;
     }
 
+    final email = _emailLoginController.text.trim();
+    if (email.isNotEmpty) {
+      userProfile.value = userProfile.value.copyWith(email: email);
+      ActivityHistoryRepository.instance.record(
+        title: 'Tizimga email orqali kirildi',
+        description: 'Tasdiqlangan email: $email',
+        category: ActivityCategory.profile,
+        statusLabel: 'Tasdiqlandi',
+      );
+    }
     _openDashboard();
   }
 
@@ -762,6 +1032,20 @@ class _IntroScreenState extends State<IntroScreen>
       return;
     }
 
+    final fullName =
+        '${_emailRegisterFirstNameController.text.trim()} ${_emailRegisterSurnameController.text.trim()}'
+            .trim();
+    final email = _emailRegisterEmailController.text.trim();
+    userProfile.value = userProfile.value.copyWith(
+      displayName: fullName.isEmpty ? userProfile.value.displayName : fullName,
+      email: email.isEmpty ? userProfile.value.email : email,
+    );
+    ActivityHistoryRepository.instance.record(
+      title: 'Yangi foydalanuvchi (Email) ro‘yxatdan o‘tdi',
+      description: '$fullName • $email',
+      category: ActivityCategory.profile,
+      statusLabel: 'Yangi hisob',
+    );
     _openDashboard();
   }
 
@@ -785,19 +1069,19 @@ class _IntroScreenState extends State<IntroScreen>
         Text(
           'YAN LEGAL FIRM',
           style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 2.6,
-            color: Colors.white.withValues(alpha: 0.24),
+            fontSize: 10.2,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2.8,
+            color: _AuthTheme.iceCyan.withValues(alpha: 0.78),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 5),
         Text(
           'Huquq • Ishonch • Texnologiya',
           style: TextStyle(
             fontSize: 9.5,
-            letterSpacing: 0.7,
-            color: Colors.white.withValues(alpha: 0.18),
+            letterSpacing: 0.8,
+            color: _AuthTheme.softSky.withValues(alpha: 0.52),
           ),
         ),
       ],
@@ -828,6 +1112,76 @@ class _IntroScreenState extends State<IntroScreen>
   }
 }
 
+class _LadyJusticeBackground extends StatelessWidget {
+  const _LadyJusticeBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const ColoredBox(color: _AuthTheme.abyssNavy),
+        Image.asset(
+          'assets/login_bg.jpg',
+          fit: BoxFit.cover,
+          alignment: const Alignment(0.15, -0.30),
+          filterQuality: FilterQuality.high,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFF041026),
+                    Color(0xFF061B3A),
+                    Color(0xFF020611),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: const [0.0, 0.16, 0.44, 0.68, 1.0],
+              colors: [
+                _AuthTheme.abyssNavy.withValues(alpha: 0.52),
+                _AuthTheme.abyssNavy.withValues(alpha: 0.10),
+                _AuthTheme.abyssNavy.withValues(alpha: 0.18),
+                _AuthTheme.abyssNavy.withValues(alpha: 0.72),
+                _AuthTheme.abyssNavy.withValues(alpha: 0.94),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: -120,
+          right: -90,
+          child: IgnorePointer(
+            child: Container(
+              width: 340,
+              height: 340,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    _AuthTheme.electricCyan.withValues(alpha: 0.14),
+                    _AuthTheme.luminousAzure.withValues(alpha: 0.04),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class MainDashboard extends StatefulWidget {
   const MainDashboard({super.key});
@@ -839,10 +1193,16 @@ class MainDashboard extends StatefulWidget {
 class _MainDashboardState extends State<MainDashboard> {
   int _selectedTab = 0;
 
+  void _switchToTab(int index) {
+    if (index >= 0 && index <= 3 && mounted) {
+      setState(() => _selectedTab = index);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A1422),
+      backgroundColor: const Color(0xFF030917),
       body: Stack(
         children: [
           const DashboardBackground(),
@@ -858,7 +1218,10 @@ class _MainDashboardState extends State<MainDashboard> {
                       ? const HujjatlarPage(key: ValueKey('documents'))
                       : _selectedTab == 1
                           ? const TarixPage(key: ValueKey('history'))
-                          : const BoshSahifaPage(key: ValueKey('home')),
+                          : BoshSahifaPage(
+                              key: const ValueKey('home'),
+                              onNavigateToTab: _switchToTab,
+                            ),
             ),
           ),
           _buildBottomNavigation(),
@@ -876,134 +1239,48 @@ class _MainDashboardState extends State<MainDashboard> {
     ];
 
     return Positioned(
-      left: 20,
-      right: 20,
-      bottom: 18 + MediaQuery.of(context).padding.bottom,
-      child: Container(
-        height: 70,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFF283746).withValues(alpha: 0.96),
-          borderRadius: BorderRadius.circular(23),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.12),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.28),
-              blurRadius: 28,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        child: Row(
-          children: List.generate(
-            items.length,
-            (index) => Expanded(
-              child: DashboardNavItem(
-                icon: items[index].icon,
-                label: items[index].label,
-                selected: _selectedTab == index,
-                onTap: () => setState(() => _selectedTab = index),
+      left: 18,
+      right: 18,
+      bottom: 16 + MediaQuery.of(context).padding.bottom,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(25),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            height: 70,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF0E254B).withValues(alpha: 0.88),
+                  const Color(0xFF061329).withValues(alpha: 0.94),
+                ],
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfessionalBackground extends StatelessWidget {
-  const _ProfessionalBackground();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF08172F),
-            Color(0xFF061020),
-            Color(0xFF030812),
-          ],
-          stops: [0.0, 0.48, 1.0],
-        ),
-      ),
-      child: Stack(
-        children: [
-          // One soft light source at the top. No competing abstract blobs.
-          Positioned(
-            top: -170,
-            left: -70,
-            child: Container(
-              width: 470,
-              height: 390,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(240),
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFF3269D8).withValues(alpha: 0.16),
-                    const Color(0xFF3269D8).withValues(alpha: 0.035),
-                    Colors.transparent,
-                  ],
+              borderRadius: BorderRadius.circular(25),
+              border: Border.all(
+                color: _AuthTheme.iceCyan.withValues(alpha: 0.26),
+                width: 1.1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
                 ),
-              ),
+              ],
             ),
-          ),
-
-          // A tiny amount of light at the bottom for depth.
-          Positioned(
-            bottom: -210,
-            right: -150,
-            child: Container(
-              width: 430,
-              height: 430,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFF214EAD).withValues(alpha: 0.075),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LogoWatermark extends StatelessWidget {
-  const _LogoWatermark();
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Center(
-        child: Transform.translate(
-          offset: const Offset(0, 150),
-          child: ImageFiltered(
-            imageFilter: ImageFilter.blur(
-              sigmaX: 18,
-              sigmaY: 18,
-            ),
-            child: ColorFiltered(
-              colorFilter: const ColorFilter.mode(
-                Color(0xFF4776D8),
-                BlendMode.srcIn,
-              ),
-              child: Opacity(
-                opacity: 0.020,
-                child: Image.asset(
-                  'assets/logo.png',
-                  width: 520,
-                  height: 520,
-                  fit: BoxFit.contain,
+            child: Row(
+              children: List.generate(
+                items.length,
+                (index) => Expanded(
+                  child: DashboardNavItem(
+                    icon: items[index].icon,
+                    label: items[index].label,
+                    selected: _selectedTab == index,
+                    onTap: () => _switchToTab(index),
+                  ),
                 ),
               ),
             ),
@@ -1014,7 +1291,7 @@ class _LogoWatermark extends StatelessWidget {
   }
 }
 
-class _UzbekPhoneField extends StatelessWidget {
+class _UzbekPhoneField extends StatefulWidget {
   final TextEditingController controller;
 
   const _UzbekPhoneField({
@@ -1022,45 +1299,93 @@ class _UzbekPhoneField extends StatelessWidget {
   });
 
   @override
+  State<_UzbekPhoneField> createState() => _UzbekPhoneFieldState();
+}
+
+class _UzbekPhoneFieldState extends State<_UzbekPhoneField> {
+  final FocusNode _focusNode = FocusNode();
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (mounted) {
+      setState(() => _focused = _focusNode.hasFocus);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode
+      ..removeListener(_onFocusChange)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return CupertinoTextField(
-      controller: controller,
-      keyboardType: TextInputType.phone,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 15,
-        vertical: 16,
-      ),
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 15,
-        fontWeight: FontWeight.w500,
-      ),
-      placeholder: '** *** ** **',
-      placeholderStyle: TextStyle(
-        color: Colors.white.withValues(alpha: 0.35),
-        fontSize: 14.5,
-      ),
-      prefix: Padding(
-        padding: const EdgeInsets.only(left: 15, right: 9),
-        child: Icon(
-          CupertinoIcons.phone,
-          size: 18,
-          color: Colors.white.withValues(alpha: 0.52),
-        ),
-      ),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.052),
+        color: _AuthTheme.inputSurface.withValues(alpha: _focused ? 0.88 : 0.72),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.095),
+          color: _focused
+              ? _AuthTheme.electricCyan.withValues(alpha: 0.78)
+              : _AuthTheme.iceCyan.withValues(alpha: 0.22),
+          width: _focused ? 1.3 : 1.0,
         ),
+        boxShadow: _focused
+            ? [
+                BoxShadow(
+                  color: _AuthTheme.electricCyan.withValues(alpha: 0.20),
+                  blurRadius: 16,
+                ),
+              ]
+            : const [],
       ),
-      cursorColor: const Color(0xFF86A9FF),
+      child: CupertinoTextField(
+        controller: widget.controller,
+        focusNode: _focusNode,
+        keyboardType: TextInputType.phone,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 15,
+          vertical: 15.5,
+        ),
+        style: const TextStyle(
+          color: _AuthTheme.crispWhite,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.2,
+        ),
+        placeholder: '** *** ** **',
+        placeholderStyle: TextStyle(
+          color: _AuthTheme.softSky.withValues(alpha: 0.45),
+          fontSize: 14.5,
+          fontWeight: FontWeight.w400,
+        ),
+        prefix: Padding(
+          padding: const EdgeInsets.only(left: 14, right: 6),
+          child: Icon(
+            CupertinoIcons.phone_fill,
+            size: 17,
+            color: _focused
+                ? _AuthTheme.electricCyan
+                : _AuthTheme.iceCyan.withValues(alpha: 0.75),
+          ),
+        ),
+        decoration: const BoxDecoration(color: Colors.transparent),
+        cursorColor: _AuthTheme.electricCyan,
+      ),
     );
   }
 }
 
-class _LiquidTextField extends StatelessWidget {
+class _LiquidTextField extends StatefulWidget {
   final TextEditingController controller;
   final String hintText;
   final TextInputType keyboardType;
@@ -1074,40 +1399,86 @@ class _LiquidTextField extends StatelessWidget {
   });
 
   @override
+  State<_LiquidTextField> createState() => _LiquidTextFieldState();
+}
+
+class _LiquidTextFieldState extends State<_LiquidTextField> {
+  final FocusNode _focusNode = FocusNode();
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (mounted) {
+      setState(() => _focused = _focusNode.hasFocus);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode
+      ..removeListener(_onFocusChange)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return CupertinoTextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 15,
-        vertical: 16,
-      ),
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 15,
-        fontWeight: FontWeight.w500,
-      ),
-      placeholder: hintText,
-      placeholderStyle: TextStyle(
-        color: Colors.white.withValues(alpha: 0.35),
-        fontSize: 14.5,
-      ),
-      prefix: Padding(
-        padding: const EdgeInsets.only(left: 15, right: 9),
-        child: Icon(
-          icon,
-          size: 18,
-          color: Colors.white.withValues(alpha: 0.52),
-        ),
-      ),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.052),
+        color: _AuthTheme.inputSurface.withValues(alpha: _focused ? 0.88 : 0.72),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.095),
+          color: _focused
+              ? _AuthTheme.electricCyan.withValues(alpha: 0.78)
+              : _AuthTheme.iceCyan.withValues(alpha: 0.22),
+          width: _focused ? 1.3 : 1.0,
         ),
+        boxShadow: _focused
+            ? [
+                BoxShadow(
+                  color: _AuthTheme.electricCyan.withValues(alpha: 0.20),
+                  blurRadius: 16,
+                ),
+              ]
+            : const [],
       ),
-      cursorColor: const Color(0xFF86A9FF),
+      child: CupertinoTextField(
+        controller: widget.controller,
+        focusNode: _focusNode,
+        keyboardType: widget.keyboardType,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 15.5,
+        ),
+        style: const TextStyle(
+          color: _AuthTheme.crispWhite,
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+        placeholder: widget.hintText,
+        placeholderStyle: TextStyle(
+          color: _AuthTheme.softSky.withValues(alpha: 0.45),
+          fontSize: 14.2,
+        ),
+        prefix: Padding(
+          padding: const EdgeInsets.only(left: 14, right: 6),
+          child: Icon(
+            widget.icon,
+            size: 17,
+            color: _focused
+                ? _AuthTheme.electricCyan
+                : _AuthTheme.iceCyan.withValues(alpha: 0.75),
+          ),
+        ),
+        decoration: const BoxDecoration(color: Colors.transparent),
+        cursorColor: _AuthTheme.electricCyan,
+      ),
     );
   }
 }
@@ -1140,29 +1511,37 @@ class _LiquidPrimaryButtonState extends State<_LiquidPrimaryButton> {
         widget.onPressed();
       },
       child: AnimatedScale(
-        scale: _pressed ? 0.985 : 1,
+        scale: _pressed ? 0.982 : 1,
         duration: const Duration(milliseconds: 100),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 15.5),
+          padding: const EdgeInsets.symmetric(vertical: 15.5, horizontal: 18),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
               colors: [
-                Color(0xFF709AFF),
-                Color(0xFF3768DC),
+                _AuthTheme.electricCyan,
+                _AuthTheme.luminousAzure,
+                _AuthTheme.royalSapphire,
               ],
+              stops: [0.0, 0.52, 1.0],
             ),
-            borderRadius: BorderRadius.circular(17),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.19),
+              color: const Color(0xFFA6F3FF).withValues(alpha: 0.55),
+              width: 1.1,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF3E70E2).withValues(alpha: 0.27),
-                blurRadius: 21,
+                color: _AuthTheme.luminousAzure.withValues(alpha: 0.42),
+                blurRadius: 22,
                 offset: const Offset(0, 8),
+              ),
+              BoxShadow(
+                color: _AuthTheme.electricCyan.withValues(alpha: 0.22),
+                blurRadius: 12,
+                spreadRadius: -1,
               ),
             ],
           ),
@@ -1172,13 +1551,18 @@ class _LiquidPrimaryButtonState extends State<_LiquidPrimaryButton> {
               Text(
                 widget.label,
                 style: const TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.05,
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.25,
                 ),
               ),
-              const SizedBox(width: 9),
-              Icon(widget.icon, size: 17),
+              const SizedBox(width: 10),
+              Icon(
+                widget.icon,
+                size: 17,
+                color: Colors.white,
+              ),
             ],
           ),
         ),
@@ -1201,8 +1585,7 @@ class _LiquidSecondaryButton extends StatefulWidget {
   });
 
   @override
-  State<_LiquidSecondaryButton> createState() =>
-      _LiquidSecondaryButtonState();
+  State<_LiquidSecondaryButton> createState() => _LiquidSecondaryButtonState();
 }
 
 class _LiquidSecondaryButtonState extends State<_LiquidSecondaryButton> {
@@ -1223,18 +1606,19 @@ class _LiquidSecondaryButtonState extends State<_LiquidSecondaryButton> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.symmetric(
-            horizontal: 8,
+            horizontal: 10,
             vertical: 13,
           ),
           decoration: BoxDecoration(
             color: widget.active
-                ? const Color(0xFF5E88F5).withValues(alpha: 0.12)
-                : Colors.white.withValues(alpha: 0.042),
+                ? _AuthTheme.electricCyan.withValues(alpha: 0.16)
+                : _AuthTheme.inputSurface.withValues(alpha: 0.65),
             borderRadius: BorderRadius.circular(15),
             border: Border.all(
               color: widget.active
-                  ? const Color(0xFF769CFF).withValues(alpha: 0.43)
-                  : Colors.white.withValues(alpha: 0.095),
+                  ? _AuthTheme.electricCyan.withValues(alpha: 0.62)
+                  : _AuthTheme.iceCyan.withValues(alpha: 0.20),
+              width: widget.active ? 1.2 : 1.0,
             ),
           ),
           child: Row(
@@ -1244,8 +1628,8 @@ class _LiquidSecondaryButtonState extends State<_LiquidSecondaryButton> {
                 widget.icon,
                 size: 16,
                 color: widget.active
-                    ? const Color(0xFFA8BEFF)
-                    : Colors.white.withValues(alpha: 0.61),
+                    ? _AuthTheme.electricCyan
+                    : _AuthTheme.softSky.withValues(alpha: 0.80),
               ),
               const SizedBox(width: 7),
               Flexible(
@@ -1254,11 +1638,11 @@ class _LiquidSecondaryButtonState extends State<_LiquidSecondaryButton> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 13.2,
+                    fontSize: 13.0,
                     fontWeight: FontWeight.w600,
                     color: widget.active
-                        ? const Color(0xFFBBD0FF)
-                        : Colors.white.withValues(alpha: 0.70),
+                        ? _AuthTheme.crispWhite
+                        : _AuthTheme.softSky.withValues(alpha: 0.88),
                   ),
                 ),
               ),
@@ -1268,4 +1652,4 @@ class _LiquidSecondaryButtonState extends State<_LiquidSecondaryButton> {
       ),
     );
   }
-} 
+}
