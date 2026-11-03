@@ -16,18 +16,18 @@ import 'services/family_claim_page.dart';
 import 'services/lawyer_draft_request_page.dart';
 import 'tarix_page.dart';
 
-/// iOS Liquid-Blue & Electric-Cyan design tokens for the YAN360 Home Page.
+/// Frosted Pearl-Blue & Royal Cobalt Liquid Glass tokens matching Image 1.
 class _HomeLiquidTheme {
-  static const Color glassTop = Color(0xFF16386B);
-  static const Color glassMid = Color(0xFF0A1D3D);
-  static const Color glassBottom = Color(0xFF0D2854);
+  static const Color frostHighlight = Color(0xFFFFFFFF);
+  static const Color frostPearlBlue = Color(0xFF6B92DA);
+  static const Color frostMidCobalt = Color(0xFF3358A0);
+  static const Color frostDeepCobalt = Color(0xFF1C3873);
 
-  static const Color electricCyan = Color(0xFF00E1FF);
-  static const Color luminousAzure = Color(0xFF1A96FF);
-  static const Color iceBlue = Color(0xFF7BE8FF);
-  static const Color cardRimBlue = Color(0xFF4AC9FF);
-  static const Color crispWhite = Color(0xFFF7FBFF);
-  static const Color softIceText = Color(0xFFA2C4E8);
+  static const Color electricCyan = Color(0xFF00E5FF);
+  static const Color luminousAzure = Color(0xFF2B88FF);
+  static const Color iceBlue = Color(0xFFA6D8FF);
+  static const Color crispWhite = Color(0xFFFFFFFF);
+  static const Color softIceText = Color(0xFFD6E6FF);
 
   // Dynamic readiness status colors (<50% Red, 50-80% Yellow, 80%+ Green)
   static const Color statusRed = Color(0xFFFF453A);
@@ -221,9 +221,9 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => Scaffold(
-          backgroundColor: const Color(0xFF030917),
+          backgroundColor: const Color(0xFF0E2654),
           appBar: AppBar(
-            backgroundColor: const Color(0xFF06152D),
+            backgroundColor: const Color(0xFF102C60),
             foregroundColor: Colors.white,
             elevation: 0,
           ),
@@ -447,7 +447,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                     crossAxisCount: 2,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
-                    mainAxisExtent: 176,
+                    mainAxisExtent: 178,
                   ),
                 ),
         ),
@@ -455,8 +455,6 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
     );
   }
 
-  /// Combines the standalone large firm logo, animated sparkling swallow flight path,
-  /// and the interactive 2-tier iOS Liquid-Glass Executive Metrics Banner.
   Widget _buildHeroHeaderWithSwallow() {
     return ValueListenableBuilder<UserProfileData>(
       valueListenable: userProfile,
@@ -503,7 +501,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                         ),
                       ),
 
-                      // 2. Top Brand Row (Standalone Big Firm Logo + YAN360 + Bell)
+                      // 2. Top Brand Row (Standalone Big Firm Logo + YAN360 + Frosted Bell)
                       Positioned(
                         top: 4,
                         left: 16,
@@ -511,7 +509,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                         child: _buildTopBrandRow(activities.length),
                       ),
 
-                      // 3. Interactive iOS Liquid-Glass Metrics & Profile Banner
+                      // 3. Interactive Frosted Pearl-Blue Liquid-Glass Metrics Banner
                       Positioned(
                         left: 18,
                         right: 18,
@@ -543,8 +541,8 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                       Positioned(
                         top: -8,
                         right: 24,
-                        width: 190,
-                        height: 134,
+                        width: 192,
+                        height: 136,
                         child: IgnorePointer(
                           child: AnimatedBuilder(
                             animation: _flightSparkleController,
@@ -565,16 +563,16 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                               alignment: Alignment.center,
                               children: [
                                 Container(
-                                  width: 142,
-                                  height: 102,
+                                  width: 146,
+                                  height: 106,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     gradient: RadialGradient(
                                       colors: [
                                         _HomeLiquidTheme.electricCyan
-                                            .withValues(alpha: 0.30),
+                                            .withValues(alpha: 0.36),
                                         _HomeLiquidTheme.luminousAzure
-                                            .withValues(alpha: 0.10),
+                                            .withValues(alpha: 0.14),
                                         Colors.transparent,
                                       ],
                                     ),
@@ -607,43 +605,43 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
     );
   }
 
-  /// Standalone big firm logo on the left with NO circular background or ring border.
   Widget _buildTopBrandRow(int totalActivitiesCount) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        // Standalone larger firm logo (80x80) with bright cyan back-glow, zero circle box
         SizedBox(
-          width: 78,
-          height: 78,
+          width: 80,
+          height: 80,
           child: Stack(
             alignment: Alignment.center,
             children: [
               Container(
-                width: 52,
-                height: 52,
+                width: 54,
+                height: 54,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
                       color: _HomeLiquidTheme.electricCyan.withValues(
-                        alpha: 0.32,
+                        alpha: 0.36,
                       ),
-                      blurRadius: 28,
-                      spreadRadius: 2,
+                      blurRadius: 30,
+                      spreadRadius: 3,
                     ),
                   ],
                 ),
               ),
               Image.asset(
                 'assets/logo.png',
-                width: 78,
-                height: 78,
+                width: 80,
+                height: 80,
                 fit: BoxFit.contain,
                 filterQuality: FilterQuality.high,
                 errorBuilder: (_, _, _) => const Icon(
                   CupertinoIcons.shield_lefthalf_fill,
                   color: _HomeLiquidTheme.electricCyan,
-                  size: 44,
+                  size: 46,
                 ),
               ),
             ],
@@ -662,7 +660,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                       text: 'YAN',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 23,
+                        fontSize: 23.5,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 2.2,
                         height: 1.0,
@@ -672,14 +670,14 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                       text: '360',
                       style: TextStyle(
                         color: _HomeLiquidTheme.electricCyan,
-                        fontSize: 23,
+                        fontSize: 23.5,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 2.2,
                         height: 1.0,
                         shadows: [
                           Shadow(
                             color: _HomeLiquidTheme.electricCyan.withValues(
-                              alpha: 0.65,
+                              alpha: 0.72,
                             ),
                             blurRadius: 14,
                           ),
@@ -695,8 +693,8 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.90),
-                  fontSize: 11.4,
+                  color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.94),
+                  fontSize: 11.5,
                   fontWeight: FontWeight.w500,
                   letterSpacing: 0.15,
                 ),
@@ -704,68 +702,69 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
             ],
           ),
         ),
+        // Frosted Pearl-Blue Notification Bell Button
         Semantics(
           button: true,
           label: 'Bildirishnomalar va faoliyat tarixi',
           child: GestureDetector(
             onTap: () => _navigateOrPushTab(1),
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFF1A3E75).withValues(alpha: 0.68),
-                    const Color(0xFF0A1A36).withValues(alpha: 0.82),
-                  ],
-                ),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: _HomeLiquidTheme.iceBlue.withValues(alpha: 0.32),
-                  width: 1.1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.30),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  const Icon(
-                    CupertinoIcons.bell,
-                    size: 19,
-                    color: _HomeLiquidTheme.crispWhite,
-                  ),
-                  if (totalActivitiesCount > 0)
-                    Positioned(
-                      top: 3,
-                      right: 3,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: _HomeLiquidTheme.electricCyan,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: _HomeLiquidTheme.electricCyan.withValues(
-                                alpha: 0.85,
-                              ),
-                              blurRadius: 8,
-                              spreadRadius: 1,
-                            ),
-                          ],
+            child: ClipOval(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withValues(alpha: 0.34),
+                        _HomeLiquidTheme.frostPearlBlue.withValues(alpha: 0.44),
+                        _HomeLiquidTheme.frostDeepCobalt.withValues(
+                          alpha: 0.65,
                         ),
-                      ),
+                      ],
                     ),
-                ],
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.72),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
+                    children: [
+                      const Icon(
+                        CupertinoIcons.bell,
+                        size: 19,
+                        color: _HomeLiquidTheme.crispWhite,
+                      ),
+                      if (totalActivitiesCount > 0)
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Container(
+                            width: 8.5,
+                            height: 8.5,
+                            decoration: BoxDecoration(
+                              color: _HomeLiquidTheme.electricCyan,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _HomeLiquidTheme.electricCyan
+                                      .withValues(alpha: 0.90),
+                                  blurRadius: 8,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -815,7 +814,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
               Text(
                 'So‘nggi yaratilgan hujjatlar:',
                 style: TextStyle(
-                  color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.85),
+                  color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.90),
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -829,10 +828,10 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
+                    color: Colors.white.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _HomeLiquidTheme.iceBlue.withValues(alpha: 0.18),
+                      color: Colors.white.withValues(alpha: 0.35),
                     ),
                   ),
                   child: Row(
@@ -929,7 +928,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF1F58A8), Color(0xFF0A1D42)],
+                        colors: [Color(0xFF2860B8), Color(0xFF14326B)],
                       ),
                       border: Border.all(
                         color: _HomeLiquidTheme.electricCyan,
@@ -961,7 +960,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: _HomeLiquidTheme.softIceText.withValues(
-                            alpha: 0.82,
+                            alpha: 0.90,
                           ),
                           fontSize: 12,
                         ),
@@ -1011,10 +1010,10 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: _HomeLiquidTheme.statusGreen.withValues(alpha: 0.14),
+                  color: _HomeLiquidTheme.statusGreen.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: _HomeLiquidTheme.statusGreen.withValues(alpha: 0.45),
+                    color: _HomeLiquidTheme.statusGreen.withValues(alpha: 0.55),
                   ),
                 ),
                 child: Row(
@@ -1042,7 +1041,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
               Text(
                 'To‘ldirilishi kerak bo‘lgan ma’lumotlar:',
                 style: TextStyle(
-                  color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.90),
+                  color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.92),
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1099,7 +1098,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: _HomeLiquidTheme.crispWhite,
-              fontSize: 18,
+              fontSize: 18.5,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.3,
               height: 1.1,
@@ -1107,179 +1106,190 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
           ),
         ),
         const SizedBox(width: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF173A6E).withValues(alpha: 0.78),
-                const Color(0xFF0B1E3E).withValues(alpha: 0.88),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: _HomeLiquidTheme.cardRimBlue.withValues(alpha: 0.42),
-              width: 1.0,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: _HomeLiquidTheme.luminousAzure.withValues(alpha: 0.20),
-                blurRadius: 12,
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(
-                CupertinoIcons.square_grid_2x2_fill,
-                size: 13,
-                color: _HomeLiquidTheme.electricCyan,
-              ),
-              SizedBox(width: 6),
-              Text(
-                '08 XIZMAT',
-                style: TextStyle(
-                  color: _HomeLiquidTheme.crispWhite,
-                  fontSize: 10.0,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.65,
+        ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7.5),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.32),
+                    _HomeLiquidTheme.frostPearlBlue.withValues(alpha: 0.44),
+                    _HomeLiquidTheme.frostDeepCobalt.withValues(alpha: 0.65),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.72),
+                  width: 1.15,
                 ),
               ),
-            ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(
+                    CupertinoIcons.square_grid_2x2_fill,
+                    size: 13.5,
+                    color: _HomeLiquidTheme.electricCyan,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    '08 XIZMAT',
+                    style: TextStyle(
+                      color: _HomeLiquidTheme.crispWhite,
+                      fontSize: 10.2,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.65,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ],
     );
   }
 
+  /// Frosted Pearl-Blue & Silver-Rim Search Capsule matching Image 1.
   Widget _buildSearch() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      height: 46,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF10284F).withValues(alpha: 0.82),
-            const Color(0xFF08162F).withValues(alpha: 0.90),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(23),
-        border: Border.all(
-          color: _searchFocused
-              ? _HomeLiquidTheme.electricCyan.withValues(alpha: 0.80)
-              : _HomeLiquidTheme.cardRimBlue.withValues(alpha: 0.30),
-          width: _searchFocused ? 1.3 : 1.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: _searchFocused
-                ? _HomeLiquidTheme.electricCyan.withValues(alpha: 0.20)
-                : Colors.black.withValues(alpha: 0.25),
-            blurRadius: 16,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: CupertinoTextField(
-        controller: _searchController,
-        focusNode: _searchFocusNode,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        keyboardType: TextInputType.text,
-        textInputAction: TextInputAction.search,
-        style: const TextStyle(
-          color: _HomeLiquidTheme.crispWhite,
-          fontSize: 13.2,
-          fontWeight: FontWeight.w500,
-        ),
-        placeholder: 'Xizmatni izlang...',
-        placeholderStyle: TextStyle(
-          color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.65),
-          fontSize: 13.0,
-        ),
-        prefix: const Padding(
-          padding: EdgeInsets.only(left: 15, right: 4),
-          child: Icon(
-            CupertinoIcons.search,
-            color: _HomeLiquidTheme.electricCyan,
-            size: 18,
-          ),
-        ),
-        suffix: _searchController.text.isEmpty
-            ? null
-            : GestureDetector(
-                onTap: _searchController.clear,
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 8, right: 14),
-                  child: Icon(
-                    CupertinoIcons.xmark_circle_fill,
-                    color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.75),
-                    size: 16,
-                  ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          height: 48,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withValues(alpha: _searchFocused ? 0.34 : 0.24),
+                _HomeLiquidTheme.frostPearlBlue.withValues(
+                  alpha: _searchFocused ? 0.48 : 0.38,
                 ),
+                _HomeLiquidTheme.frostDeepCobalt.withValues(
+                  alpha: _searchFocused ? 0.68 : 0.58,
+                ),
+              ],
+              stops: const [0.0, 0.48, 1.0],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: _searchFocused
+                  ? Colors.white.withValues(alpha: 0.92)
+                  : Colors.white.withValues(alpha: 0.64),
+              width: _searchFocused ? 1.4 : 1.15,
+            ),
+          ),
+          child: CupertinoTextField(
+            controller: _searchController,
+            focusNode: _searchFocusNode,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.search,
+            style: const TextStyle(
+              color: _HomeLiquidTheme.crispWhite,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+            ),
+            placeholder: 'Xizmatni izlang...',
+            placeholderStyle: TextStyle(
+              color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.80),
+              fontSize: 13.2,
+            ),
+            prefix: const Padding(
+              padding: EdgeInsets.only(left: 16, right: 4),
+              child: Icon(
+                CupertinoIcons.search,
+                color: Colors.white,
+                size: 18,
               ),
-        decoration: const BoxDecoration(color: Colors.transparent),
-        cursorColor: _HomeLiquidTheme.electricCyan,
+            ),
+            suffix: _searchController.text.isEmpty
+                ? null
+                : GestureDetector(
+                    onTap: _searchController.clear,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 8, right: 14),
+                      child: Icon(
+                        CupertinoIcons.xmark_circle_fill,
+                        color: Colors.white.withValues(alpha: 0.85),
+                        size: 16,
+                      ),
+                    ),
+                  ),
+            decoration: const BoxDecoration(color: Colors.transparent),
+            cursorColor: Colors.white,
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildEmptyState() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(22, 30, 22, 31),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            _HomeLiquidTheme.glassTop.withValues(alpha: 0.72),
-            _HomeLiquidTheme.glassMid.withValues(alpha: 0.88),
-          ],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(22, 30, 22, 31),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withValues(alpha: 0.26),
+                _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.56),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.62),
+            ),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  CupertinoIcons.search,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Xizmat topilmadi',
+                style: TextStyle(
+                  color: _HomeLiquidTheme.crispWhite,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "Qidiruv so'zini o'zgartirib ko'ring.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.85),
+                  fontSize: 12.2,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
         ),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: _HomeLiquidTheme.cardRimBlue.withValues(alpha: 0.28),
-        ),
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: _HomeLiquidTheme.electricCyan.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              CupertinoIcons.search,
-              color: _HomeLiquidTheme.electricCyan,
-              size: 24,
-            ),
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Xizmat topilmadi',
-            style: TextStyle(
-              color: _HomeLiquidTheme.crispWhite,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            "Qidiruv so'zini o'zgartirib ko'ring.",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.72),
-              fontSize: 12.2,
-              height: 1.35,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1299,7 +1309,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
           20,
           98 + MediaQuery.of(context).padding.bottom,
         ),
-        backgroundColor: const Color(0xFF102A52),
+        backgroundColor: const Color(0xFF1E3E7A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
@@ -1358,10 +1368,10 @@ class _SwallowFlightSparklePainter extends CustomPainter {
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9)
       ..shader = LinearGradient(
         colors: [
-          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.05),
-          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.45),
-          _HomeLiquidTheme.iceBlue.withValues(alpha: 0.65),
-          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.15),
+          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.08),
+          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.50),
+          _HomeLiquidTheme.iceBlue.withValues(alpha: 0.70),
+          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.18),
         ],
         stops: const [0.0, 0.38, 0.74, 1.0],
       ).createShader(shaderRect);
@@ -1372,9 +1382,9 @@ class _SwallowFlightSparklePainter extends CustomPainter {
       ..shader = LinearGradient(
         colors: [
           Colors.white.withValues(alpha: 0.0),
-          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.65),
-          Colors.white.withValues(alpha: 0.90),
-          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.25),
+          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.72),
+          Colors.white.withValues(alpha: 0.95),
+          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.30),
         ],
         stops: const [0.0, 0.32, 0.70, 1.0],
       ).createShader(shaderRect);
@@ -1385,8 +1395,8 @@ class _SwallowFlightSparklePainter extends CustomPainter {
       ..shader = LinearGradient(
         colors: [
           Colors.transparent,
-          _HomeLiquidTheme.luminousAzure.withValues(alpha: 0.38),
-          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.50),
+          _HomeLiquidTheme.iceBlue.withValues(alpha: 0.45),
+          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.55),
           Colors.transparent,
         ],
         stops: const [0.0, 0.35, 0.78, 1.0],
@@ -1418,7 +1428,7 @@ class _SwallowFlightSparklePainter extends CustomPainter {
       final radius = s.radius * (0.82 + 0.28 * pulse);
 
       final haloPaint = Paint()
-        ..color = _HomeLiquidTheme.electricCyan.withValues(alpha: 0.42 * pulse)
+        ..color = _HomeLiquidTheme.electricCyan.withValues(alpha: 0.45 * pulse)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
       canvas.drawCircle(center, radius * 1.6, haloPaint);
 
@@ -1426,7 +1436,7 @@ class _SwallowFlightSparklePainter extends CustomPainter {
         _drawFourPointStar(canvas, center, radius * 1.45, pulse);
       } else {
         final dotPaint = Paint()
-          ..color = Colors.white.withValues(alpha: 0.88 * pulse);
+          ..color = Colors.white.withValues(alpha: 0.90 * pulse);
         canvas.drawCircle(center, radius * 0.55, dotPaint);
       }
     }
@@ -1447,7 +1457,7 @@ class _SwallowFlightSparklePainter extends CustomPainter {
       ..close();
 
     final starPaint = Paint()
-      ..color = Colors.white.withValues(alpha: (0.92 * alphaFactor).clamp(0, 1))
+      ..color = Colors.white.withValues(alpha: (0.94 * alphaFactor).clamp(0, 1))
       ..style = PaintingStyle.fill;
     canvas.drawPath(starPath, starPaint);
   }
@@ -1474,6 +1484,7 @@ class _SparkleSpec {
   );
 }
 
+/// Frosted Pearl-Blue & Silver-Rim Command Banner matching Image 1.
 class _InteractiveLiquidMetricsBanner extends StatelessWidget {
   final UserProfileData profile;
   final int totalArizalarCount;
@@ -1499,7 +1510,7 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(24);
+    final radius = BorderRadius.circular(26);
     final completionRatio = profile.profileCompletion.clamp(0.0, 1.0);
     final completionPercentInt = (completionRatio * 100).round().clamp(0, 100);
     final completionLabel = '$completionPercentInt%';
@@ -1513,18 +1524,18 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
     final shortName = profile.displayName.trim().split(RegExp(r'\s+')).first;
 
     return Container(
-      height: 146,
+      height: 148,
       decoration: BoxDecoration(
         borderRadius: radius,
         boxShadow: [
           BoxShadow(
-            color: _HomeLiquidTheme.electricCyan.withValues(alpha: 0.22),
+            color: const Color(0xFF4C94FF).withValues(alpha: 0.25),
             blurRadius: 24,
             offset: const Offset(0, 6),
           ),
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.48),
-            blurRadius: 20,
+            color: Colors.black.withValues(alpha: 0.32),
+            blurRadius: 18,
             offset: const Offset(0, 10),
           ),
         ],
@@ -1532,56 +1543,58 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
       child: ClipRRect(
         borderRadius: radius,
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFF193E75).withValues(alpha: 0.85),
-                  const Color(0xFF091A38).withValues(alpha: 0.92),
-                  const Color(0xFF112E5E).withValues(alpha: 0.88),
+                  Colors.white.withValues(alpha: 0.30),
+                  _HomeLiquidTheme.frostPearlBlue.withValues(alpha: 0.44),
+                  _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.60),
+                  _HomeLiquidTheme.frostDeepCobalt.withValues(alpha: 0.72),
                 ],
-                stops: const [0.0, 0.52, 1.0],
+                stops: const [0.0, 0.30, 0.70, 1.0],
               ),
               borderRadius: radius,
               border: Border.all(
-                color: _HomeLiquidTheme.iceBlue.withValues(alpha: 0.38),
-                width: 1.15,
+                color: Colors.white.withValues(alpha: 0.72),
+                width: 1.3,
               ),
             ),
             child: Stack(
               children: [
+                // Top inner silver-white frost highlight
                 Positioned(
                   top: 0,
-                  left: 24,
-                  right: 24,
-                  child: Container(
-                    height: 1.2,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          Colors.white.withValues(alpha: 0.55),
-                          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.65),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 0,
-                  left: 36,
-                  right: 36,
+                  left: 20,
+                  right: 20,
                   child: Container(
                     height: 1.5,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
                           Colors.transparent,
-                          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.72),
+                          Colors.white.withValues(alpha: 0.90),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                // Bottom inner silver-ice highlight
+                Positioned(
+                  bottom: 0,
+                  left: 30,
+                  right: 30,
+                  child: Container(
+                    height: 1.4,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          Colors.white.withValues(alpha: 0.70),
                           Colors.transparent,
                         ],
                       ),
@@ -1606,29 +1619,32 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                                 child: Row(
                                   children: [
                                     Container(
-                                      width: 38,
-                                      height: 38,
+                                      width: 40,
+                                      height: 40,
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
                                           colors: [
-                                            _HomeLiquidTheme.electricCyan
-                                                .withValues(alpha: 0.22),
-                                            _HomeLiquidTheme.luminousAzure
-                                                .withValues(alpha: 0.10),
+                                            Colors.white.withValues(
+                                              alpha: 0.32,
+                                            ),
+                                            _HomeLiquidTheme.frostMidCobalt
+                                                .withValues(alpha: 0.55),
                                           ],
                                         ),
-                                        borderRadius: BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(13),
                                         border: Border.all(
-                                          color: _HomeLiquidTheme.electricCyan
-                                              .withValues(alpha: 0.45),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.68,
+                                          ),
+                                          width: 1.1,
                                         ),
                                       ),
                                       child: const Icon(
                                         CupertinoIcons.doc_text_fill,
                                         color: _HomeLiquidTheme.electricCyan,
-                                        size: 19,
+                                        size: 20,
                                       ),
                                     ),
                                     const SizedBox(width: 9),
@@ -1645,7 +1661,7 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                                                 totalArizalarCount.toString(),
                                                 style: const TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: 21,
+                                                  fontSize: 21.5,
                                                   fontWeight: FontWeight.w900,
                                                   height: 1.0,
                                                 ),
@@ -1654,8 +1670,9 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                                               Icon(
                                                 CupertinoIcons.chevron_right,
                                                 size: 11,
-                                                color: _HomeLiquidTheme.iceBlue
-                                                    .withValues(alpha: 0.75),
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.85,
+                                                ),
                                               ),
                                             ],
                                           ),
@@ -1665,9 +1682,10 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
-                                              color: _HomeLiquidTheme.crispWhite
-                                                  .withValues(alpha: 0.88),
-                                              fontSize: 10.0,
+                                              color: Colors.white.withValues(
+                                                alpha: 0.94,
+                                              ),
+                                              fontSize: 10.2,
                                               fontWeight: FontWeight.w600,
                                               height: 1.14,
                                             ),
@@ -1682,7 +1700,7 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
 
                             _buildVerticalDivider(),
 
-                            // 2. Centerpiece User Profile Picture Avatar (Replaces Faol xizmatlar)
+                            // 2. Centerpiece User Profile Picture Avatar
                             Expanded(
                               flex: 9,
                               child: _PressableStatRegion(
@@ -1699,7 +1717,7 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                                         Container(
                                           width: 54,
                                           height: 54,
-                                          padding: const EdgeInsets.all(2.2),
+                                          padding: const EdgeInsets.all(2.3),
                                           decoration: BoxDecoration(
                                             shape: BoxShape.circle,
                                             gradient: const LinearGradient(
@@ -1714,16 +1732,16 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                                               BoxShadow(
                                                 color: _HomeLiquidTheme
                                                     .electricCyan
-                                                    .withValues(alpha: 0.38),
+                                                    .withValues(alpha: 0.45),
                                                 blurRadius: 14,
-                                                spreadRadius: 0.5,
+                                                spreadRadius: 0.8,
                                               ),
                                             ],
                                           ),
                                           child: Container(
                                             decoration: const BoxDecoration(
                                               shape: BoxShape.circle,
-                                              color: Color(0xFF0A1D3D),
+                                              color: Color(0xFF16356C),
                                             ),
                                             child: ClipOval(
                                               child: buildAvatarContent(
@@ -1740,12 +1758,12 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                                             width: 18,
                                             height: 18,
                                             decoration: BoxDecoration(
-                                              color: const Color(0xFF071630),
+                                              color: const Color(0xFF15346B),
                                               shape: BoxShape.circle,
                                               border: Border.all(
-                                                color: _HomeLiquidTheme
-                                                    .electricCyan
-                                                    .withValues(alpha: 0.70),
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.85,
+                                                ),
                                                 width: 1.2,
                                               ),
                                             ),
@@ -1773,8 +1791,8 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
                                               color: Colors.white,
-                                              fontSize: 10.5,
-                                              fontWeight: FontWeight.w700,
+                                              fontSize: 10.6,
+                                              fontWeight: FontWeight.w800,
                                               height: 1.0,
                                             ),
                                           ),
@@ -1783,8 +1801,9 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                                         Icon(
                                           CupertinoIcons.chevron_right,
                                           size: 9.5,
-                                          color: _HomeLiquidTheme.iceBlue
-                                              .withValues(alpha: 0.80),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.85,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -1818,13 +1837,13 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                                             completionLabel,
                                             style: TextStyle(
                                               color: Colors.white,
-                                              fontSize: 12.0,
+                                              fontSize: 12.2,
                                               fontWeight: FontWeight.w900,
                                               letterSpacing: -0.3,
                                               shadows: [
                                                 Shadow(
                                                   color: readinessColor
-                                                      .withValues(alpha: 0.65),
+                                                      .withValues(alpha: 0.70),
                                                   blurRadius: 8,
                                                 ),
                                               ],
@@ -1846,36 +1865,39 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
-                                              color: _HomeLiquidTheme.crispWhite
-                                                  .withValues(alpha: 0.90),
-                                              fontSize: 10.0,
+                                              color: Colors.white.withValues(
+                                                alpha: 0.94,
+                                              ),
+                                              fontSize: 10.2,
                                               fontWeight: FontWeight.w600,
                                               height: 1.14,
                                             ),
                                           ),
-                                          const SizedBox(height: 3),
+                                          const SizedBox(height: 3.5),
                                           Container(
                                             padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 1.5,
+                                              horizontal: 7,
+                                              vertical: 2,
                                             ),
                                             decoration: BoxDecoration(
                                               color: readinessColor.withValues(
-                                                alpha: 0.16,
+                                                alpha: 0.22,
                                               ),
                                               borderRadius:
-                                                  BorderRadius.circular(6),
+                                                  BorderRadius.circular(8),
                                               border: Border.all(
                                                 color: readinessColor
-                                                    .withValues(alpha: 0.48),
-                                                width: 0.8,
+                                                    .withValues(alpha: 0.65),
+                                                width: 0.9,
                                               ),
                                             ),
                                             child: Text(
                                               readinessStatus,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
                                                 color: readinessColor,
-                                                fontSize: 8.2,
+                                                fontSize: 8.6,
                                                 fontWeight: FontWeight.w800,
                                                 letterSpacing: 0.2,
                                               ),
@@ -1899,16 +1921,16 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                           gradient: LinearGradient(
                             colors: [
                               Colors.transparent,
-                              _HomeLiquidTheme.iceBlue.withValues(alpha: 0.24),
+                              Colors.white.withValues(alpha: 0.36),
                               Colors.transparent,
                             ],
                           ),
                         ),
                       ),
 
-                      // BOTTOM TIER: 3 Extra Dynamic Clickable Quick-Stat Pills
+                      // BOTTOM TIER: 3 Frosted Pearl-Blue Dynamic Quick-Stat Pills
                       SizedBox(
-                        height: 28,
+                        height: 29,
                         child: Row(
                           children: [
                             Expanded(
@@ -1919,19 +1941,19 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
                                 onTap: () => onNavigateToTab(2),
                               ),
                             ),
-                            const SizedBox(width: 7),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: _QuickDynamicStatPill(
                                 icon: CupertinoIcons.videocam_fill,
                                 label: 'Yurist: $consultAndLawyerCount ta',
-                                accentColor: const Color(0xFF64B5F6),
+                                accentColor: const Color(0xFF82C4FF),
                                 onTap: () => onNavigateToTab(1),
                               ),
                             ),
-                            const SizedBox(width: 7),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: _QuickDynamicStatPill(
-                                icon: CupertinoIcons.bolt_horizontal_circle_fill,
+                                icon: CupertinoIcons.checkmark_circle_fill,
                                 label: 'Tarix: $totalActivitiesCount ta',
                                 accentColor: _HomeLiquidTheme.statusGreen,
                                 onTap: () => onNavigateToTab(1),
@@ -1962,7 +1984,7 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
           end: Alignment.bottomCenter,
           colors: [
             Colors.transparent,
-            _HomeLiquidTheme.iceBlue.withValues(alpha: 0.28),
+            Colors.white.withValues(alpha: 0.38),
             Colors.transparent,
           ],
         ),
@@ -1971,10 +1993,6 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
   }
 }
 
-/// Dynamic circular progress ring painter:
-/// - Below 50%: Crimson Red
-/// - 50% to 80%: Golden Yellow
-/// - 80%+: Emerald Green
 class _DynamicProgressRingPainter extends CustomPainter {
   final double progress;
   final int percent;
@@ -1993,7 +2011,7 @@ class _DynamicProgressRingPainter extends CustomPainter {
     final lightColor = _HomeLiquidTheme.readinessLightColor(percent);
 
     final trackPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.12)
+      ..color = Colors.white.withValues(alpha: 0.18)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4.4;
     canvas.drawCircle(center, radius, trackPaint);
@@ -2002,7 +2020,7 @@ class _DynamicProgressRingPainter extends CustomPainter {
     final rect = Rect.fromCircle(center: center, radius: radius);
 
     final glowPaint = Paint()
-      ..color = primaryColor.withValues(alpha: 0.58)
+      ..color = primaryColor.withValues(alpha: 0.62)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 6.8
       ..strokeCap = StrokeCap.round
@@ -2019,7 +2037,7 @@ class _DynamicProgressRingPainter extends CustomPainter {
         ],
       ).createShader(rect)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.5
+      ..strokeWidth = 4.6
       ..strokeCap = StrokeCap.round;
     canvas.drawArc(rect, -math.pi / 2, sweepAngle, false, arcPaint);
   }
@@ -2090,19 +2108,26 @@ class _QuickDynamicStatPill extends StatelessWidget {
       semanticLabel: label,
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
         decoration: BoxDecoration(
-          color: const Color(0xFF071630).withValues(alpha: 0.68),
-          borderRadius: BorderRadius.circular(10),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: 0.24),
+              _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.52),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: accentColor.withValues(alpha: 0.34),
-            width: 0.9,
+            color: Colors.white.withValues(alpha: 0.62),
+            width: 1.0,
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 12, color: accentColor),
+            Icon(icon, size: 12.5, color: accentColor),
             const SizedBox(width: 5),
             Flexible(
               child: Text(
@@ -2111,8 +2136,8 @@ class _QuickDynamicStatPill extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 9.6,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 9.8,
+                  fontWeight: FontWeight.w800,
                   letterSpacing: 0.1,
                 ),
               ),
@@ -2138,7 +2163,7 @@ class _ServiceCardData {
   });
 }
 
-/// Unified iOS Liquid-Blue Glass Service Card with enlarged, prominent 3D logo stage.
+/// Frosted Pearl-Blue & Silver-Rim Service Card matching Image 1.
 class _LiquidServiceCard extends StatefulWidget {
   final _ServiceCardData data;
   final VoidCallback onTap;
@@ -2155,7 +2180,7 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
   @override
   Widget build(BuildContext context) {
     final data = widget.data;
-    final radius = BorderRadius.circular(22);
+    final radius = BorderRadius.circular(24);
 
     return Semantics(
       button: true,
@@ -2175,14 +2200,14 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
               borderRadius: radius,
               boxShadow: [
                 BoxShadow(
-                  color: _HomeLiquidTheme.luminousAzure.withValues(
-                    alpha: _pressed ? 0.38 : 0.22,
+                  color: const Color(0xFF4C94FF).withValues(
+                    alpha: _pressed ? 0.36 : 0.22,
                   ),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
+                  blurRadius: 20,
+                  offset: const Offset(0, 7),
                 ),
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.40),
+                  color: Colors.black.withValues(alpha: 0.30),
                   blurRadius: 12,
                   offset: const Offset(0, 5),
                 ),
@@ -2191,7 +2216,7 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
             child: ClipRRect(
               borderRadius: radius,
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
                   padding: const EdgeInsets.fromLTRB(13, 8, 12, 11),
@@ -2200,41 +2225,39 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        _HomeLiquidTheme.glassTop.withValues(alpha: 0.84),
-                        _HomeLiquidTheme.glassMid.withValues(alpha: 0.90),
-                        _HomeLiquidTheme.glassBottom.withValues(alpha: 0.94),
+                        Colors.white.withValues(alpha: 0.32),
+                        _HomeLiquidTheme.frostPearlBlue.withValues(alpha: 0.46),
+                        _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.62),
+                        _HomeLiquidTheme.frostDeepCobalt.withValues(
+                          alpha: 0.74,
+                        ),
                       ],
-                      stops: const [0.0, 0.54, 1.0],
+                      stops: const [0.0, 0.28, 0.68, 1.0],
                     ),
                     borderRadius: radius,
                     border: Border.all(
                       color: _pressed
-                          ? _HomeLiquidTheme.electricCyan.withValues(
-                              alpha: 0.80,
-                            )
-                          : _HomeLiquidTheme.cardRimBlue.withValues(
-                              alpha: 0.36,
-                            ),
-                      width: _pressed ? 1.35 : 1.1,
+                          ? Colors.white.withValues(alpha: 0.95)
+                          : Colors.white.withValues(alpha: 0.72),
+                      width: _pressed ? 1.45 : 1.25,
                     ),
                   ),
                   child: Stack(
                     children: [
+                      // Soft pearl-white & ice-blue radial glow behind the 3D icon
                       Positioned(
-                        top: -32,
-                        left: -26,
+                        top: -28,
+                        left: -20,
                         child: Container(
-                          width: 150,
-                          height: 130,
+                          width: 155,
+                          height: 135,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: RadialGradient(
                               colors: [
-                                _HomeLiquidTheme.electricCyan.withValues(
-                                  alpha: 0.28,
-                                ),
-                                _HomeLiquidTheme.luminousAzure.withValues(
-                                  alpha: 0.10,
+                                Colors.white.withValues(alpha: 0.30),
+                                _HomeLiquidTheme.iceBlue.withValues(
+                                  alpha: 0.20,
                                 ),
                                 Colors.transparent,
                               ],
@@ -2242,21 +2265,20 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
                           ),
                         ),
                       ),
+                      // Bottom-right soft frost bloom
                       Positioned(
-                        right: -28,
-                        bottom: -34,
+                        right: -24,
+                        bottom: -30,
                         child: Container(
                           width: 128,
-                          height: 102,
+                          height: 104,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: RadialGradient(
                               colors: [
+                                Colors.white.withValues(alpha: 0.22),
                                 _HomeLiquidTheme.electricCyan.withValues(
-                                  alpha: 0.28,
-                                ),
-                                _HomeLiquidTheme.luminousAzure.withValues(
-                                  alpha: 0.10,
+                                  alpha: 0.14,
                                 ),
                                 Colors.transparent,
                               ],
@@ -2264,59 +2286,59 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
                           ),
                         ),
                       ),
+                      // Top inner silver-white glass bevel highlight
                       Positioned(
                         top: 0,
-                        left: 18,
-                        right: 18,
+                        left: 16,
+                        right: 16,
                         child: Container(
-                          height: 1,
+                          height: 1.4,
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
                                 Colors.transparent,
-                                Colors.white.withValues(alpha: 0.45),
-                                _HomeLiquidTheme.iceBlue.withValues(
-                                  alpha: 0.52,
-                                ),
+                                Colors.white.withValues(alpha: 0.88),
                                 Colors.transparent,
                               ],
                             ),
                           ),
                         ),
                       ),
+                      // Top-right circular frosted glass arrow button
                       Positioned(
                         top: 2,
                         right: 0,
                         child: Container(
-                          width: 28,
-                          height: 28,
+                          width: 29,
+                          height: 29,
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                const Color(0xFF204B87).withValues(alpha: 0.74),
-                                const Color(0xFF0E254A).withValues(alpha: 0.88),
+                                Colors.white.withValues(alpha: 0.34),
+                                _HomeLiquidTheme.frostMidCobalt.withValues(
+                                  alpha: 0.58,
+                                ),
                               ],
                             ),
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: _HomeLiquidTheme.iceBlue.withValues(
-                                alpha: 0.36,
-                              ),
+                              color: Colors.white.withValues(alpha: 0.72),
+                              width: 1.1,
                             ),
                           ),
                           child: const Icon(
                             CupertinoIcons.arrow_right,
-                            size: 13,
-                            color: _HomeLiquidTheme.crispWhite,
+                            size: 13.5,
+                            color: Colors.white,
                           ),
                         ),
                       ),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Enlarged 3D service logo stage (116x92 + 1.18x scale)
+                          // Prominent 3D service logo stage (116x92 + 1.18x scale)
                           SizedBox(
                             width: 116,
                             height: 92,
@@ -2338,14 +2360,14 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 12.6,
+                              fontSize: 12.8,
                               fontWeight: FontWeight.w800,
                               height: 1.12,
                               letterSpacing: -0.15,
                               shadows: [
                                 Shadow(
-                                  color: Colors.black54,
-                                  blurRadius: 6,
+                                  color: Colors.black38,
+                                  blurRadius: 5,
                                   offset: Offset(0, 1),
                                 ),
                               ],
@@ -2358,9 +2380,9 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: _HomeLiquidTheme.softIceText.withValues(
-                                alpha: 0.86,
+                                alpha: 0.92,
                               ),
-                              fontSize: 9.4,
+                              fontSize: 9.5,
                               fontWeight: FontWeight.w500,
                               height: 1.15,
                             ),
@@ -2399,7 +2421,7 @@ class _LiquidModalSheet extends StatelessWidget {
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
         child: Container(
           padding: EdgeInsets.fromLTRB(
             20,
@@ -2412,14 +2434,14 @@ class _LiquidModalSheet extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                const Color(0xFF112C56).withValues(alpha: 0.94),
-                const Color(0xFF061226).withValues(alpha: 0.98),
+                const Color(0xFF2B5299).withValues(alpha: 0.90),
+                const Color(0xFF102552).withValues(alpha: 0.96),
               ],
             ),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             border: Border.all(
-              color: accentColor.withValues(alpha: 0.38),
-              width: 1.1,
+              color: Colors.white.withValues(alpha: 0.65),
+              width: 1.2,
             ),
           ),
           child: Column(
@@ -2431,7 +2453,7 @@ class _LiquidModalSheet extends StatelessWidget {
                   width: 42,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.24),
+                    color: Colors.white.withValues(alpha: 0.38),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -2443,10 +2465,10 @@ class _LiquidModalSheet extends StatelessWidget {
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.16),
+                      color: Colors.white.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(13),
                       border: Border.all(
-                        color: accentColor.withValues(alpha: 0.45),
+                        color: Colors.white.withValues(alpha: 0.55),
                       ),
                     ),
                     child: Icon(icon, color: accentColor, size: 21),
@@ -2469,7 +2491,7 @@ class _LiquidModalSheet extends StatelessWidget {
                           subtitle,
                           style: TextStyle(
                             color: _HomeLiquidTheme.softIceText.withValues(
-                              alpha: 0.80,
+                              alpha: 0.88,
                             ),
                             fontSize: 11.5,
                           ),
@@ -2505,9 +2527,9 @@ class _SheetStatBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
+        color: Colors.white.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.34)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2557,19 +2579,21 @@ class _SheetActionButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
         decoration: BoxDecoration(
           gradient: secondary
-              ? null
+              ? LinearGradient(
+                  colors: [
+                    Colors.white.withValues(alpha: 0.20),
+                    _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.48),
+                  ],
+                )
               : const LinearGradient(
                   colors: [
                     _HomeLiquidTheme.electricCyan,
                     _HomeLiquidTheme.luminousAzure,
                   ],
                 ),
-          color: secondary ? Colors.white.withValues(alpha: 0.08) : null,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: secondary
-                ? _HomeLiquidTheme.iceBlue.withValues(alpha: 0.30)
-                : Colors.white.withValues(alpha: 0.45),
+            color: Colors.white.withValues(alpha: 0.65),
           ),
         ),
         child: Row(
@@ -2578,7 +2602,7 @@ class _SheetActionButton extends StatelessWidget {
             Icon(
               icon,
               size: 16,
-              color: secondary ? _HomeLiquidTheme.iceBlue : Colors.white,
+              color: Colors.white,
             ),
             const SizedBox(width: 8),
             Flexible(
@@ -2627,10 +2651,10 @@ class _ResilientAssetImage extends StatelessWidget {
           width: 56,
           height: 56,
           decoration: BoxDecoration(
-            color: _HomeLiquidTheme.electricCyan.withValues(alpha: 0.16),
+            color: Colors.white.withValues(alpha: 0.22),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: _HomeLiquidTheme.electricCyan.withValues(alpha: 0.42),
+              color: Colors.white.withValues(alpha: 0.62),
             ),
           ),
           child: Icon(

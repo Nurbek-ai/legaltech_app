@@ -19,27 +19,27 @@ void main() {
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
       statusBarBrightness: Brightness.dark,
-      systemNavigationBarColor: Color(0xFF020610),
+      systemNavigationBarColor: Color(0xFF0D234F),
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
   runApp(const YAN360App());
 }
 
-/// Color tokens calibrated to the electric-cyan & deep-sapphire Lady Justice artwork.
+/// Royal Cobalt & Frosted Pearl-Blue Liquid Glass tokens for Login & Main Shell.
 class _AuthTheme {
-  static const Color abyssNavy = Color(0xFF020611);
-  static const Color midnightSapphire = Color(0xFF06132C);
-  static const Color cardGlassTop = Color(0xFF081A3A);
-  static const Color cardGlassBottom = Color(0xFF030B1B);
-  static const Color inputSurface = Color(0xFF030B1A);
+  static const Color royalCobalt = Color(0xFF0F2A5E);
+  static const Color midCobalt = Color(0xFF163A7A);
+  static const Color frostLight = Color(0xFF6E96DE);
+  static const Color frostMid = Color(0xFF2D5299);
+  static const Color frostDeep = Color(0xFF1B3670);
 
-  static const Color electricCyan = Color(0xFF00D4FF);
-  static const Color luminousAzure = Color(0xFF0088FF);
-  static const Color royalSapphire = Color(0xFF0051D5);
-  static const Color iceCyan = Color(0xFF6AE6FF);
-  static const Color softSky = Color(0xFFA4C8F0);
-  static const Color crispWhite = Color(0xFFF5FAFF);
+  static const Color electricCyan = Color(0xFF00E0FF);
+  static const Color luminousAzure = Color(0xFF1A8CFF);
+  static const Color royalSapphire = Color(0xFF0055D8);
+  static const Color iceCyan = Color(0xFF8CEEFF);
+  static const Color softSky = Color(0xFFD2E5FF);
+  static const Color crispWhite = Color(0xFFFFFFFF);
 }
 
 class YAN360App extends StatelessWidget {
@@ -52,13 +52,13 @@ class YAN360App extends StatelessWidget {
       title: 'YAN360',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: _AuthTheme.abyssNavy,
+        scaffoldBackgroundColor: _AuthTheme.royalCobalt,
         fontFamily: 'Roboto',
         useMaterial3: true,
         colorScheme: const ColorScheme.dark(
           primary: _AuthTheme.electricCyan,
           secondary: _AuthTheme.luminousAzure,
-          surface: _AuthTheme.midnightSapphire,
+          surface: _AuthTheme.midCobalt,
           onSurface: _AuthTheme.crispWhite,
         ),
       ),
@@ -222,12 +222,12 @@ class _IntroScreenState extends State<IntroScreen>
     final keyboardOpen = bottomInset > 40;
 
     return Scaffold(
-      backgroundColor: _AuthTheme.abyssNavy,
+      backgroundColor: _AuthTheme.royalCobalt,
       resizeToAvoidBottomInset: true,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          const _LadyJusticeBackground(),
+          const _LadyJusticeLiquidBackground(),
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -254,7 +254,7 @@ class _IntroScreenState extends State<IntroScreen>
                           if (!keyboardOpen) ...[
                             const Spacer(),
                             _buildHeroTagline(),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 14),
                           ] else
                             const SizedBox(height: 18),
                           _buildAuthCard(),
@@ -297,7 +297,6 @@ class _IntroScreenState extends State<IntroScreen>
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Standalone large logo (84x84) with subtle ambient glow — NO circular border
             SizedBox(
               width: 84,
               height: 84,
@@ -305,15 +304,15 @@ class _IntroScreenState extends State<IntroScreen>
                 alignment: Alignment.center,
                 children: [
                   Container(
-                    width: 54,
-                    height: 54,
+                    width: 56,
+                    height: 56,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: _AuthTheme.electricCyan.withValues(alpha: 0.32),
+                          color: _AuthTheme.electricCyan.withValues(alpha: 0.36),
                           blurRadius: 32,
-                          spreadRadius: 2,
+                          spreadRadius: 3,
                         ),
                       ],
                     ),
@@ -347,7 +346,7 @@ class _IntroScreenState extends State<IntroScreen>
                             color: Colors.white,
                             fontSize: 25,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: 3.2,
+                            letterSpacing: 3.0,
                             height: 1.0,
                           ),
                         ),
@@ -357,12 +356,12 @@ class _IntroScreenState extends State<IntroScreen>
                             color: _AuthTheme.electricCyan,
                             fontSize: 25,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: 3.2,
+                            letterSpacing: 3.0,
                             height: 1.0,
                             shadows: [
                               Shadow(
                                 color: _AuthTheme.electricCyan.withValues(
-                                  alpha: 0.65,
+                                  alpha: 0.70,
                                 ),
                                 blurRadius: 14,
                               ),
@@ -381,40 +380,58 @@ class _IntroScreenState extends State<IntroScreen>
                       fontSize: 11.5,
                       fontWeight: FontWeight.w500,
                       letterSpacing: 0.2,
-                      color: _AuthTheme.softSky.withValues(alpha: 0.86),
+                      color: _AuthTheme.softSky.withValues(alpha: 0.92),
                     ),
                   ),
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: _AuthTheme.midnightSapphire.withValues(alpha: 0.68),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: _AuthTheme.iceCyan.withValues(alpha: 0.30),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(
-                    CupertinoIcons.checkmark_shield_fill,
-                    size: 13,
-                    color: _AuthTheme.electricCyan,
+            // Frosted pearl-blue 24/7 badge
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 6,
                   ),
-                  SizedBox(width: 5),
-                  Text(
-                    '24/7',
-                    style: TextStyle(
-                      color: _AuthTheme.crispWhite,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withValues(alpha: 0.28),
+                        _AuthTheme.frostMid.withValues(alpha: 0.55),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.58),
+                      width: 1.1,
                     ),
                   ),
-                ],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(
+                        CupertinoIcons.checkmark_shield_fill,
+                        size: 13,
+                        color: _AuthTheme.electricCyan,
+                      ),
+                      SizedBox(width: 5),
+                      Text(
+                        '24/7',
+                        style: TextStyle(
+                          color: _AuthTheme.crispWhite,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ],
@@ -433,49 +450,64 @@ class _IntroScreenState extends State<IntroScreen>
       opacity: fade,
       child: Align(
         alignment: Alignment.centerLeft,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: _AuthTheme.abyssNavy.withValues(alpha: 0.58),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(
-              color: _AuthTheme.electricCyan.withValues(alpha: 0.32),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(30),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6.5),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.26),
+                    _AuthTheme.frostMid.withValues(alpha: 0.56),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.58),
+                  width: 1.0,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: _AuthTheme.electricCyan.withValues(alpha: 0.20),
+                    blurRadius: 16,
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6.5,
+                    height: 6.5,
+                    decoration: const BoxDecoration(
+                      color: _AuthTheme.electricCyan,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    _badgeText,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9.8,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.3,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: _AuthTheme.electricCyan.withValues(alpha: 0.14),
-                blurRadius: 16,
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: const BoxDecoration(
-                  color: _AuthTheme.electricCyan,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 7),
-              Text(
-                _badgeText,
-                style: const TextStyle(
-                  color: _AuthTheme.iceCyan,
-                  fontSize: 9.8,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.3,
-                ),
-              ),
-            ],
           ),
         ),
       ),
     );
   }
 
+  /// Frosted Pearl-Blue & Silver-Rim Liquid Blur Authentication Window.
   Widget _buildAuthCard() {
     final fade = CurvedAnimation(
       parent: _entranceController,
@@ -492,113 +524,149 @@ class _IntroScreenState extends State<IntroScreen>
       ),
     );
 
+    final radius = BorderRadius.circular(28);
+
     return FadeTransition(
       opacity: fade,
       child: SlideTransition(
         position: slide,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(26),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    _AuthTheme.cardGlassTop.withValues(alpha: 0.78),
-                    _AuthTheme.cardGlassBottom.withValues(alpha: 0.88),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(26),
-                border: Border.all(
-                  color: _AuthTheme.iceCyan.withValues(alpha: 0.28),
-                  width: 1.1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    blurRadius: 34,
-                    offset: const Offset(0, 18),
-                  ),
-                  BoxShadow(
-                    color: _AuthTheme.luminousAzure.withValues(alpha: 0.16),
-                    blurRadius: 28,
-                    spreadRadius: -2,
-                  ),
-                ],
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            boxShadow: [
+              BoxShadow(
+                color: _AuthTheme.luminousAzure.withValues(alpha: 0.28),
+                blurRadius: 28,
+                offset: const Offset(0, 10),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    height: 1.5,
-                    margin: const EdgeInsets.symmetric(horizontal: 28),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          _AuthTheme.iceCyan.withValues(alpha: 0.75),
-                          Colors.transparent,
-                        ],
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 24,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: radius,
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withValues(alpha: 0.28),
+                      _AuthTheme.frostLight.withValues(alpha: 0.38),
+                      _AuthTheme.frostMid.withValues(alpha: 0.56),
+                      _AuthTheme.frostDeep.withValues(alpha: 0.68),
+                    ],
+                    stops: const [0.0, 0.28, 0.68, 1.0],
+                  ),
+                  borderRadius: radius,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.65),
+                    width: 1.3,
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    // Soft inner pearl-cyan glow at top-left
+                    Positioned(
+                      top: -50,
+                      left: -40,
+                      child: IgnorePointer(
+                        child: Container(
+                          width: 180,
+                          height: 140,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                Colors.white.withValues(alpha: 0.28),
+                                _AuthTheme.electricCyan.withValues(alpha: 0.12),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (!_isLogin) _buildBackButton(),
-                        if (!_isLogin) const SizedBox(height: 8),
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 220),
-                          child: Column(
-                            key: ValueKey(_mode),
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _title,
-                                style: const TextStyle(
-                                  color: _AuthTheme.crispWhite,
-                                  fontSize: 23,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.4,
-                                ),
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                _subtitle,
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  height: 1.3,
-                                  color: _AuthTheme.softSky.withValues(
-                                    alpha: 0.78,
-                                  ),
-                                ),
-                              ),
+                    // Top silver-white specular reflection line
+                    Positioned(
+                      top: 0,
+                      left: 24,
+                      right: 24,
+                      child: Container(
+                        height: 1.5,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              Colors.white.withValues(alpha: 0.90),
+                              _AuthTheme.iceCyan.withValues(alpha: 0.75),
+                              Colors.transparent,
                             ],
                           ),
                         ),
-                        const SizedBox(height: 18),
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 240),
-                          switchInCurve: Curves.easeOutCubic,
-                          switchOutCurve: Curves.easeIn,
-                          child: KeyedSubtree(
-                            key: ValueKey(
-                              '$_mode-$_phoneCodeSent-$_emailCodeSent',
-                            ),
-                            child: _buildCurrentForm(),
-                          ),
-                        ),
-                        const SizedBox(height: 15),
-                        _buildNavigationButtons(),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (!_isLogin) _buildBackButton(),
+                          if (!_isLogin) const SizedBox(height: 8),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 220),
+                            child: Column(
+                              key: ValueKey(_mode),
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _title,
+                                  style: const TextStyle(
+                                    color: _AuthTheme.crispWhite,
+                                    fontSize: 23.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.4,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  _subtitle,
+                                  style: TextStyle(
+                                    fontSize: 12.6,
+                                    height: 1.3,
+                                    color: _AuthTheme.softSky.withValues(
+                                      alpha: 0.92,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 240),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeIn,
+                            child: KeyedSubtree(
+                              key: ValueKey(
+                                '$_mode-$_phoneCodeSent-$_emailCodeSent',
+                              ),
+                              child: _buildCurrentForm(),
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+                          _buildNavigationButtons(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -611,12 +679,17 @@ class _IntroScreenState extends State<IntroScreen>
     return GestureDetector(
       onTap: _goToLogin,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5.5),
         decoration: BoxDecoration(
-          color: _AuthTheme.electricCyan.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
+          gradient: LinearGradient(
+            colors: [
+              Colors.white.withValues(alpha: 0.26),
+              _AuthTheme.frostMid.withValues(alpha: 0.48),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: _AuthTheme.iceCyan.withValues(alpha: 0.30),
+            color: Colors.white.withValues(alpha: 0.58),
           ),
         ),
         child: Row(
@@ -625,15 +698,15 @@ class _IntroScreenState extends State<IntroScreen>
             Icon(
               CupertinoIcons.chevron_left,
               size: 14,
-              color: _AuthTheme.iceCyan,
+              color: Colors.white,
             ),
             SizedBox(width: 4),
             Text(
               'Kirishga qaytish',
               style: TextStyle(
                 fontSize: 12.2,
-                fontWeight: FontWeight.w600,
-                color: _AuthTheme.iceCyan,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
               ),
             ),
           ],
@@ -1069,19 +1142,19 @@ class _IntroScreenState extends State<IntroScreen>
         Text(
           'YAN LEGAL FIRM',
           style: TextStyle(
-            fontSize: 10.2,
+            fontSize: 10.4,
             fontWeight: FontWeight.w800,
             letterSpacing: 2.8,
-            color: _AuthTheme.iceCyan.withValues(alpha: 0.78),
+            color: Colors.white.withValues(alpha: 0.90),
           ),
         ),
         const SizedBox(height: 5),
         Text(
           'Huquq • Ishonch • Texnologiya',
           style: TextStyle(
-            fontSize: 9.5,
+            fontSize: 9.6,
             letterSpacing: 0.8,
-            color: _AuthTheme.softSky.withValues(alpha: 0.52),
+            color: _AuthTheme.softSky.withValues(alpha: 0.72),
           ),
         ),
       ],
@@ -1112,55 +1185,76 @@ class _IntroScreenState extends State<IntroScreen>
   }
 }
 
-class _LadyJusticeBackground extends StatelessWidget {
-  const _LadyJusticeBackground();
+/// Brighter Royal Cobalt & Luminous Cyan atmosphere over the Lady Justice artwork
+/// so the Frosted Pearl-Blue Login Window refracts rich blue & cyan light.
+class _LadyJusticeLiquidBackground extends StatelessWidget {
+  const _LadyJusticeLiquidBackground();
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       fit: StackFit.expand,
       children: [
-        const ColoredBox(color: _AuthTheme.abyssNavy),
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF102C60),
+                Color(0xFF163A7A),
+                Color(0xFF0E2654),
+              ],
+            ),
+          ),
+        ),
         Image.asset(
           'assets/login_bg.jpg',
           fit: BoxFit.cover,
           alignment: const Alignment(0.15, -0.30),
           filterQuality: FilterQuality.high,
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0xFF041026),
-                    Color(0xFF061B3A),
-                    Color(0xFF020611),
-                  ],
-                ),
-              ),
-            );
-          },
+          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
         ),
+        // Luminous Royal Cobalt & Sapphire tint (much brighter than the old black scrim)
         DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              stops: const [0.0, 0.16, 0.44, 0.68, 1.0],
+              stops: const [0.0, 0.20, 0.48, 0.72, 1.0],
               colors: [
-                _AuthTheme.abyssNavy.withValues(alpha: 0.52),
-                _AuthTheme.abyssNavy.withValues(alpha: 0.10),
-                _AuthTheme.abyssNavy.withValues(alpha: 0.18),
-                _AuthTheme.abyssNavy.withValues(alpha: 0.72),
-                _AuthTheme.abyssNavy.withValues(alpha: 0.94),
+                const Color(0xFF0E295C).withValues(alpha: 0.42),
+                const Color(0xFF12326B).withValues(alpha: 0.10),
+                const Color(0xFF143572).withValues(alpha: 0.18),
+                const Color(0xFF123066).withValues(alpha: 0.56),
+                const Color(0xFF0D234F).withValues(alpha: 0.78),
               ],
             ),
           ),
         ),
+        // Ambient pearl-blue & cyan light blooms behind the frosted auth window
         Positioned(
-          bottom: -120,
-          right: -90,
+          bottom: 80,
+          left: -70,
+          child: IgnorePointer(
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFF4A88F5).withValues(alpha: 0.30),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: -80,
+          right: -60,
           child: IgnorePointer(
             child: Container(
               width: 340,
@@ -1169,8 +1263,8 @@ class _LadyJusticeBackground extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    _AuthTheme.electricCyan.withValues(alpha: 0.14),
-                    _AuthTheme.luminousAzure.withValues(alpha: 0.04),
+                    _AuthTheme.electricCyan.withValues(alpha: 0.26),
+                    _AuthTheme.luminousAzure.withValues(alpha: 0.10),
                     Colors.transparent,
                   ],
                 ),
@@ -1202,7 +1296,7 @@ class _MainDashboardState extends State<MainDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF030917),
+      backgroundColor: const Color(0xFF0E2654),
       body: Stack(
         children: [
           const DashboardBackground(),
@@ -1230,6 +1324,7 @@ class _MainDashboardState extends State<MainDashboard> {
     );
   }
 
+  /// Frosted Pearl-Blue & Silver-Rim Bottom Navigation Dock matching Image 1.
   Widget _buildBottomNavigation() {
     const items = <DashboardNavData>[
       DashboardNavData(CupertinoIcons.house_fill, 'Bosh sahifa'),
@@ -1242,44 +1337,56 @@ class _MainDashboardState extends State<MainDashboard> {
       left: 18,
       right: 18,
       bottom: 16 + MediaQuery.of(context).padding.bottom,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(25),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            height: 70,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFF0E254B).withValues(alpha: 0.88),
-                  const Color(0xFF061329).withValues(alpha: 0.94),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(25),
-              border: Border.all(
-                color: _AuthTheme.iceCyan.withValues(alpha: 0.26),
-                width: 1.1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  blurRadius: 28,
-                  offset: const Offset(0, 12),
-                ),
-              ],
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF3888FF).withValues(alpha: 0.22),
+              blurRadius: 24,
+              offset: const Offset(0, 6),
             ),
-            child: Row(
-              children: List.generate(
-                items.length,
-                (index) => Expanded(
-                  child: DashboardNavItem(
-                    icon: items[index].icon,
-                    label: items[index].label,
-                    selected: _selectedTab == index,
-                    onTap: () => _switchToTab(index),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(26),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              height: 70,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.28),
+                    const Color(0xFF4F78C4).withValues(alpha: 0.46),
+                    const Color(0xFF203E7A).withValues(alpha: 0.68),
+                  ],
+                  stops: const [0.0, 0.45, 1.0],
+                ),
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.68),
+                  width: 1.25,
+                ),
+              ),
+              child: Row(
+                children: List.generate(
+                  items.length,
+                  (index) => Expanded(
+                    child: DashboardNavItem(
+                      icon: items[index].icon,
+                      label: items[index].label,
+                      selected: _selectedTab == index,
+                      onTap: () => _switchToTab(index),
+                    ),
                   ),
                 ),
               ),
@@ -1291,6 +1398,7 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 }
 
+/// Frosted Pearl-Blue Phone Input Field with Silver-White Rim.
 class _UzbekPhoneField extends StatefulWidget {
   final TextEditingController controller;
 
@@ -1331,18 +1439,26 @@ class _UzbekPhoneFieldState extends State<_UzbekPhoneField> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
-        color: _AuthTheme.inputSurface.withValues(alpha: _focused ? 0.88 : 0.72),
-        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: _focused ? 0.28 : 0.18),
+            const Color(0xFF3B64B0).withValues(alpha: _focused ? 0.52 : 0.40),
+            const Color(0xFF1B3670).withValues(alpha: _focused ? 0.68 : 0.56),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: _focused
-              ? _AuthTheme.electricCyan.withValues(alpha: 0.78)
-              : _AuthTheme.iceCyan.withValues(alpha: 0.22),
-          width: _focused ? 1.3 : 1.0,
+              ? Colors.white.withValues(alpha: 0.92)
+              : Colors.white.withValues(alpha: 0.52),
+          width: _focused ? 1.4 : 1.1,
         ),
         boxShadow: _focused
             ? [
                 BoxShadow(
-                  color: _AuthTheme.electricCyan.withValues(alpha: 0.20),
+                  color: _AuthTheme.electricCyan.withValues(alpha: 0.28),
                   blurRadius: 16,
                 ),
               ]
@@ -1358,33 +1474,32 @@ class _UzbekPhoneFieldState extends State<_UzbekPhoneField> {
         ),
         style: const TextStyle(
           color: _AuthTheme.crispWhite,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.2,
+          fontSize: 15.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.25,
         ),
         placeholder: '** *** ** **',
         placeholderStyle: TextStyle(
-          color: _AuthTheme.softSky.withValues(alpha: 0.45),
+          color: _AuthTheme.softSky.withValues(alpha: 0.65),
           fontSize: 14.5,
           fontWeight: FontWeight.w400,
         ),
         prefix: Padding(
-          padding: const EdgeInsets.only(left: 14, right: 6),
+          padding: const EdgeInsets.only(left: 15, right: 6),
           child: Icon(
             CupertinoIcons.phone_fill,
-            size: 17,
-            color: _focused
-                ? _AuthTheme.electricCyan
-                : _AuthTheme.iceCyan.withValues(alpha: 0.75),
+            size: 18,
+            color: _focused ? Colors.white : _AuthTheme.electricCyan,
           ),
         ),
         decoration: const BoxDecoration(color: Colors.transparent),
-        cursorColor: _AuthTheme.electricCyan,
+        cursorColor: Colors.white,
       ),
     );
   }
 }
 
+/// Frosted Pearl-Blue Text Input Field with Silver-White Rim.
 class _LiquidTextField extends StatefulWidget {
   final TextEditingController controller;
   final String hintText;
@@ -1431,18 +1546,26 @@ class _LiquidTextFieldState extends State<_LiquidTextField> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
-        color: _AuthTheme.inputSurface.withValues(alpha: _focused ? 0.88 : 0.72),
-        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: _focused ? 0.28 : 0.18),
+            const Color(0xFF3B64B0).withValues(alpha: _focused ? 0.52 : 0.40),
+            const Color(0xFF1B3670).withValues(alpha: _focused ? 0.68 : 0.56),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: _focused
-              ? _AuthTheme.electricCyan.withValues(alpha: 0.78)
-              : _AuthTheme.iceCyan.withValues(alpha: 0.22),
-          width: _focused ? 1.3 : 1.0,
+              ? Colors.white.withValues(alpha: 0.92)
+              : Colors.white.withValues(alpha: 0.52),
+          width: _focused ? 1.4 : 1.1,
         ),
         boxShadow: _focused
             ? [
                 BoxShadow(
-                  color: _AuthTheme.electricCyan.withValues(alpha: 0.20),
+                  color: _AuthTheme.electricCyan.withValues(alpha: 0.28),
                   blurRadius: 16,
                 ),
               ]
@@ -1459,11 +1582,11 @@ class _LiquidTextFieldState extends State<_LiquidTextField> {
         style: const TextStyle(
           color: _AuthTheme.crispWhite,
           fontSize: 15,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         ),
         placeholder: widget.hintText,
         placeholderStyle: TextStyle(
-          color: _AuthTheme.softSky.withValues(alpha: 0.45),
+          color: _AuthTheme.softSky.withValues(alpha: 0.68),
           fontSize: 14.2,
         ),
         prefix: Padding(
@@ -1471,13 +1594,11 @@ class _LiquidTextFieldState extends State<_LiquidTextField> {
           child: Icon(
             widget.icon,
             size: 17,
-            color: _focused
-                ? _AuthTheme.electricCyan
-                : _AuthTheme.iceCyan.withValues(alpha: 0.75),
+            color: _focused ? Colors.white : _AuthTheme.electricCyan,
           ),
         ),
         decoration: const BoxDecoration(color: Colors.transparent),
-        cursorColor: _AuthTheme.electricCyan,
+        cursorColor: Colors.white,
       ),
     );
   }
@@ -1527,21 +1648,16 @@ class _LiquidPrimaryButtonState extends State<_LiquidPrimaryButton> {
               ],
               stops: [0.0, 0.52, 1.0],
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: const Color(0xFFA6F3FF).withValues(alpha: 0.55),
-              width: 1.1,
+              color: Colors.white.withValues(alpha: 0.78),
+              width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: _AuthTheme.luminousAzure.withValues(alpha: 0.42),
+                color: _AuthTheme.luminousAzure.withValues(alpha: 0.45),
                 blurRadius: 22,
                 offset: const Offset(0, 8),
-              ),
-              BoxShadow(
-                color: _AuthTheme.electricCyan.withValues(alpha: 0.22),
-                blurRadius: 12,
-                spreadRadius: -1,
               ),
             ],
           ),
@@ -1552,7 +1668,7 @@ class _LiquidPrimaryButtonState extends State<_LiquidPrimaryButton> {
                 widget.label,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 15,
+                  fontSize: 15.2,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.25,
                 ),
@@ -1571,6 +1687,7 @@ class _LiquidPrimaryButtonState extends State<_LiquidPrimaryButton> {
   }
 }
 
+/// Frosted Pearl-Blue Secondary Mode Switcher Button.
 class _LiquidSecondaryButton extends StatefulWidget {
   final IconData icon;
   final String label;
@@ -1607,18 +1724,28 @@ class _LiquidSecondaryButtonState extends State<_LiquidSecondaryButton> {
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.symmetric(
             horizontal: 10,
-            vertical: 13,
+            vertical: 13.5,
           ),
           decoration: BoxDecoration(
-            color: widget.active
-                ? _AuthTheme.electricCyan.withValues(alpha: 0.16)
-                : _AuthTheme.inputSurface.withValues(alpha: 0.65),
-            borderRadius: BorderRadius.circular(15),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: widget.active
+                  ? [
+                      Colors.white.withValues(alpha: 0.34),
+                      const Color(0xFF4C7ED1).withValues(alpha: 0.56),
+                    ]
+                  : [
+                      Colors.white.withValues(alpha: 0.20),
+                      const Color(0xFF355BA3).withValues(alpha: 0.44),
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: widget.active
-                  ? _AuthTheme.electricCyan.withValues(alpha: 0.62)
-                  : _AuthTheme.iceCyan.withValues(alpha: 0.20),
-              width: widget.active ? 1.2 : 1.0,
+                  ? Colors.white.withValues(alpha: 0.85)
+                  : Colors.white.withValues(alpha: 0.52),
+              width: widget.active ? 1.3 : 1.05,
             ),
           ),
           child: Row(
@@ -1627,9 +1754,7 @@ class _LiquidSecondaryButtonState extends State<_LiquidSecondaryButton> {
               Icon(
                 widget.icon,
                 size: 16,
-                color: widget.active
-                    ? _AuthTheme.electricCyan
-                    : _AuthTheme.softSky.withValues(alpha: 0.80),
+                color: Colors.white,
               ),
               const SizedBox(width: 7),
               Flexible(
@@ -1637,12 +1762,10 @@ class _LiquidSecondaryButtonState extends State<_LiquidSecondaryButton> {
                   widget.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13.0,
-                    fontWeight: FontWeight.w600,
-                    color: widget.active
-                        ? _AuthTheme.crispWhite
-                        : _AuthTheme.softSky.withValues(alpha: 0.88),
+                  style: const TextStyle(
+                    fontSize: 13.2,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
                 ),
               ),

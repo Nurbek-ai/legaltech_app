@@ -7,14 +7,14 @@ class DashboardNavData {
   const DashboardNavData(this.icon, this.label);
 }
 
-
 class DashboardNavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
-  const DashboardNavItem({super.key, 
+  const DashboardNavItem({
+    super.key,
     required this.icon,
     required this.label,
     required this.selected,
@@ -23,6 +23,9 @@ class DashboardNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const crispWhite = Color(0xFFFFFFFF);
+    const inactiveIce = Color(0xFFD0E2FF);
+
     return Semantics(
       button: true,
       selected: selected,
@@ -31,35 +34,62 @@ class DashboardNavItem extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          margin: const EdgeInsets.symmetric(horizontal: 3),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: selected
-                ? Colors.white.withValues(alpha: 0.15)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(15),
+            gradient: selected
+                ? LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withValues(alpha: 0.34),
+                      const Color(0xFF5A88D6).withValues(alpha: 0.42),
+                      const Color(0xFF28509C).withValues(alpha: 0.58),
+                    ],
+                    stops: const [0.0, 0.48, 1.0],
+                  )
+                : null,
+            color: selected ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(18),
+            border: selected
+                ? Border.all(
+                    color: Colors.white.withValues(alpha: 0.78),
+                    width: 1.25,
+                  )
+                : null,
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF66B2FF).withValues(alpha: 0.32),
+                      blurRadius: 14,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : const [],
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 icon,
-                size: 20,
+                size: 21,
                 color: selected
-                    ? const Color(0xFFF1F5FF)
-                    : Colors.white.withValues(alpha: 0.48),
+                    ? crispWhite
+                    : inactiveIce.withValues(alpha: 0.78),
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 4),
               Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: selected
-                      ? const Color(0xFFF1F5FF)
-                      : Colors.white.withValues(alpha: 0.48),
-                  fontSize: 9.5,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      ? crispWhite
+                      : inactiveIce.withValues(alpha: 0.82),
+                  fontSize: 10.0,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                  letterSpacing: 0.1,
                 ),
               ),
             ],
@@ -69,4 +99,3 @@ class DashboardNavItem extends StatelessWidget {
     );
   }
 }
-
