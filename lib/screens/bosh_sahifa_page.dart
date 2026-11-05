@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -16,12 +15,12 @@ import 'services/family_claim_page.dart';
 import 'services/lawyer_draft_request_page.dart';
 import 'tarix_page.dart';
 
-/// Frosted Pearl-Blue & Royal Cobalt Liquid Glass tokens matching Image 1.
+/// Frosted Pearl-Blue & Royal Cobalt Liquid Glass tokens (GPU-optimized).
 class _HomeLiquidTheme {
-  static const Color frostHighlight = Color(0xFFFFFFFF);
-  static const Color frostPearlBlue = Color(0xFF6B92DA);
-  static const Color frostMidCobalt = Color(0xFF3358A0);
-  static const Color frostDeepCobalt = Color(0xFF1C3873);
+  static const Color frostPearlLight = Color(0xFF7FA4E8);
+  static const Color frostPearlBlue = Color(0xFF537BC4);
+  static const Color frostMidCobalt = Color(0xFF2B5096);
+  static const Color frostDeepCobalt = Color(0xFF19356E);
 
   static const Color electricCyan = Color(0xFF00E5FF);
   static const Color luminousAzure = Color(0xFF2B88FF);
@@ -74,7 +73,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
   final _searchFocusNode = FocusNode();
   bool _searchFocused = false;
 
-  late final AnimationController _flightSparkleController;
+  late final AnimationController _entranceController;
 
   /// All 8 legal services mapped to the custom 3D artwork in `assets/service_artwork/`.
   static const _services = <_ServiceCardData>[
@@ -179,10 +178,11 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
   @override
   void initState() {
     super.initState();
-    _flightSparkleController = AnimationController(
+    // Runs once on page entrance instead of .repeat() so idle GPU usage is 0%
+    _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 4200),
-    )..repeat();
+      duration: const Duration(milliseconds: 1100),
+    )..forward();
     _searchController.addListener(_handleSearchChanged);
     _searchFocusNode.addListener(_handleFocusChanged);
     GeneratedDocumentRepository.instance.reload();
@@ -191,7 +191,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
 
   @override
   void dispose() {
-    _flightSparkleController.dispose();
+    _entranceController.dispose();
     _searchFocusNode
       ..removeListener(_handleFocusChanged)
       ..dispose();
@@ -416,9 +416,12 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
     return CustomScrollView(
       key: const ValueKey('home'),
       physics: const BouncingScrollPhysics(),
+      cacheExtent: 600,
       slivers: [
         SliverToBoxAdapter(
-          child: _buildHeroHeaderWithSwallow(),
+          child: RepaintBoundary(
+            child: _buildHeroHeaderWithSwallow(),
+          ),
         ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
@@ -436,12 +439,15 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       final service = visibleServices[index];
-                      return _LiquidServiceCard(
-                        data: service,
-                        onTap: () => _handleServiceTap(service),
+                      return RepaintBoundary(
+                        child: _LiquidServiceCard(
+                          data: service,
+                          onTap: () => _handleServiceTap(service),
+                        ),
                       );
                     },
                     childCount: visibleServices.length,
+                    addRepaintBoundaries: false,
                   ),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
@@ -481,27 +487,22 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      // 1. Animated cyan flight waves & sparkling star particles
-                      Positioned(
+                      // 1. Static GPU-cached flight trajectory & sparkles
+                      const Positioned(
                         top: 0,
                         left: 0,
                         right: 0,
                         height: 156,
                         child: IgnorePointer(
-                          child: AnimatedBuilder(
-                            animation: _flightSparkleController,
-                            builder: (context, _) {
-                              return CustomPaint(
-                                painter: _SwallowFlightSparklePainter(
-                                  progress: _flightSparkleController.value,
-                                ),
-                              );
-                            },
+                          child: RepaintBoundary(
+                            child: CustomPaint(
+                              painter: _SwallowFlightSparklePainter(),
+                            ),
                           ),
                         ),
                       ),
 
-                      // 2. Top Brand Row (Standalone Big Firm Logo + YAN360 + Frosted Bell)
+                      // 2. Top Brand Row
                       Positioned(
                         top: 4,
                         left: 16,
@@ -509,56 +510,48 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                         child: _buildTopBrandRow(activities.length),
                       ),
 
-                      // 3. Interactive Frosted Pearl-Blue Liquid-Glass Metrics Banner
+                      // 3. Interactive Frosted Pearl-Blue Command Banner
                       Positioned(
                         left: 18,
                         right: 18,
                         bottom: 0,
-                        child: _InteractiveLiquidMetricsBanner(
-                          profile: profile,
-                          totalArizalarCount: totalArizalar,
-                          savedDocsCount: savedDocsCount,
-                          consultAndLawyerCount: consultAndLawyerCount,
-                          totalActivitiesCount: activities.length,
-                          onTapDocuments: () => _showDocumentsQuickSheet(
-                            context,
-                            docs: docs,
-                            activeApplications: profile.activeApplications,
-                          ),
-                          onTapProfileAvatar: () => _showProfileQuickSheet(
-                            context,
+                        child: RepaintBoundary(
+                          child: _InteractiveLiquidMetricsBanner(
                             profile: profile,
+                            totalArizalarCount: totalArizalar,
+                            savedDocsCount: savedDocsCount,
+                            consultAndLawyerCount: consultAndLawyerCount,
+                            totalActivitiesCount: activities.length,
+                            onTapDocuments: () => _showDocumentsQuickSheet(
+                              context,
+                              docs: docs,
+                              activeApplications: profile.activeApplications,
+                            ),
+                            onTapProfileAvatar: () => _showProfileQuickSheet(
+                              context,
+                              profile: profile,
+                            ),
+                            onTapReadinessRing: () => _showReadinessQuickSheet(
+                              context,
+                              profile: profile,
+                            ),
+                            onNavigateToTab: _navigateOrPushTab,
                           ),
-                          onTapReadinessRing: () => _showReadinessQuickSheet(
-                            context,
-                            profile: profile,
-                          ),
-                          onNavigateToTab: _navigateOrPushTab,
                         ),
                       ),
 
-                      // 4. Soaring Swallow overlapping the upper-right sky
+                      // 4. Soaring Swallow (smooth 1-time entrance, then 0% GPU idle)
                       Positioned(
                         top: -8,
                         right: 24,
                         width: 192,
                         height: 136,
                         child: IgnorePointer(
-                          child: AnimatedBuilder(
-                            animation: _flightSparkleController,
-                            builder: (context, child) {
-                              final dy =
-                                  math.sin(
-                                    _flightSparkleController.value *
-                                        2 *
-                                        math.pi,
-                                  ) *
-                                  3.2;
-                              return Transform.translate(
-                                offset: Offset(0, dy),
-                                child: child,
-                              );
-                            },
+                          child: FadeTransition(
+                            opacity: CurvedAnimation(
+                              parent: _entranceController,
+                              curve: Curves.easeOut,
+                            ),
                             child: Stack(
                               alignment: Alignment.center,
                               children: [
@@ -570,9 +563,9 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                                     gradient: RadialGradient(
                                       colors: [
                                         _HomeLiquidTheme.electricCyan
-                                            .withValues(alpha: 0.36),
+                                            .withValues(alpha: 0.34),
                                         _HomeLiquidTheme.luminousAzure
-                                            .withValues(alpha: 0.14),
+                                            .withValues(alpha: 0.12),
                                         Colors.transparent,
                                       ],
                                     ),
@@ -588,6 +581,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                                     'assets/yanswallow.jpg',
                                   ],
                                   fit: BoxFit.contain,
+                                  cacheWidth: 450,
                                 ),
                               ],
                             ),
@@ -609,7 +603,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Standalone larger firm logo (80x80) with bright cyan back-glow, zero circle box
+        // Standalone larger firm logo (80x80) with downsampled cacheWidth
         SizedBox(
           width: 80,
           height: 80,
@@ -624,10 +618,10 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                   boxShadow: [
                     BoxShadow(
                       color: _HomeLiquidTheme.electricCyan.withValues(
-                        alpha: 0.36,
+                        alpha: 0.34,
                       ),
-                      blurRadius: 30,
-                      spreadRadius: 3,
+                      blurRadius: 26,
+                      spreadRadius: 2,
                     ),
                   ],
                 ),
@@ -636,8 +630,9 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                 'assets/logo.png',
                 width: 80,
                 height: 80,
+                cacheWidth: 220,
                 fit: BoxFit.contain,
-                filterQuality: FilterQuality.high,
+                filterQuality: FilterQuality.medium,
                 errorBuilder: (_, _, _) => const Icon(
                   CupertinoIcons.shield_lefthalf_fill,
                   color: _HomeLiquidTheme.electricCyan,
@@ -677,9 +672,9 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
                         shadows: [
                           Shadow(
                             color: _HomeLiquidTheme.electricCyan.withValues(
-                              alpha: 0.72,
+                              alpha: 0.70,
                             ),
-                            blurRadius: 14,
+                            blurRadius: 12,
                           ),
                         ],
                       ),
@@ -702,69 +697,54 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
             ],
           ),
         ),
-        // Frosted Pearl-Blue Notification Bell Button
+        // Frosted Pearl-Blue Notification Bell (no offscreen BackdropFilter needed)
         Semantics(
           button: true,
           label: 'Bildirishnomalar va faoliyat tarixi',
           child: GestureDetector(
             onTap: () => _navigateOrPushTab(1),
-            child: ClipOval(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.white.withValues(alpha: 0.34),
-                        _HomeLiquidTheme.frostPearlBlue.withValues(alpha: 0.44),
-                        _HomeLiquidTheme.frostDeepCobalt.withValues(
-                          alpha: 0.65,
-                        ),
-                      ],
-                    ),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.72),
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    alignment: Alignment.center,
-                    children: [
-                      const Icon(
-                        CupertinoIcons.bell,
-                        size: 19,
-                        color: _HomeLiquidTheme.crispWhite,
-                      ),
-                      if (totalActivitiesCount > 0)
-                        Positioned(
-                          top: 6,
-                          right: 6,
-                          child: Container(
-                            width: 8.5,
-                            height: 8.5,
-                            decoration: BoxDecoration(
-                              color: _HomeLiquidTheme.electricCyan,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: _HomeLiquidTheme.electricCyan
-                                      .withValues(alpha: 0.90),
-                                  blurRadius: 8,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    _HomeLiquidTheme.frostPearlLight.withValues(alpha: 0.58),
+                    _HomeLiquidTheme.frostPearlBlue.withValues(alpha: 0.62),
+                    _HomeLiquidTheme.frostDeepCobalt.withValues(alpha: 0.85),
+                  ],
                 ),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.74),
+                  width: 1.2,
+                ),
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  const Icon(
+                    CupertinoIcons.bell,
+                    size: 19,
+                    color: _HomeLiquidTheme.crispWhite,
+                  ),
+                  if (totalActivitiesCount > 0)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Container(
+                        width: 8.5,
+                        height: 8.5,
+                        decoration: const BoxDecoration(
+                          color: _HomeLiquidTheme.electricCyan,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -1106,190 +1086,174 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
           ),
         ),
         const SizedBox(width: 10),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(22),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7.5),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.32),
-                    _HomeLiquidTheme.frostPearlBlue.withValues(alpha: 0.44),
-                    _HomeLiquidTheme.frostDeepCobalt.withValues(alpha: 0.65),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.72),
-                  width: 1.15,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(
-                    CupertinoIcons.square_grid_2x2_fill,
-                    size: 13.5,
-                    color: _HomeLiquidTheme.electricCyan,
-                  ),
-                  SizedBox(width: 6),
-                  Text(
-                    '08 XIZMAT',
-                    style: TextStyle(
-                      color: _HomeLiquidTheme.crispWhite,
-                      fontSize: 10.2,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.65,
-                    ),
-                  ),
-                ],
-              ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7.5),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                _HomeLiquidTheme.frostPearlLight.withValues(alpha: 0.58),
+                _HomeLiquidTheme.frostPearlBlue.withValues(alpha: 0.62),
+                _HomeLiquidTheme.frostDeepCobalt.withValues(alpha: 0.85),
+              ],
             ),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.72),
+              width: 1.15,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(
+                CupertinoIcons.square_grid_2x2_fill,
+                size: 13.5,
+                color: _HomeLiquidTheme.electricCyan,
+              ),
+              SizedBox(width: 6),
+              Text(
+                '08 XIZMAT',
+                style: TextStyle(
+                  color: _HomeLiquidTheme.crispWhite,
+                  fontSize: 10.2,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.65,
+                ),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  /// Frosted Pearl-Blue & Silver-Rim Search Capsule matching Image 1.
+  /// Hardware-accelerated Frosted Pearl-Blue Search Capsule (zero BackdropFilter lag).
   Widget _buildSearch() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          height: 48,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: _searchFocused ? 0.34 : 0.24),
-                _HomeLiquidTheme.frostPearlBlue.withValues(
-                  alpha: _searchFocused ? 0.48 : 0.38,
-                ),
-                _HomeLiquidTheme.frostDeepCobalt.withValues(
-                  alpha: _searchFocused ? 0.68 : 0.58,
-                ),
-              ],
-              stops: const [0.0, 0.48, 1.0],
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      height: 48,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _HomeLiquidTheme.frostPearlLight.withValues(
+              alpha: _searchFocused ? 0.65 : 0.50,
             ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: _searchFocused
-                  ? Colors.white.withValues(alpha: 0.92)
-                  : Colors.white.withValues(alpha: 0.64),
-              width: _searchFocused ? 1.4 : 1.15,
+            _HomeLiquidTheme.frostPearlBlue.withValues(
+              alpha: _searchFocused ? 0.72 : 0.58,
             ),
-          ),
-          child: CupertinoTextField(
-            controller: _searchController,
-            focusNode: _searchFocusNode,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            keyboardType: TextInputType.text,
-            textInputAction: TextInputAction.search,
-            style: const TextStyle(
-              color: _HomeLiquidTheme.crispWhite,
-              fontSize: 13.5,
-              fontWeight: FontWeight.w600,
+            _HomeLiquidTheme.frostDeepCobalt.withValues(
+              alpha: _searchFocused ? 0.90 : 0.82,
             ),
-            placeholder: 'Xizmatni izlang...',
-            placeholderStyle: TextStyle(
-              color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.80),
-              fontSize: 13.2,
-            ),
-            prefix: const Padding(
-              padding: EdgeInsets.only(left: 16, right: 4),
-              child: Icon(
-                CupertinoIcons.search,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
-            suffix: _searchController.text.isEmpty
-                ? null
-                : GestureDetector(
-                    onTap: _searchController.clear,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 8, right: 14),
-                      child: Icon(
-                        CupertinoIcons.xmark_circle_fill,
-                        color: Colors.white.withValues(alpha: 0.85),
-                        size: 16,
-                      ),
-                    ),
-                  ),
-            decoration: const BoxDecoration(color: Colors.transparent),
-            cursorColor: Colors.white,
+          ],
+          stops: const [0.0, 0.45, 1.0],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: _searchFocused
+              ? Colors.white.withValues(alpha: 0.94)
+              : Colors.white.withValues(alpha: 0.66),
+          width: _searchFocused ? 1.4 : 1.15,
+        ),
+      ),
+      child: CupertinoTextField(
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        keyboardType: TextInputType.text,
+        textInputAction: TextInputAction.search,
+        style: const TextStyle(
+          color: _HomeLiquidTheme.crispWhite,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w600,
+        ),
+        placeholder: 'Xizmatni izlang...',
+        placeholderStyle: TextStyle(
+          color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.82),
+          fontSize: 13.2,
+        ),
+        prefix: const Padding(
+          padding: EdgeInsets.only(left: 16, right: 4),
+          child: Icon(
+            CupertinoIcons.search,
+            color: Colors.white,
+            size: 18,
           ),
         ),
+        suffix: _searchController.text.isEmpty
+            ? null
+            : GestureDetector(
+                onTap: _searchController.clear,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8, right: 14),
+                  child: Icon(
+                    CupertinoIcons.xmark_circle_fill,
+                    color: Colors.white.withValues(alpha: 0.85),
+                    size: 16,
+                  ),
+                ),
+              ),
+        decoration: const BoxDecoration(color: Colors.transparent),
+        cursorColor: Colors.white,
       ),
     );
   }
 
   Widget _buildEmptyState() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(22, 30, 22, 31),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: 0.26),
-                _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.56),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.62),
-            ),
-          ),
-          child: Column(
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  CupertinoIcons.search,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'Xizmat topilmadi',
-                style: TextStyle(
-                  color: _HomeLiquidTheme.crispWhite,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                "Qidiruv so'zini o'zgartirib ko'ring.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.85),
-                  fontSize: 12.2,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(22, 30, 22, 31),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _HomeLiquidTheme.frostPearlLight.withValues(alpha: 0.52),
+            _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.80),
+          ],
         ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.62),
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              CupertinoIcons.search,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Xizmat topilmadi',
+            style: TextStyle(
+              color: _HomeLiquidTheme.crispWhite,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "Qidiruv so'zini o'zgartirib ko'ring.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _HomeLiquidTheme.softIceText.withValues(alpha: 0.85),
+              fontSize: 12.2,
+              height: 1.35,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1316,10 +1280,9 @@ class _BoshSahifaPageState extends State<BoshSahifaPage>
   }
 }
 
+/// Static, GPU-friendly flight trajectory & sparkles painter (zero MaskFilter.blur per frame).
 class _SwallowFlightSparklePainter extends CustomPainter {
-  final double progress;
-
-  const _SwallowFlightSparklePainter({required this.progress});
+  const _SwallowFlightSparklePainter();
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1362,29 +1325,30 @@ class _SwallowFlightSparklePainter extends CustomPainter {
 
     final shaderRect = Rect.fromLTWH(0, 0, w, h);
 
-    final glowPaint = Paint()
+    // Soft wide stroke instead of expensive MaskFilter.blur
+    final softRibbonPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 7.0
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9)
+      ..strokeWidth = 5.0
+      ..strokeCap = StrokeCap.round
       ..shader = LinearGradient(
         colors: [
+          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.02),
+          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.22),
+          _HomeLiquidTheme.iceBlue.withValues(alpha: 0.32),
           _HomeLiquidTheme.electricCyan.withValues(alpha: 0.08),
-          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.50),
-          _HomeLiquidTheme.iceBlue.withValues(alpha: 0.70),
-          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.18),
         ],
         stops: const [0.0, 0.38, 0.74, 1.0],
       ).createShader(shaderRect);
 
     final corePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6
+      ..strokeWidth = 1.5
       ..shader = LinearGradient(
         colors: [
           Colors.white.withValues(alpha: 0.0),
-          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.72),
-          Colors.white.withValues(alpha: 0.95),
-          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.30),
+          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.70),
+          Colors.white.withValues(alpha: 0.92),
+          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.28),
         ],
         stops: const [0.0, 0.32, 0.70, 1.0],
       ).createShader(shaderRect);
@@ -1395,59 +1359,47 @@ class _SwallowFlightSparklePainter extends CustomPainter {
       ..shader = LinearGradient(
         colors: [
           Colors.transparent,
-          _HomeLiquidTheme.iceBlue.withValues(alpha: 0.45),
-          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.55),
+          _HomeLiquidTheme.iceBlue.withValues(alpha: 0.42),
+          _HomeLiquidTheme.electricCyan.withValues(alpha: 0.50),
           Colors.transparent,
         ],
         stops: const [0.0, 0.35, 0.78, 1.0],
       ).createShader(shaderRect);
 
-    canvas.drawPath(mainPath, glowPaint);
+    canvas.drawPath(mainPath, softRibbonPaint);
     canvas.drawPath(secondaryPath, secondaryPaint);
     canvas.drawPath(mainPath, corePaint);
 
     const sparkles = <_SparkleSpec>[
-      _SparkleSpec(0.22, 0.65, 3.2, 0.0, true),
-      _SparkleSpec(0.31, 0.56, 2.2, 0.25, false),
-      _SparkleSpec(0.42, 0.48, 4.0, 0.50, true),
-      _SparkleSpec(0.49, 0.58, 2.0, 0.72, false),
-      _SparkleSpec(0.55, 0.44, 4.6, 0.15, true),
-      _SparkleSpec(0.61, 0.52, 2.5, 0.40, false),
-      _SparkleSpec(0.66, 0.36, 5.2, 0.65, true),
-      _SparkleSpec(0.71, 0.22, 3.8, 0.85, true),
-      _SparkleSpec(0.76, 0.48, 2.4, 0.10, false),
-      _SparkleSpec(0.83, 0.28, 4.5, 0.55, true),
-      _SparkleSpec(0.88, 0.44, 3.0, 0.30, true),
-      _SparkleSpec(0.92, 0.19, 2.2, 0.80, false),
+      _SparkleSpec(0.22, 0.65, 3.2, true),
+      _SparkleSpec(0.31, 0.56, 2.0, false),
+      _SparkleSpec(0.42, 0.48, 3.8, true),
+      _SparkleSpec(0.49, 0.58, 2.0, false),
+      _SparkleSpec(0.55, 0.44, 4.4, true),
+      _SparkleSpec(0.61, 0.52, 2.3, false),
+      _SparkleSpec(0.66, 0.36, 5.0, true),
+      _SparkleSpec(0.71, 0.22, 3.6, true),
+      _SparkleSpec(0.76, 0.48, 2.2, false),
+      _SparkleSpec(0.83, 0.28, 4.2, true),
+      _SparkleSpec(0.88, 0.44, 2.8, true),
     ];
 
+    final haloPaint = Paint()
+      ..color = _HomeLiquidTheme.electricCyan.withValues(alpha: 0.26);
+    final dotPaint = Paint()..color = Colors.white.withValues(alpha: 0.88);
+
     for (final s in sparkles) {
-      final phase = (progress + s.phaseOffset) % 1.0;
-      final pulse = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(phase * 2 * math.pi));
       final center = Offset(w * s.dx, h * s.dy);
-      final radius = s.radius * (0.82 + 0.28 * pulse);
-
-      final haloPaint = Paint()
-        ..color = _HomeLiquidTheme.electricCyan.withValues(alpha: 0.45 * pulse)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-      canvas.drawCircle(center, radius * 1.6, haloPaint);
-
+      canvas.drawCircle(center, s.radius * 1.4, haloPaint);
       if (s.isStar) {
-        _drawFourPointStar(canvas, center, radius * 1.45, pulse);
+        _drawFourPointStar(canvas, center, s.radius * 1.4);
       } else {
-        final dotPaint = Paint()
-          ..color = Colors.white.withValues(alpha: 0.90 * pulse);
-        canvas.drawCircle(center, radius * 0.55, dotPaint);
+        canvas.drawCircle(center, s.radius * 0.55, dotPaint);
       }
     }
   }
 
-  void _drawFourPointStar(
-    Canvas canvas,
-    Offset c,
-    double r,
-    double alphaFactor,
-  ) {
+  void _drawFourPointStar(Canvas canvas, Offset c, double r) {
     final starPath = Path()
       ..moveTo(c.dx, c.dy - r)
       ..quadraticBezierTo(c.dx, c.dy, c.dx + r, c.dy)
@@ -1457,34 +1409,31 @@ class _SwallowFlightSparklePainter extends CustomPainter {
       ..close();
 
     final starPaint = Paint()
-      ..color = Colors.white.withValues(alpha: (0.94 * alphaFactor).clamp(0, 1))
+      ..color = Colors.white.withValues(alpha: 0.92)
       ..style = PaintingStyle.fill;
     canvas.drawPath(starPath, starPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _SwallowFlightSparklePainter oldDelegate) {
-    return oldDelegate.progress != progress;
-  }
+  bool shouldRepaint(covariant _SwallowFlightSparklePainter oldDelegate) =>
+      false;
 }
 
 class _SparkleSpec {
   final double dx;
   final double dy;
   final double radius;
-  final double phaseOffset;
   final bool isStar;
 
   const _SparkleSpec(
     this.dx,
     this.dy,
     this.radius,
-    this.phaseOffset,
     this.isStar,
   );
 }
 
-/// Frosted Pearl-Blue & Silver-Rim Command Banner matching Image 1.
+/// Frosted Pearl-Blue & Silver-Rim Command Banner (GPU-optimized optical glass).
 class _InteractiveLiquidMetricsBanner extends StatelessWidget {
   final UserProfileData profile;
   final int totalArizalarCount;
@@ -1526,448 +1475,436 @@ class _InteractiveLiquidMetricsBanner extends StatelessWidget {
     return Container(
       height: 148,
       decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _HomeLiquidTheme.frostPearlLight.withValues(alpha: 0.62),
+            _HomeLiquidTheme.frostPearlBlue.withValues(alpha: 0.68),
+            _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.82),
+            _HomeLiquidTheme.frostDeepCobalt.withValues(alpha: 0.90),
+          ],
+          stops: const [0.0, 0.30, 0.70, 1.0],
+        ),
         borderRadius: radius,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.74),
+          width: 1.3,
+        ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4C94FF).withValues(alpha: 0.25),
-            blurRadius: 24,
+            color: const Color(0xFF4C94FF).withValues(alpha: 0.22),
+            blurRadius: 20,
             offset: const Offset(0, 6),
           ),
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.32),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: ClipRRect(
         borderRadius: radius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withValues(alpha: 0.30),
-                  _HomeLiquidTheme.frostPearlBlue.withValues(alpha: 0.44),
-                  _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.60),
-                  _HomeLiquidTheme.frostDeepCobalt.withValues(alpha: 0.72),
-                ],
-                stops: const [0.0, 0.30, 0.70, 1.0],
-              ),
-              borderRadius: radius,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.72),
-                width: 1.3,
+        child: Stack(
+          children: [
+            // Soft top-left pearl frost sheen
+            Positioned(
+              top: -40,
+              left: -30,
+              child: Container(
+                width: 180,
+                height: 130,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.26),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
               ),
             ),
-            child: Stack(
-              children: [
-                // Top inner silver-white frost highlight
-                Positioned(
-                  top: 0,
-                  left: 20,
-                  right: 20,
-                  child: Container(
-                    height: 1.5,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          Colors.white.withValues(alpha: 0.90),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
+            // Top inner silver-white frost highlight
+            Positioned(
+              top: 0,
+              left: 20,
+              right: 20,
+              child: Container(
+                height: 1.5,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      Colors.white.withValues(alpha: 0.90),
+                      Colors.transparent,
+                    ],
                   ),
                 ),
-                // Bottom inner silver-ice highlight
-                Positioned(
-                  bottom: 0,
-                  left: 30,
-                  right: 30,
-                  child: Container(
-                    height: 1.4,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          Colors.white.withValues(alpha: 0.70),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
+              ),
+            ),
+            // Bottom inner silver-ice highlight
+            Positioned(
+              bottom: 0,
+              left: 30,
+              right: 30,
+              child: Container(
+                height: 1.4,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      Colors.white.withValues(alpha: 0.70),
+                      Colors.transparent,
+                    ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 9),
-                  child: Column(
-                    children: [
-                      // TOP TIER: 3 Primary Interactive Columns
-                      Expanded(
-                        child: Row(
-                          children: [
-                            // 1. Clickable Arizalar va hujjatlar
-                            Expanded(
-                              flex: 11,
-                              child: _PressableStatRegion(
-                                semanticLabel:
-                                    'Arizalar va hujjatlar: $totalArizalarCount ta. Ko‘rish uchun bosing',
-                                onTap: onTapDocuments,
-                                child: Row(
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 9),
+              child: Column(
+                children: [
+                  // TOP TIER: 3 Primary Interactive Columns
+                  Expanded(
+                    child: Row(
+                      children: [
+                        // 1. Clickable Arizalar va hujjatlar
+                        Expanded(
+                          flex: 11,
+                          child: _PressableStatRegion(
+                            semanticLabel:
+                                'Arizalar va hujjatlar: $totalArizalarCount ta. Ko‘rish uchun bosing',
+                            onTap: onTapDocuments,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        Colors.white.withValues(alpha: 0.34),
+                                        _HomeLiquidTheme.frostMidCobalt
+                                            .withValues(alpha: 0.62),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(13),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.70,
+                                      ),
+                                      width: 1.1,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    CupertinoIcons.doc_text_fill,
+                                    color: _HomeLiquidTheme.electricCyan,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 9),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            totalArizalarCount.toString(),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 21.5,
+                                              fontWeight: FontWeight.w900,
+                                              height: 1.0,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Icon(
+                                            CupertinoIcons.chevron_right,
+                                            size: 11,
+                                            color: Colors.white.withValues(
+                                              alpha: 0.85,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        'Arizalar va\nhujjatlar',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.94,
+                                          ),
+                                          fontSize: 10.2,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1.14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        _buildVerticalDivider(),
+
+                        // 2. Centerpiece User Profile Picture Avatar
+                        Expanded(
+                          flex: 9,
+                          child: _PressableStatRegion(
+                            semanticLabel:
+                                'Foydalanuvchi profili: ${profile.displayName}. Ochish uchun bosing',
+                            onTap: onTapProfileAvatar,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Stack(
+                                  clipBehavior: Clip.none,
+                                  alignment: Alignment.center,
                                   children: [
                                     Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
+                                      width: 54,
+                                      height: 54,
+                                      padding: const EdgeInsets.all(2.3),
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
                                         gradient: LinearGradient(
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
                                           colors: [
-                                            Colors.white.withValues(
-                                              alpha: 0.32,
-                                            ),
-                                            _HomeLiquidTheme.frostMidCobalt
-                                                .withValues(alpha: 0.55),
+                                            _HomeLiquidTheme.electricCyan,
+                                            _HomeLiquidTheme.luminousAzure,
                                           ],
                                         ),
-                                        borderRadius: BorderRadius.circular(13),
-                                        border: Border.all(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.68,
+                                      ),
+                                      child: Container(
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Color(0xFF16356C),
+                                        ),
+                                        child: ClipOval(
+                                          child: buildAvatarContent(
+                                            profile,
+                                            initialsSize: 17,
                                           ),
-                                          width: 1.1,
                                         ),
                                       ),
-                                      child: const Icon(
-                                        CupertinoIcons.doc_text_fill,
-                                        color: _HomeLiquidTheme.electricCyan,
-                                        size: 20,
-                                      ),
                                     ),
-                                    const SizedBox(width: 9),
-                                    Expanded(
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Text(
-                                                totalArizalarCount.toString(),
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 21.5,
-                                                  fontWeight: FontWeight.w900,
-                                                  height: 1.0,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Icon(
-                                                CupertinoIcons.chevron_right,
-                                                size: 11,
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.85,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            'Arizalar va\nhujjatlar',
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: Colors.white.withValues(
-                                                alpha: 0.94,
-                                              ),
-                                              fontSize: 10.2,
-                                              fontWeight: FontWeight.w600,
-                                              height: 1.14,
+                                    Positioned(
+                                      bottom: -1,
+                                      right: -1,
+                                      child: Container(
+                                        width: 18,
+                                        height: 18,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF15346B),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.85,
                                             ),
+                                            width: 1.2,
                                           ),
-                                        ],
+                                        ),
+                                        child: const Icon(
+                                          CupertinoIcons.checkmark_seal_fill,
+                                          color: _HomeLiquidTheme.electricCyan,
+                                          size: 11,
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ),
-
-                            _buildVerticalDivider(),
-
-                            // 2. Centerpiece User Profile Picture Avatar
-                            Expanded(
-                              flex: 9,
-                              child: _PressableStatRegion(
-                                semanticLabel:
-                                    'Foydalanuvchi profili: ${profile.displayName}. Ochish uchun bosing',
-                                onTap: onTapProfileAvatar,
-                                child: Column(
+                                const SizedBox(height: 4),
+                                Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Stack(
-                                      clipBehavior: Clip.none,
-                                      alignment: Alignment.center,
-                                      children: [
-                                        Container(
-                                          width: 54,
-                                          height: 54,
-                                          padding: const EdgeInsets.all(2.3),
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            gradient: const LinearGradient(
-                                              begin: Alignment.topLeft,
-                                              end: Alignment.bottomRight,
-                                              colors: [
-                                                _HomeLiquidTheme.electricCyan,
-                                                _HomeLiquidTheme.luminousAzure,
-                                              ],
-                                            ),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: _HomeLiquidTheme
-                                                    .electricCyan
-                                                    .withValues(alpha: 0.45),
-                                                blurRadius: 14,
-                                                spreadRadius: 0.8,
-                                              ),
-                                            ],
-                                          ),
-                                          child: Container(
-                                            decoration: const BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: Color(0xFF16356C),
-                                            ),
-                                            child: ClipOval(
-                                              child: buildAvatarContent(
-                                                profile,
-                                                initialsSize: 17,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        Positioned(
-                                          bottom: -1,
-                                          right: -1,
-                                          child: Container(
-                                            width: 18,
-                                            height: 18,
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF15346B),
-                                              shape: BoxShape.circle,
-                                              border: Border.all(
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.85,
-                                                ),
-                                                width: 1.2,
-                                              ),
-                                            ),
-                                            child: const Icon(
-                                              CupertinoIcons
-                                                  .checkmark_seal_fill,
-                                              color:
-                                                  _HomeLiquidTheme.electricCyan,
-                                              size: 11,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Flexible(
-                                          child: Text(
-                                            shortName,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 10.6,
-                                              fontWeight: FontWeight.w800,
-                                              height: 1.0,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 2),
-                                        Icon(
-                                          CupertinoIcons.chevron_right,
-                                          size: 9.5,
-                                          color: Colors.white.withValues(
-                                            alpha: 0.85,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            _buildVerticalDivider(),
-
-                            // 3. Clickable Dynamic Color Circular Progress Ring (<50 Red, 50-80 Yellow, 80+ Green)
-                            Expanded(
-                              flex: 12,
-                              child: _PressableStatRegion(
-                                semanticLabel:
-                                    'Profil tayyorligi: $completionLabel ($readinessStatus). Batafsil ko‘rish uchun bosing',
-                                onTap: onTapReadinessRing,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    SizedBox(
-                                      width: 50,
-                                      height: 50,
-                                      child: CustomPaint(
-                                        painter: _DynamicProgressRingPainter(
-                                          progress: completionRatio,
-                                          percent: completionPercentInt,
-                                        ),
-                                        child: Center(
-                                          child: Text(
-                                            completionLabel,
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12.2,
-                                              fontWeight: FontWeight.w900,
-                                              letterSpacing: -0.3,
-                                              shadows: [
-                                                Shadow(
-                                                  color: readinessColor
-                                                      .withValues(alpha: 0.70),
-                                                  blurRadius: 8,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
                                     Flexible(
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Profil\ntayyorligi',
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: Colors.white.withValues(
-                                                alpha: 0.94,
-                                              ),
-                                              fontSize: 10.2,
-                                              fontWeight: FontWeight.w600,
-                                              height: 1.14,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 3.5),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 7,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: readinessColor.withValues(
-                                                alpha: 0.22,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              border: Border.all(
-                                                color: readinessColor
-                                                    .withValues(alpha: 0.65),
-                                                width: 0.9,
-                                              ),
-                                            ),
-                                            child: Text(
-                                              readinessStatus,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: readinessColor,
-                                                fontSize: 8.6,
-                                                fontWeight: FontWeight.w800,
-                                                letterSpacing: 0.2,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
+                                      child: Text(
+                                        shortName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10.6,
+                                          fontWeight: FontWeight.w800,
+                                          height: 1.0,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Icon(
+                                      CupertinoIcons.chevron_right,
+                                      size: 9.5,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.85,
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-
-                      Container(
-                        height: 1,
-                        margin: const EdgeInsets.symmetric(vertical: 6),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.transparent,
-                              Colors.white.withValues(alpha: 0.36),
-                              Colors.transparent,
-                            ],
                           ),
                         ),
-                      ),
 
-                      // BOTTOM TIER: 3 Frosted Pearl-Blue Dynamic Quick-Stat Pills
-                      SizedBox(
-                        height: 29,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _QuickDynamicStatPill(
-                                icon: CupertinoIcons.doc_checkmark_fill,
-                                label: 'DOCX: $savedDocsCount ta',
-                                accentColor: _HomeLiquidTheme.electricCyan,
-                                onTap: () => onNavigateToTab(2),
-                              ),
+                        _buildVerticalDivider(),
+
+                        // 3. Clickable Dynamic Color Circular Progress Ring
+                        Expanded(
+                          flex: 12,
+                          child: _PressableStatRegion(
+                            semanticLabel:
+                                'Profil tayyorligi: $completionLabel ($readinessStatus). Batafsil ko‘rish uchun bosing',
+                            onTap: onTapReadinessRing,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                SizedBox(
+                                  width: 50,
+                                  height: 50,
+                                  child: CustomPaint(
+                                    painter: _DynamicProgressRingPainter(
+                                      progress: completionRatio,
+                                      percent: completionPercentInt,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        completionLabel,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12.2,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: -0.3,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Profil\ntayyorligi',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.94,
+                                          ),
+                                          fontSize: 10.2,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1.14,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3.5),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 7,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: readinessColor.withValues(
+                                            alpha: 0.24,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: readinessColor.withValues(
+                                              alpha: 0.70,
+                                            ),
+                                            width: 0.9,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          readinessStatus,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: readinessColor,
+                                            fontSize: 8.6,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.2,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _QuickDynamicStatPill(
-                                icon: CupertinoIcons.videocam_fill,
-                                label: 'Yurist: $consultAndLawyerCount ta',
-                                accentColor: const Color(0xFF82C4FF),
-                                onTap: () => onNavigateToTab(1),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _QuickDynamicStatPill(
-                                icon: CupertinoIcons.checkmark_circle_fill,
-                                label: 'Tarix: $totalActivitiesCount ta',
-                                accentColor: _HomeLiquidTheme.statusGreen,
-                                onTap: () => onNavigateToTab(1),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+
+                  Container(
+                    height: 1,
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          Colors.white.withValues(alpha: 0.36),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // BOTTOM TIER: 3 Frosted Pearl-Blue Dynamic Quick-Stat Pills
+                  SizedBox(
+                    height: 29,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _QuickDynamicStatPill(
+                            icon: CupertinoIcons.doc_checkmark_fill,
+                            label: 'DOCX: $savedDocsCount ta',
+                            accentColor: _HomeLiquidTheme.electricCyan,
+                            onTap: () => onNavigateToTab(2),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _QuickDynamicStatPill(
+                            icon: CupertinoIcons.videocam_fill,
+                            label: 'Yurist: $consultAndLawyerCount ta',
+                            accentColor: const Color(0xFF82C4FF),
+                            onTap: () => onNavigateToTab(1),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _QuickDynamicStatPill(
+                            icon: CupertinoIcons.checkmark_circle_fill,
+                            label: 'Tarix: $totalActivitiesCount ta',
+                            accentColor: _HomeLiquidTheme.statusGreen,
+                            onTap: () => onNavigateToTab(1),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -2019,13 +1956,13 @@ class _DynamicProgressRingPainter extends CustomPainter {
     final sweepAngle = 2 * math.pi * progress.clamp(0.06, 1.0);
     final rect = Rect.fromCircle(center: center, radius: radius);
 
-    final glowPaint = Paint()
-      ..color = primaryColor.withValues(alpha: 0.62)
+    // Soft outer halo stroke (avoids expensive MaskFilter.blur)
+    final haloPaint = Paint()
+      ..color = primaryColor.withValues(alpha: 0.28)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 6.8
-      ..strokeCap = StrokeCap.round
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-    canvas.drawArc(rect, -math.pi / 2, sweepAngle, false, glowPaint);
+      ..strokeWidth = 8.0
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, -math.pi / 2, sweepAngle, false, haloPaint);
 
     final arcPaint = Paint()
       ..shader = LinearGradient(
@@ -2114,13 +2051,13 @@ class _QuickDynamicStatPill extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Colors.white.withValues(alpha: 0.24),
-              _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.52),
+              Colors.white.withValues(alpha: 0.28),
+              _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.62),
             ],
           ),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.62),
+            color: Colors.white.withValues(alpha: 0.65),
             width: 1.0,
           ),
         ),
@@ -2163,7 +2100,8 @@ class _ServiceCardData {
   });
 }
 
-/// Frosted Pearl-Blue & Silver-Rim Service Card matching Image 1.
+/// Hardware-accelerated Frosted Pearl-Blue & Silver-Rim Service Card.
+/// Achieves the exact frosted glass look of Image 1 with zero offscreen BackdropFilter lag.
 class _LiquidServiceCard extends StatefulWidget {
   final _ServiceCardData data;
   final VoidCallback onTap;
@@ -2194,203 +2132,186 @@ class _LiquidServiceCardState extends State<_LiquidServiceCard> {
         },
         child: AnimatedScale(
           scale: _pressed ? 0.972 : 1.0,
-          duration: const Duration(milliseconds: 120),
+          duration: const Duration(milliseconds: 110),
           child: Container(
             decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  _HomeLiquidTheme.frostPearlLight.withValues(alpha: 0.68),
+                  _HomeLiquidTheme.frostPearlBlue.withValues(alpha: 0.72),
+                  _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.84),
+                  _HomeLiquidTheme.frostDeepCobalt.withValues(alpha: 0.92),
+                ],
+                stops: const [0.0, 0.28, 0.68, 1.0],
+              ),
               borderRadius: radius,
+              border: Border.all(
+                color: _pressed
+                    ? Colors.white.withValues(alpha: 0.96)
+                    : Colors.white.withValues(alpha: 0.74),
+                width: _pressed ? 1.45 : 1.25,
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF4C94FF).withValues(
-                    alpha: _pressed ? 0.36 : 0.22,
-                  ),
-                  blurRadius: 20,
-                  offset: const Offset(0, 7),
-                ),
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.30),
+                  color: Colors.black.withValues(alpha: 0.26),
                   blurRadius: 12,
-                  offset: const Offset(0, 5),
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
             child: ClipRRect(
               borderRadius: radius,
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.fromLTRB(13, 8, 12, 11),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.white.withValues(alpha: 0.32),
-                        _HomeLiquidTheme.frostPearlBlue.withValues(alpha: 0.46),
-                        _HomeLiquidTheme.frostMidCobalt.withValues(alpha: 0.62),
-                        _HomeLiquidTheme.frostDeepCobalt.withValues(
-                          alpha: 0.74,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(13, 8, 12, 11),
+                child: Stack(
+                  children: [
+                    // Soft pearl-white & ice-blue radial glow behind the 3D icon
+                    Positioned(
+                      top: -28,
+                      left: -20,
+                      child: Container(
+                        width: 155,
+                        height: 135,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              Colors.white.withValues(alpha: 0.34),
+                              _HomeLiquidTheme.iceBlue.withValues(alpha: 0.22),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Bottom-right soft frost bloom
+                    Positioned(
+                      right: -24,
+                      bottom: -30,
+                      child: Container(
+                        width: 128,
+                        height: 104,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              Colors.white.withValues(alpha: 0.22),
+                              _HomeLiquidTheme.electricCyan.withValues(
+                                alpha: 0.14,
+                              ),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Top inner silver-white glass bevel highlight
+                    Positioned(
+                      top: 0,
+                      left: 16,
+                      right: 16,
+                      child: Container(
+                        height: 1.4,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              Colors.white.withValues(alpha: 0.88),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Top-right circular frosted glass arrow button
+                    Positioned(
+                      top: 2,
+                      right: 0,
+                      child: Container(
+                        width: 29,
+                        height: 29,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white.withValues(alpha: 0.36),
+                              _HomeLiquidTheme.frostMidCobalt.withValues(
+                                alpha: 0.65,
+                              ),
+                            ],
+                          ),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.74),
+                            width: 1.1,
+                          ),
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.arrow_right,
+                          size: 13.5,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Prominent 3D service logo stage with downsampled cacheWidth
+                        SizedBox(
+                          width: 116,
+                          height: 92,
+                          child: Transform.scale(
+                            scale: 1.18,
+                            alignment: Alignment.centerLeft,
+                            child: _ResilientAssetImage(
+                              candidates: data.artworkCandidates,
+                              alignment: Alignment.centerLeft,
+                              fit: BoxFit.contain,
+                              cacheWidth: 280,
+                              fallbackIcon: data.fallbackIcon,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          data.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12.8,
+                            fontWeight: FontWeight.w800,
+                            height: 1.12,
+                            letterSpacing: -0.15,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black38,
+                                blurRadius: 4,
+                                offset: Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          data.caption,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: _HomeLiquidTheme.softIceText.withValues(
+                              alpha: 0.94,
+                            ),
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w500,
+                            height: 1.15,
+                          ),
                         ),
                       ],
-                      stops: const [0.0, 0.28, 0.68, 1.0],
                     ),
-                    borderRadius: radius,
-                    border: Border.all(
-                      color: _pressed
-                          ? Colors.white.withValues(alpha: 0.95)
-                          : Colors.white.withValues(alpha: 0.72),
-                      width: _pressed ? 1.45 : 1.25,
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      // Soft pearl-white & ice-blue radial glow behind the 3D icon
-                      Positioned(
-                        top: -28,
-                        left: -20,
-                        child: Container(
-                          width: 155,
-                          height: 135,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(
-                              colors: [
-                                Colors.white.withValues(alpha: 0.30),
-                                _HomeLiquidTheme.iceBlue.withValues(
-                                  alpha: 0.20,
-                                ),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Bottom-right soft frost bloom
-                      Positioned(
-                        right: -24,
-                        bottom: -30,
-                        child: Container(
-                          width: 128,
-                          height: 104,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(
-                              colors: [
-                                Colors.white.withValues(alpha: 0.22),
-                                _HomeLiquidTheme.electricCyan.withValues(
-                                  alpha: 0.14,
-                                ),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Top inner silver-white glass bevel highlight
-                      Positioned(
-                        top: 0,
-                        left: 16,
-                        right: 16,
-                        child: Container(
-                          height: 1.4,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.transparent,
-                                Colors.white.withValues(alpha: 0.88),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Top-right circular frosted glass arrow button
-                      Positioned(
-                        top: 2,
-                        right: 0,
-                        child: Container(
-                          width: 29,
-                          height: 29,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Colors.white.withValues(alpha: 0.34),
-                                _HomeLiquidTheme.frostMidCobalt.withValues(
-                                  alpha: 0.58,
-                                ),
-                              ],
-                            ),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.72),
-                              width: 1.1,
-                            ),
-                          ),
-                          child: const Icon(
-                            CupertinoIcons.arrow_right,
-                            size: 13.5,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Prominent 3D service logo stage (116x92 + 1.18x scale)
-                          SizedBox(
-                            width: 116,
-                            height: 92,
-                            child: Transform.scale(
-                              scale: 1.18,
-                              alignment: Alignment.centerLeft,
-                              child: _ResilientAssetImage(
-                                candidates: data.artworkCandidates,
-                                alignment: Alignment.centerLeft,
-                                fit: BoxFit.contain,
-                                fallbackIcon: data.fallbackIcon,
-                              ),
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            data.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12.8,
-                              fontWeight: FontWeight.w800,
-                              height: 1.12,
-                              letterSpacing: -0.15,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black38,
-                                  blurRadius: 5,
-                                  offset: Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            data.caption,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: _HomeLiquidTheme.softIceText.withValues(
-                                alpha: 0.92,
-                              ),
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w500,
-                              height: 1.15,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -2418,94 +2339,88 @@ class _LiquidModalSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            14,
-            20,
-            24 + MediaQuery.of(context).padding.bottom,
-          ),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF2B5299).withValues(alpha: 0.90),
-                const Color(0xFF102552).withValues(alpha: 0.96),
-              ],
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        14,
+        20,
+        24 + MediaQuery.of(context).padding.bottom,
+      ),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF2B5299),
+            Color(0xFF102552),
+          ],
+        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.65),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.38),
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.65),
-              width: 1.2,
-            ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 16),
+          Row(
             children: [
-              Center(
-                child: Container(
-                  width: 42,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.38),
-                    borderRadius: BorderRadius.circular(4),
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.55),
                   ),
                 ),
+                child: Icon(icon, color: accentColor, size: 21),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(13),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.55),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16.5,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                    child: Icon(icon, color: accentColor, size: 21),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16.5,
-                            fontWeight: FontWeight.w800,
-                          ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: _HomeLiquidTheme.softIceText.withValues(
+                          alpha: 0.88,
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          subtitle,
-                          style: TextStyle(
-                            color: _HomeLiquidTheme.softIceText.withValues(
-                              alpha: 0.88,
-                            ),
-                            fontSize: 11.5,
-                          ),
-                        ),
-                      ],
+                        fontSize: 11.5,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 18),
-              ...children,
             ],
           ),
-        ),
+          const SizedBox(height: 18),
+          ...children,
+        ],
       ),
     );
   }
@@ -2624,25 +2539,33 @@ class _SheetActionButton extends StatelessWidget {
   }
 }
 
+/// Caches the working asset candidate path in memory so scrolling never re-probes failed paths,
+/// and decodes images at `cacheWidth` to save ~90% of GPU texture memory.
 class _ResilientAssetImage extends StatelessWidget {
+  static final Map<String, int> _resolvedIndexCache = <String, int>{};
+
   final List<String> candidates;
   final BoxFit fit;
   final AlignmentGeometry alignment;
+  final int? cacheWidth;
   final IconData? fallbackIcon;
 
   const _ResilientAssetImage({
     required this.candidates,
     this.fit = BoxFit.contain,
     this.alignment = Alignment.center,
+    this.cacheWidth,
     this.fallbackIcon,
   });
 
   @override
   Widget build(BuildContext context) {
-    return _buildCandidate(0);
+    final cacheKey = candidates.first;
+    final startIdx = _resolvedIndexCache[cacheKey] ?? 0;
+    return _buildCandidate(cacheKey, startIdx);
   }
 
-  Widget _buildCandidate(int index) {
+  Widget _buildCandidate(String cacheKey, int index) {
     if (index >= candidates.length) {
       if (fallbackIcon == null) return const SizedBox.shrink();
       return Align(
@@ -2670,8 +2593,19 @@ class _ResilientAssetImage extends StatelessWidget {
       candidates[index],
       fit: fit,
       alignment: alignment,
-      filterQuality: FilterQuality.high,
-      errorBuilder: (_, _, _) => _buildCandidate(index + 1),
+      cacheWidth: cacheWidth,
+      filterQuality: FilterQuality.medium,
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (frame != null || wasSynchronouslyLoaded) {
+          _resolvedIndexCache[cacheKey] = index;
+        }
+        return child;
+      },
+      errorBuilder: (_, _, _) {
+        final next = index + 1;
+        _resolvedIndexCache[cacheKey] = next;
+        return _buildCandidate(cacheKey, next);
+      },
     );
   }
 }
