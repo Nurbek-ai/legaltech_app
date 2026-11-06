@@ -6,13 +6,18 @@ import 'package:flutter/material.dart';
 
 import 'user_profile.dart';
 
-/// Renders the avatar photo if one was selected, otherwise shows initials.
-/// [initialsSize] is larger on the profile hero, smaller on the mini card.
-Widget buildAvatarContent(UserProfileData profile, {double initialsSize = 22}) {
+/// Renders the avatar photo at full quality if selected, otherwise shows initials
+/// inside a deep navy (#102B57) badge as shown in the YAN360 reference.
+Widget buildAvatarContent(
+  UserProfileData profile, {
+  double initialsSize = 19,
+}) {
   if (profile.avatarFile != null) {
     return Image.file(
       profile.avatarFile!,
       fit: BoxFit.cover,
+      filterQuality: FilterQuality.high,
+      isAntiAlias: true,
       width: double.infinity,
       height: double.infinity,
     );
@@ -21,7 +26,7 @@ Widget buildAvatarContent(UserProfileData profile, {double initialsSize = 22}) {
     child: Text(
       profile.initials,
       style: TextStyle(
-        color: const Color(0xFFDCEAFF),
+        color: Colors.white,
         fontSize: initialsSize,
         fontWeight: FontWeight.w800,
         letterSpacing: 0.5,
@@ -30,12 +35,6 @@ Widget buildAvatarContent(UserProfileData profile, {double initialsSize = 22}) {
   );
 }
 
-/// Full-screen photo viewer — Telegram / Instagram style.
-///
-/// - Blurred background
-/// - Dark overlay
-/// - Hero-animated photo
-/// - Tap anywhere or press X to close
 class FullScreenPhotoPage extends StatelessWidget {
   final File file;
 
@@ -46,56 +45,61 @@ class FullScreenPhotoPage extends StatelessWidget {
     return GestureDetector(
       onTap: () => Navigator.of(context).pop(),
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: YanColors.background,
         body: Stack(
-          children: [
-            // Blurred background
+          children: <Widget>[
             Positioned.fill(
               child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                child: Image.file(file, fit: BoxFit.cover),
+                imageFilter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                child: Opacity(
+                  opacity: 0.25,
+                  child: Image.file(file, fit: BoxFit.cover),
+                ),
               ),
             ),
-            // Dim overlay
-            Positioned.fill(
-              child: ColoredBox(color: Colors.black.withValues(alpha: 0.58)),
-            ),
-            // The photo
             Center(
               child: Hero(
                 tag: 'profile-avatar-hero',
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(24),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxWidth: MediaQuery.of(context).size.width * 0.88,
                       maxHeight: MediaQuery.of(context).size.height * 0.75,
                     ),
-                    child: Image.file(file, fit: BoxFit.contain),
+                    child: Image.file(
+                      file,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                    ),
                   ),
                 ),
               ),
             ),
-            // Close button
             SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(16),
                 child: GestureDetector(
                   onTap: () => Navigator.of(context).pop(),
                   child: Container(
-                    width: 40,
-                    height: 40,
+                    width: 42,
+                    height: 42,
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.50),
+                      color: YanColors.white,
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.22),
-                      ),
+                      border: Border.all(color: YanColors.border),
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(
+                          color: YanColors.primaryNavy.withValues(alpha: 0.10),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
                     child: const Icon(
                       CupertinoIcons.xmark,
-                      color: Colors.white,
-                      size: 17,
+                      color: YanColors.primaryNavy,
+                      size: 18,
                     ),
                   ),
                 ),

@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -18,7 +20,7 @@ class DashboardNavItem extends StatelessWidget {
   final String label;
   final String? badge;
   final bool selected;
-  final Color accentColor;
+  final Color activeColor;
   final VoidCallback onTap;
 
   const DashboardNavItem({
@@ -28,11 +30,15 @@ class DashboardNavItem extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.badge,
-    this.accentColor = const Color(0xFF7CE7FF),
+    this.activeColor = const Color(0xFF1677D2),
   });
 
   @override
   Widget build(BuildContext context) {
+    const navyColor = Color(0xFF102B57);
+    const mutedNavy = Color(0xFF5A7196);
+    const successGreen = Color(0xFF10C995);
+
     return Semantics(
       button: true,
       selected: selected,
@@ -43,30 +49,16 @@ class DashboardNavItem extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
-          margin: const EdgeInsets.symmetric(horizontal: 3.5),
+          margin: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(17),
-            gradient: selected
-                ? LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: <Color>[
-                      const Color(0xFF8AB4FA).withValues(alpha: 0.42),
-                      const Color(0xFF4A78D0).withValues(alpha: 0.34),
-                      const Color(0xFF234794).withValues(alpha: 0.52),
-                    ],
-                  )
-                : null,
-            border: selected
-                ? Border.all(
-                    color: accentColor.withValues(alpha: 0.62),
-                    width: 1.15,
-                  )
-                : null,
+            // Single solid #1677D2 background for active item (no two-color gradient)
+            color: selected ? activeColor : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
             boxShadow: selected
                 ? <BoxShadow>[
                     BoxShadow(
-                      color: accentColor.withValues(alpha: 0.22),
+                      color: activeColor.withValues(alpha: 0.26),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -74,56 +66,53 @@ class DashboardNavItem extends StatelessWidget {
                 : null,
           ),
           child: Stack(
+            clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: <Widget>[
               Column(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   Icon(
                     icon,
-                    size: 20.5,
-                    color: selected
-                        ? Colors.white
-                        : const Color(0xFFDCEBFF).withValues(alpha: 0.62),
+                    size: 20,
+                    color: selected ? Colors.white : mutedNavy,
                   ),
-                  const SizedBox(height: 4.5),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: selected
-                            ? Colors.white
-                            : const Color(0xFFDCEBFF).withValues(alpha: 0.65),
-                        fontSize: 10.2,
-                        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                        letterSpacing: 0.1,
-                      ),
+                  const SizedBox(height: 3.5),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: selected ? Colors.white : navyColor,
+                      fontSize: 10.0,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                      letterSpacing: -0.1,
                     ),
                   ),
                 ],
               ),
               if (badge != null && badge!.isNotEmpty)
                 Positioned(
-                  top: 5,
-                  right: 8,
+                  top: -2,
+                  right: 2,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 5,
                       vertical: 1.5,
                     ),
                     decoration: BoxDecoration(
-                      color: accentColor,
+                      color: successGreen,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white, width: 1),
                     ),
                     child: Text(
                       badge!,
                       style: const TextStyle(
-                        color: Color(0xFF071633),
-                        fontSize: 8.2,
-                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        fontSize: 8.0,
+                        fontWeight: FontWeight.w800,
+                        height: 1.0,
                       ),
                     ),
                   ),
@@ -142,7 +131,7 @@ class DashboardBottomNavigation extends StatelessWidget {
     required this.selectedIndex,
     required this.onSelected,
     this.items,
-    this.accentColor = const Color(0xFF7CE7FF),
+    this.accentColor = const Color(0xFF1677D2),
   });
 
   final int selectedIndex;
@@ -150,9 +139,12 @@ class DashboardBottomNavigation extends StatelessWidget {
   final List<DashboardNavData>? items;
   final Color accentColor;
 
+  /// Default 5-tab YAN360 navigation structure from the visual reference:
+  /// 1. Bosh sahifa | 2. Arizalarim | 3. Advokatim | 4. Advokatxona | 5. Profil
   static const List<DashboardNavData> defaultItems = <DashboardNavData>[
     DashboardNavData(CupertinoIcons.house_fill, 'Bosh sahifa'),
-    DashboardNavData(CupertinoIcons.doc_on_doc_fill, 'Arizalarim'),
+    DashboardNavData(CupertinoIcons.doc_text_fill, 'Arizalarim', badge: '-50%'),
+    DashboardNavData(CupertinoIcons.shield_fill, 'Advokatim', badge: 'VIP'),
     DashboardNavData(CupertinoIcons.building_2_fill, 'Advokatxona'),
     DashboardNavData(CupertinoIcons.person_crop_circle, 'Profil'),
   ];
@@ -160,51 +152,48 @@ class DashboardBottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final navItems = items ?? defaultItems;
+
     return RepaintBoundary(
-      child: Container(
-        height: 72,
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: <Color>[
-              const Color(0xFF6B94DE).withValues(alpha: 0.42),
-              const Color(0xFF3962B0).withValues(alpha: 0.48),
-              const Color(0xFF1A3875).withValues(alpha: 0.78),
-              const Color(0xFF102757).withValues(alpha: 0.90),
-            ],
-            stops: const <double>[0.0, 0.35, 0.72, 1.0],
-          ),
-          border: Border.all(
-            color: const Color(0xFFDCEBFF).withValues(alpha: 0.42),
-            width: 1.2,
-          ),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: const Color(0xFF06122E).withValues(alpha: 0.55),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            height: 70,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.88),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.95),
+                width: 1.4,
+              ),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: const Color(0xFF102B57).withValues(alpha: 0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                ),
+                BoxShadow(
+                  color: const Color(0xFF1677D2).withValues(alpha: 0.05),
+                  blurRadius: 12,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            BoxShadow(
-              color: accentColor.withValues(alpha: 0.14),
-              blurRadius: 18,
-              spreadRadius: -2,
-            ),
-          ],
-        ),
-        child: Row(
-          children: List<Widget>.generate(
-            navItems.length,
-            (index) => Expanded(
-              child: DashboardNavItem(
-                icon: navItems[index].icon,
-                label: navItems[index].label,
-                badge: navItems[index].badge,
-                selected: selectedIndex == index,
-                accentColor: accentColor,
-                onTap: () => onSelected(index),
+            child: Row(
+              children: List<Widget>.generate(
+                navItems.length,
+                (index) => Expanded(
+                  child: DashboardNavItem(
+                    icon: navItems[index].icon,
+                    label: navItems[index].label,
+                    badge: navItems[index].badge,
+                    selected: selectedIndex == index,
+                    activeColor: const Color(0xFF1677D2),
+                    onTap: () => onSelected(index),
+                  ),
+                ),
               ),
             ),
           ),

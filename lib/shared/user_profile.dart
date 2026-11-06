@@ -1,11 +1,52 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../services/alimony_claim_document_service.dart';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// YAN360 Premium LegalTech Color & Typography Design System (#FEFEFA)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class YanColors {
+  YanColors._();
+
+  /// Exact Primary Background Color (#FEFEFA | RGB: 254, 254, 250)
+  static const Color background = Color(0xFFFEFEFA);
+
+  /// Primary Navy (#102B57) — Headings & primary typography
+  static const Color primaryNavy = Color(0xFF102B57);
+
+  /// Primary Blue (#1677D2) — Primary solid buttons & active states
+  static const Color primaryBlue = Color(0xFF1677D2);
+
+  /// Cyan Accent (#08BDEB) — Small brand accents
+  static const Color cyanAccent = Color(0xFF08BDEB);
+
+  /// Light Blue (#EAF5FF) — Secondary solid buttons & soft badges
+  static const Color lightBlue = Color(0xFFEAF5FF);
+
+  /// Pure White (#FFFFFF) — Card surfaces & neutral solid buttons
+  static const Color white = Color(0xFFFFFFFF);
+
+  /// Success Green (#10C995) — Exclusively for success states & verification
+  static const Color successGreen = Color(0xFF10C995);
+
+  /// Supporting / Muted Navy-Gray for readable subtitles
+  static const Color mutedText = Color(0xFF546B8C);
+  static const Color subtleText = Color(0xFF7B90AE);
+
+  /// Delicate surface borders & dividers
+  static const Color border = Color(0xFFDCE9F7);
+  static const Color divider = Color(0xFFE4EEF8);
+
+  /// Destructive solid red when necessary
+  static const Color destructiveRed = Color(0xFFE53935);
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // YAN360 4-Role Architecture Enum & Metadata
@@ -16,9 +57,9 @@ enum UserRole {
     id: 'oddiy',
     label: 'Oddiy foydalanuvchi',
     shortBadge: 'ODDIY',
-    subtitle: 'Bepul hisob • Ariza yozish va advokat topish',
-    accentColor: Color(0xFF7CE7FF),
-    secondaryColor: Color(0xFF3B82F6),
+    subtitle: 'Bepul standart hisob • Shartnoma tuzilmagan',
+    accentColor: YanColors.primaryBlue,
+    secondaryColor: YanColors.cyanAccent,
     icon: CupertinoIcons.person_crop_circle_fill,
   ),
   mijoz(
@@ -26,8 +67,8 @@ enum UserRole {
     label: 'Shartnomali mijoz',
     shortBadge: 'MIJOZ VIP',
     subtitle: '3 oy bepul (so‘ng \$3/oy) • 30%–50% maxsus chegirma',
-    accentColor: Color(0xFF34D399),
-    secondaryColor: Color(0xFF059669),
+    accentColor: YanColors.successGreen,
+    secondaryColor: YanColors.primaryBlue,
     icon: CupertinoIcons.checkmark_seal_fill,
   ),
   advokat(
@@ -35,8 +76,8 @@ enum UserRole {
     label: 'Litsenziyali advokat',
     shortBadge: 'ADVOKAT PRO',
     subtitle: 'YAN Legal Firm hamkori • Mijozlar va shartnomalar',
-    accentColor: Color(0xFFFBBF24),
-    secondaryColor: Color(0xFFD97706),
+    accentColor: YanColors.primaryNavy,
+    secondaryColor: YanColors.primaryBlue,
     icon: CupertinoIcons.briefcase_fill,
   ),
   yordamchi(
@@ -44,8 +85,8 @@ enum UserRole {
     label: 'Advokat yordamchisi',
     shortBadge: 'YORDAMCHI',
     subtitle: 'Shaxsiy yordamchi • Vazifalar, hujjatlar va mijozlar',
-    accentColor: Color(0xFFC084FC),
-    secondaryColor: Color(0xFF7C3AED),
+    accentColor: YanColors.cyanAccent,
+    secondaryColor: YanColors.primaryBlue,
     icon: CupertinoIcons.person_2_fill,
   );
 
@@ -95,7 +136,7 @@ class UserProfileData {
     this.memberSince = '2026',
     this.isVerified = true,
     this.activeApplications = 1,
-    this.savedDocuments = 0,
+    this.savedDocuments = 5,
     this.biometricEnabled = true,
     this.notificationsEnabled = true,
     this.pinCode,
@@ -142,7 +183,6 @@ class UserProfileData {
   final DateTime? contractSignedAt;
 
   /// Lawyer-specific & Assistant-specific fields.
-  /// Tier 1 = Start ($19/oy), Tier 2 = Pro ($39/oy), Tier 3 = Elite ($69/oy)
   final int lawyerSubscriptionTier;
   final String assignedLawyerName;
   final String lawyerLicenseNumber;
@@ -151,23 +191,18 @@ class UserProfileData {
 
   bool get hasPinCode => pinCode != null && pinCode!.trim().length >= 4;
 
-  /// Dynamic role label that reflects the active 4-role state.
   String get effectiveRoleTitle => roleType.label;
 
-  /// Mijoz automatic discount getters (per YAN360 specification):
-  /// - 30% discount on any general service in the app
-  /// - 20% discount on lawyer consultations
-  /// - 50% discount on template petitions (shablon arizalar)
   double get serviceDiscount => roleType == UserRole.mijoz ? 0.30 : 0.0;
   double get consultationDiscount => roleType == UserRole.mijoz ? 0.20 : 0.0;
   double get templateDiscount => roleType == UserRole.mijoz ? 0.50 : 0.0;
 
   bool get hasClientDiscounts => roleType == UserRole.mijoz;
 
-  /// Calculates remaining days in the 3-month (90-day) free trial after signing a lawyer contract.
   int get freeTrialDaysRemaining {
     if (roleType != UserRole.mijoz) return 0;
-    final signed = contractSignedAt ?? DateTime.now().subtract(const Duration(days: 12));
+    final signed =
+        contractSignedAt ?? DateTime.now().subtract(const Duration(days: 12));
     final elapsed = DateTime.now().difference(signed).inDays;
     final remaining = 90 - elapsed;
     return remaining > 0 ? remaining : 0;
@@ -197,7 +232,6 @@ class UserProfileData {
     }
   }
 
-  /// Calculates discounted price in UZS based on service category.
   int applyDiscount(int basePriceUzs, {String category = 'service'}) {
     final rate = switch (category) {
       'consultation' => consultationDiscount,
@@ -216,7 +250,6 @@ class UserProfileData {
     return parts.isEmpty ? 'Manzil kiritilmagan' : parts.join(', ');
   }
 
-  /// Dynamically calculates profile completion from actual filled fields.
   double get profileCompletion {
     var completed = 0;
     const total = 6;
@@ -250,6 +283,11 @@ class UserProfileData {
     return missing;
   }
 
+  String get firstName {
+    final parts = displayName.trim().split(RegExp(r'\s+'));
+    return parts.isNotEmpty && parts.first.isNotEmpty ? parts.first : 'Nurbek';
+  }
+
   String get initials {
     final parts = displayName.trim().split(RegExp(r'\s+'));
     final result = parts
@@ -258,7 +296,7 @@ class UserProfileData {
         .map((p) => p[0])
         .join()
         .toUpperCase();
-    return result.isEmpty ? 'YA' : result;
+    return result.isEmpty ? 'NO' : result;
   }
 
   String get completionPercent => '${(profileCompletion * 100).round()}%';
@@ -380,7 +418,7 @@ class UserProfileData {
       memberSince: json['memberSince']?.toString() ?? '2026',
       isVerified: json['isVerified'] != false,
       activeApplications: (json['activeApplications'] as num?)?.toInt() ?? 1,
-      savedDocuments: (json['savedDocuments'] as num?)?.toInt() ?? 0,
+      savedDocuments: (json['savedDocuments'] as num?)?.toInt() ?? 5,
       biometricEnabled: json['biometricEnabled'] != false,
       notificationsEnabled: json['notificationsEnabled'] != false,
       pinCode: json['pinCode']?.toString(),
@@ -430,7 +468,7 @@ class UserProfileNotifier extends ValueNotifier<UserProfileData> {
         }
       }
     } catch (_) {
-      // Ignore load errors and keep default profile
+      // Keep default profile
     }
   }
 
@@ -447,7 +485,6 @@ class UserProfileNotifier extends ValueNotifier<UserProfileData> {
     value = updated;
   }
 
-  /// Switches the active role and records the transition in ActivityHistoryRepository.
   Future<void> switchRole(
     UserRole targetRole, {
     String? lawyerId,
@@ -544,7 +581,6 @@ class LawyerDirectoryProfile {
   final List<LawyerFeedbackItem> feedbacks;
   final bool isVerifiedPartner;
 
-  /// Composite ranking score so lawyers with higher and more feedback appear at the top.
   double get rankingScore => rating * 20.0 + (feedbackCount * 0.35);
 
   String get initials {
@@ -707,7 +743,7 @@ class YanRoleDataCatalog {
     ),
     LawyerDirectoryProfile(
       id: 'LAW-003',
-      fullName: 'bekzod Rahmonov',
+      fullName: 'Bekzod Rahmonov',
       title: 'Viloyat bo‘limi bosh advokati',
       region: 'Samarqand viloyati',
       specialization: 'Oila va aliment huquqi',
@@ -855,7 +891,8 @@ class YanRoleDataCatalog {
       ValueNotifier<List<AssistantTaskItem>>(<AssistantTaskItem>[
         const AssistantTaskItem(
           id: 'TSK-101',
-          title: 'Nurbek Otamurodov ishi bo‘yicha DOCX da’vo arizasini tekshirish',
+          title:
+              'Nurbek Otamurodov ishi bo‘yicha DOCX da’vo arizasini tekshirish',
           clientName: 'Nurbek Otamurodov',
           assignedByLawyer: 'Shohruh Jo‘rayev',
           deadlineLabel: 'Bugun, 17:30',
@@ -865,7 +902,8 @@ class YanRoleDataCatalog {
         ),
         const AssistantTaskItem(
           id: 'TSK-102',
-          title: 'Fuqarolik ishlari bo‘yicha Yunusobod sudiga ilova hujjatlarni yuklash',
+          title:
+              'Fuqarolik ishlari bo‘yicha Yunusobod sudiga ilova hujjatlarni yuklash',
           clientName: 'Malika Abdullayeva',
           assignedByLawyer: 'Shohruh Jo‘rayev',
           deadlineLabel: 'Ertaga, 11:00',
@@ -885,7 +923,8 @@ class YanRoleDataCatalog {
         ),
         const AssistantTaskItem(
           id: 'TSK-104',
-          title: 'Nikohdan ajrashish bo‘yicha guvohnoma va tug‘ilganlik ma’lumotlarini solishtirish',
+          title:
+              'Nikohdan ajrashish bo‘yicha guvohnoma va tug‘ilganlik ma’lumotlarini solishtirish',
           clientName: 'Sevara Mirzayeva',
           assignedByLawyer: 'Shohruh Jo‘rayev',
           deadlineLabel: '08.11.2026',
@@ -903,19 +942,23 @@ class YanRoleDataCatalog {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Shared Frosted Pearl-Blue & Silver-Rim Liquid Window UI Components
-// (Hardware-accelerated, zero-lag, matches BoshSahifaPage aesthetic)
+// Selective Liquid Glass Surface & Strict Monochromatic Solid Buttons
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// Selective Liquid Glass container for profile banners, search bars, and cards
+/// on the #FEFEFA canvas. Uses clean translucent white/light-blue surfaces,
+/// thin borders, and soft elevation shadows without distracting decorative lines.
 class LiquidGlassWindow extends StatelessWidget {
   const LiquidGlassWindow({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(16),
-    this.borderRadius = 24,
+    this.borderRadius = 22,
     this.accentGlowColor,
     this.onTap,
     this.isHighlighted = false,
+    this.useBlur = false,
+    this.backgroundColor,
   });
 
   final Widget child;
@@ -924,98 +967,78 @@ class LiquidGlassWindow extends StatelessWidget {
   final Color? accentGlowColor;
   final VoidCallback? onTap;
   final bool isHighlighted;
+  final bool useBlur;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
-    final glow = accentGlowColor ?? const Color(0xFF7CE7FF);
-    final card = RepaintBoundary(
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(borderRadius),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isHighlighted
-                ? <Color>[
-                    const Color(0xFF8AB2F8).withValues(alpha: 0.44),
-                    const Color(0xFF5A84D2).withValues(alpha: 0.34),
-                    const Color(0xFF2D549E).withValues(alpha: 0.46),
-                    const Color(0xFF1A3772).withValues(alpha: 0.62),
-                  ]
-                : <Color>[
-                    const Color(0xFF7FA4E8).withValues(alpha: 0.34),
-                    const Color(0xFF537BC4).withValues(alpha: 0.25),
-                    const Color(0xFF2B5096).withValues(alpha: 0.38),
-                    const Color(0xFF19356E).withValues(alpha: 0.54),
-                  ],
-            stops: const <double>[0.0, 0.32, 0.70, 1.0],
-          ),
-          border: Border.all(
-            color: isHighlighted
-                ? glow.withValues(alpha: 0.72)
-                : const Color(0xFFDCEBFF).withValues(alpha: 0.38),
-            width: isHighlighted ? 1.45 : 1.15,
-          ),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: const Color(0xFF071535).withValues(alpha: 0.42),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-            BoxShadow(
-              color: glow.withValues(alpha: isHighlighted ? 0.22 : 0.10),
-              blurRadius: 16,
-              spreadRadius: -2,
-            ),
-          ],
+    final surfaceColor =
+        backgroundColor ??
+        (isHighlighted
+            ? const Color(0xFFF3F9FF).withValues(alpha: 0.94)
+            : Colors.white.withValues(alpha: 0.92));
+
+    Widget container = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(
+          color: isHighlighted
+              ? (accentGlowColor ?? YanColors.primaryBlue).withValues(
+                  alpha: 0.45,
+                )
+              : YanColors.border,
+          width: isHighlighted ? 1.3 : 1.0,
         ),
-        child: Stack(
-          children: <Widget>[
-            Positioned(
-              top: 0,
-              left: 20,
-              right: 20,
-              child: IgnorePointer(
-                child: Container(
-                  height: 1.3,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: <Color>[
-                        Colors.white.withValues(alpha: 0.0),
-                        Colors.white.withValues(alpha: 0.68),
-                        Colors.white.withValues(alpha: 0.0),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: padding,
-              child: child,
-            ),
-          ],
-        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: YanColors.primaryNavy.withValues(alpha: 0.055),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
+      child: child,
     );
 
-    if (onTap == null) return card;
+    if (useBlur) {
+      container = ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: container,
+        ),
+      );
+    }
+
+    final wrapped = RepaintBoundary(child: container);
+
+    if (onTap == null) return wrapped;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: card,
+      child: wrapped,
     );
   }
 }
 
+/// Strictly monochromatic, single-solid-color button:
+/// - Primary (`isPrimary: true`): solid #1677D2 background, white text/icon
+/// - Secondary (`isPrimary: false`): solid #EAF5FF background, #1677D2 or #102B57 text/icon
+/// - Neutral (`isNeutral: true`): solid #FFFFFF background, #102B57 text/icon
+/// - Destructive (`isDestructive: true`): solid #E53935 background, white text/icon
+/// No gradients, no two-color backgrounds, no decorative inner lines.
 class LiquidActionButton extends StatefulWidget {
   const LiquidActionButton({
     super.key,
     required this.label,
     required this.icon,
     required this.onPressed,
-    this.accentColor = const Color(0xFF63B3FF),
+    this.accentColor = YanColors.primaryBlue,
     this.isPrimary = true,
+    this.isNeutral = false,
+    this.isDestructive = false,
     this.compact = false,
   });
 
@@ -1024,6 +1047,8 @@ class LiquidActionButton extends StatefulWidget {
   final VoidCallback onPressed;
   final Color accentColor;
   final bool isPrimary;
+  final bool isNeutral;
+  final bool isDestructive;
   final bool compact;
 
   @override
@@ -1035,6 +1060,33 @@ class _LiquidActionButtonState extends State<LiquidActionButton> {
 
   @override
   Widget build(BuildContext context) {
+    final bool useDestructive =
+        widget.isDestructive ||
+        widget.accentColor == const Color(0xFFF87171) ||
+        widget.accentColor == YanColors.destructiveRed;
+
+    final Color bgColor;
+    final Color fgColor;
+    final Border? border;
+
+    if (useDestructive) {
+      bgColor = YanColors.destructiveRed;
+      fgColor = YanColors.white;
+      border = null;
+    } else if (widget.isNeutral) {
+      bgColor = YanColors.white;
+      fgColor = YanColors.primaryNavy;
+      border = Border.all(color: YanColors.border, width: 1.0);
+    } else if (widget.isPrimary) {
+      bgColor = YanColors.primaryBlue; // Solid #1677D2
+      fgColor = YanColors.white;
+      border = null;
+    } else {
+      bgColor = YanColors.lightBlue; // Solid #EAF5FF
+      fgColor = YanColors.primaryNavy;
+      border = Border.all(color: YanColors.border, width: 1.0);
+    }
+
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapCancel: () => setState(() => _pressed = false),
@@ -1043,45 +1095,26 @@ class _LiquidActionButtonState extends State<LiquidActionButton> {
         widget.onPressed();
       },
       child: AnimatedScale(
-        scale: _pressed ? 0.97 : 1.0,
+        scale: _pressed ? 0.98 : 1.0,
         duration: const Duration(milliseconds: 100),
         child: Container(
           padding: EdgeInsets.symmetric(
-            horizontal: widget.compact ? 13 : 16,
+            horizontal: widget.compact ? 12 : 16,
             vertical: widget.compact ? 10 : 13.5,
           ),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(widget.compact ? 14 : 17),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: widget.isPrimary
-                  ? <Color>[
-                      widget.accentColor.withValues(alpha: 0.92),
-                      const Color(0xFF356AE6).withValues(alpha: 0.92),
-                      const Color(0xFF1F47AA).withValues(alpha: 0.96),
-                    ]
-                  : <Color>[
-                      const Color(0xFF83A8EC).withValues(alpha: 0.32),
-                      const Color(0xFF3D66B4).withValues(alpha: 0.28),
-                      const Color(0xFF1E3E82).withValues(alpha: 0.44),
-                    ],
-            ),
-            border: Border.all(
-              color: Colors.white.withValues(
-                alpha: widget.isPrimary ? 0.52 : 0.34,
-              ),
-              width: 1.1,
-            ),
-            boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: widget.accentColor.withValues(
-                  alpha: widget.isPrimary ? 0.28 : 0.12,
-                ),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
-              ),
-            ],
+            color: bgColor,
+            borderRadius: BorderRadius.circular(widget.compact ? 13 : 16),
+            border: border,
+            boxShadow: widget.isPrimary || useDestructive
+                ? <BoxShadow>[
+                    BoxShadow(
+                      color: bgColor.withValues(alpha: 0.22),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1090,19 +1123,19 @@ class _LiquidActionButtonState extends State<LiquidActionButton> {
               Icon(
                 widget.icon,
                 size: widget.compact ? 15.5 : 17.5,
-                color: Colors.white,
+                color: fgColor,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 7),
               Flexible(
                 child: Text(
                   widget.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white,
-                    fontSize: widget.compact ? 12.5 : 13.8,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.1,
+                    color: fgColor,
+                    fontSize: widget.compact ? 12.4 : 13.8,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.1,
                   ),
                 ),
               ),
@@ -1171,18 +1204,13 @@ class ActivityEntry {
   };
 
   Color get accentColor => switch (category) {
-    ActivityCategory.documents => const Color(0xFF67E2B8),
-    ActivityCategory.consultation => const Color(0xFFFFC979),
-    ActivityCategory.lawyer => const Color(0xFF9DBBFF),
-    ActivityCategory.profile => const Color(0xFFC8B2FF),
+    ActivityCategory.documents => YanColors.primaryBlue,
+    ActivityCategory.consultation => YanColors.cyanAccent,
+    ActivityCategory.lawyer => YanColors.primaryNavy,
+    ActivityCategory.profile => YanColors.successGreen,
   };
 
-  Color get iconBackground => switch (category) {
-    ActivityCategory.documents => const Color(0xFF1A4338),
-    ActivityCategory.consultation => const Color(0xFF4B3B24),
-    ActivityCategory.lawyer => const Color(0xFF21385C),
-    ActivityCategory.profile => const Color(0xFF362C54),
-  };
+  Color get iconBackground => YanColors.lightBlue;
 
   String get timeFormatted {
     final h = createdAt.hour.toString().padLeft(2, '0');

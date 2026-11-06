@@ -1,80 +1,60 @@
 import 'package:flutter/material.dart';
 
+/// Primary YAN360 application background surface.
+/// Uses the exact required #FEFEFA (RGB: 254, 254, 250) base canvas
+/// with subtle #EAF5FF light-blue atmospheric depth in selected corners.
 class DashboardBackground extends StatelessWidget {
   const DashboardBackground({super.key});
 
+  static const Color primaryBackground = Color(0xFFFEFEFA);
+  static const Color lightBlueAtmosphere = Color(0xFFEAF5FF);
+
   @override
   Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF102C60),
-              Color(0xFF163A7A),
-              Color(0xFF123168),
-              Color(0xFF0D234F),
-            ],
-            stops: [0.0, 0.36, 0.72, 1.0],
-          ),
-        ),
+    return RepaintBoundary(
+      child: ColoredBox(
+        color: primaryBackground,
         child: Stack(
-          children: [
-            // Bright sky-cyan bloom in upper-right behind the flying swallow
+          fit: StackFit.expand,
+          children: <Widget>[
+            // Subtle top-right light-blue atmospheric glow behind the swallow
             Positioned(
-              top: -80,
-              right: -50,
-              child: Container(
-                width: 360,
-                height: 320,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFF38B6FF).withValues(alpha: 0.32),
-                      const Color(0xFF2B68E0).withValues(alpha: 0.14),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            // Soft pearl-cobalt glow on upper-left behind the firm logo & cards
-            Positioned(
-              top: 160,
-              left: -100,
-              child: Container(
-                width: 360,
-                height: 360,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFF4E86F0).withValues(alpha: 0.24),
-                      const Color(0xFF2855B8).withValues(alpha: 0.08),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            // Luminous azure-ice glow in the lower-right behind service cards
-            Positioned(
-              bottom: -110,
+              top: -90,
               right: -70,
-              child: Container(
-                width: 360,
-                height: 340,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFF38A8FF).withValues(alpha: 0.24),
-                      const Color(0xFF1E56C2).withValues(alpha: 0.08),
-                      Colors.transparent,
-                    ],
+              child: IgnorePointer(
+                child: Container(
+                  width: 320,
+                  height: 320,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: <Color>[
+                        lightBlueAtmosphere.withValues(alpha: 0.85),
+                        lightBlueAtmosphere.withValues(alpha: 0.25),
+                        primaryBackground.withValues(alpha: 0.0),
+                      ],
+                      stops: const <double>[0.0, 0.55, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Subtle top-left soft ambient light behind the shield emblem
+            Positioned(
+              top: 30,
+              left: -80,
+              child: IgnorePointer(
+                child: Container(
+                  width: 240,
+                  height: 240,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: <Color>[
+                        lightBlueAtmosphere.withValues(alpha: 0.60),
+                        primaryBackground.withValues(alpha: 0.0),
+                      ],
+                    ),
                   ),
                 ),
               ),
