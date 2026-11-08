@@ -49,16 +49,16 @@ class DashboardNavItem extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
-          margin: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           decoration: BoxDecoration(
-            // Single solid #1677D2 background for active item (no two-color gradient)
+            // Single solid #1677D2 background for active item
             color: selected ? activeColor : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
             boxShadow: selected
                 ? <BoxShadow>[
                     BoxShadow(
-                      color: activeColor.withValues(alpha: 0.26),
+                      color: activeColor.withValues(alpha: 0.25),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -75,7 +75,7 @@ class DashboardNavItem extends StatelessWidget {
                 children: <Widget>[
                   Icon(
                     icon,
-                    size: 20,
+                    size: 20.5,
                     color: selected ? Colors.white : mutedNavy,
                   ),
                   const SizedBox(height: 3.5),
@@ -85,7 +85,7 @@ class DashboardNavItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: selected ? Colors.white : navyColor,
-                      fontSize: 10.0,
+                      fontSize: 10.5,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                       letterSpacing: -0.1,
                     ),
@@ -95,22 +95,22 @@ class DashboardNavItem extends StatelessWidget {
               if (badge != null && badge!.isNotEmpty)
                 Positioned(
                   top: -2,
-                  right: 2,
+                  right: 4,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
+                      horizontal: 5.5,
                       vertical: 1.5,
                     ),
                     decoration: BoxDecoration(
                       color: successGreen,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white, width: 1),
+                      border: Border.all(color: Colors.white, width: 1.1),
                     ),
                     child: Text(
                       badge!,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 8.0,
+                        fontSize: 8.2,
                         fontWeight: FontWeight.w800,
                         height: 1.0,
                       ),
@@ -139,12 +139,11 @@ class DashboardBottomNavigation extends StatelessWidget {
   final List<DashboardNavData>? items;
   final Color accentColor;
 
-  /// Default 5-tab YAN360 navigation structure from the visual reference:
-  /// 1. Bosh sahifa | 2. Arizalarim | 3. Advokatim | 4. Advokatxona | 5. Profil
+  /// Default 4-tab YAN360 navigation structure:
+  /// 1. Bosh sahifa | 2. Arizalarim | 3. Advokatxona | 4. Profil
   static const List<DashboardNavData> defaultItems = <DashboardNavData>[
     DashboardNavData(CupertinoIcons.house_fill, 'Bosh sahifa'),
-    DashboardNavData(CupertinoIcons.doc_text_fill, 'Arizalarim', badge: '-50%'),
-    DashboardNavData(CupertinoIcons.shield_fill, 'Advokatim', badge: 'VIP'),
+    DashboardNavData(CupertinoIcons.doc_text_fill, 'Arizalarim'),
     DashboardNavData(CupertinoIcons.building_2_fill, 'Advokatxona'),
     DashboardNavData(CupertinoIcons.person_crop_circle, 'Profil'),
   ];
@@ -162,10 +161,10 @@ class DashboardBottomNavigation extends StatelessWidget {
             height: 70,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.88),
+              color: Colors.white.withValues(alpha: 0.90),
               borderRadius: BorderRadius.circular(28),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.95),
+                color: Colors.white.withValues(alpha: 0.96),
                 width: 1.4,
               ),
               boxShadow: <BoxShadow>[

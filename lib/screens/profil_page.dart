@@ -2,12 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:open_filex/open_filex.dart';
 
 import '../main.dart';
 import '../services/alimony_claim_document_service.dart';
-import '../services/alimony_location_catalog.dart';
 import '../shared/profile_widgets.dart';
 import '../shared/user_profile.dart';
 import 'services/advokat_yollash_page.dart';
@@ -23,13 +23,329 @@ class ProfilPage extends StatefulWidget {
 }
 
 class _ProfilPageState extends State<ProfilPage> {
-  final _picker = ImagePicker();
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     GeneratedDocumentRepository.instance.reload();
     ActivityHistoryRepository.instance.ensureInitialized();
+  }
+
+  Future<void> _pickAvatarImage(UserProfileData profile) async {
+    try {
+      final picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 96,
+      );
+      if (picked != null) {
+        final file = File(picked.path);
+        userProfile.value = profile.copyWith(avatarFile: file);
+        await ActivityHistoryRepository.instance.record(
+          title: 'Guvohnoma fotosurati yangilandi',
+          description:
+              'YAN360 shaxsiy yuridik guvohnomasi uchun yangi rasm o‘rnatildi',
+          category: ActivityCategory.profile,
+          statusLabel: 'Saqlandi',
+        );
+      }
+    } catch (_) {
+      // Ignore cancel
+    }
+  }
+
+  void _openAvatarViewer(UserProfileData profile) {
+    if (profile.avatarFile != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => FullScreenPhotoPage(file: profile.avatarFile!),
+        ),
+      );
+    } else {
+      _pickAvatarImage(profile);
+    }
+  }
+
+  void _copyToClipboard(String label, String value) {
+    Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: YanColors.primaryNavy,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        content: Text(
+          '$label nusxalandi: $value',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showQrShareModal(UserProfileData profile) {
+    final isMijoz = profile.roleType == UserRole.mijoz;
+    final passportNo = profile.passportOrPinfl.trim().isNotEmpty
+        ? profile.passportOrPinfl.trim()
+        : 'AA 4829104';
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(22, 16, 22, 28),
+          decoration: BoxDecoration(
+            color: YanColors.background,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: YanColors.border),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: YanColors.border,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  isMijoz
+                      ? 'YAN360 VIP Mijoz Raqamli QR Guvohnomasi'
+                      : 'YAN360 Raqamli Yuridik Guvohnoma QR Kodi',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: YanColors.primaryNavy,
+                    fontSize: 17.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Advokat yoki sud devonxonasi ushbu QR kod orqali shaxsingiz va shartnomangizni tasdiqlaydi',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: YanColors.mutedText,
+                    fontSize: 12.4,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  width: 176,
+                  height: 176,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: YanColors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: YanColors.border, width: 1.5),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: YanColors.primaryNavy.withValues(alpha: 0.08),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: <Widget>[
+                      const Icon(
+                        CupertinoIcons.qrcode,
+                        size: 138,
+                        color: YanColors.primaryNavy,
+                      ),
+                      Container(
+                        width: 36,
+                        height: 36,
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: YanColors.white,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(color: YanColors.border),
+                        ),
+                        child: Image.asset(
+                          'assets/logo.png',
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  '${profile.displayName} • ${profile.clientId} • $passportNo',
+                  style: const TextStyle(
+                    color: YanColors.primaryNavy,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: LiquidActionButton(
+                        label: 'ID nusxalash',
+                        icon: CupertinoIcons.doc_on_doc,
+                        isPrimary: false,
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          _copyToClipboard(
+                            'Raqamli Guvohnoma ID',
+                            '${profile.displayName} | ID: ${profile.clientId} | Pasport: $passportNo',
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: LiquidActionButton(
+                        label: 'Tayyor',
+                        icon: CupertinoIcons.checkmark_alt,
+                        onPressed: () => Navigator.pop(sheetContext),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEditProfileSheet(UserProfileData profile) {
+    final nameCtrl = TextEditingController(text: profile.displayName);
+    final phoneCtrl = TextEditingController(text: profile.phone);
+    final emailCtrl = TextEditingController(text: profile.email);
+    final regionCtrl = TextEditingController(text: profile.region);
+    final districtCtrl = TextEditingController(text: profile.district);
+    final streetCtrl = TextEditingController(text: profile.streetAddress);
+    final pinflCtrl = TextEditingController(
+      text: profile.passportOrPinfl.isEmpty
+          ? 'AA 4829104'
+          : profile.passportOrPinfl,
+    );
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final bottomInset = MediaQuery.viewInsetsOf(sheetContext).bottom;
+        return Container(
+          padding: EdgeInsets.fromLTRB(20, 16, 20, 22 + bottomInset),
+          decoration: BoxDecoration(
+            color: YanColors.background,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: YanColors.border),
+          ),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: YanColors.border,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Shaxsiy Guvohnoma va Rekvizitlarni Tahrirlash',
+                    style: TextStyle(
+                      color: YanColors.primaryNavy,
+                      fontSize: 17.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _ProfileInputField(label: 'F.I.Sh.', controller: nameCtrl),
+                  const SizedBox(height: 9),
+                  _ProfileInputField(
+                    label: 'Pasport seriya va raqami / JSHSHIR',
+                    controller: pinflCtrl,
+                  ),
+                  const SizedBox(height: 9),
+                  _ProfileInputField(
+                    label: 'Telefon raqami',
+                    controller: phoneCtrl,
+                  ),
+                  const SizedBox(height: 9),
+                  _ProfileInputField(
+                    label: 'Email manzili',
+                    controller: emailCtrl,
+                  ),
+                  const SizedBox(height: 9),
+                  _ProfileInputField(
+                    label: 'Viloyat / Shahar',
+                    controller: regionCtrl,
+                  ),
+                  const SizedBox(height: 9),
+                  _ProfileInputField(label: 'Tuman', controller: districtCtrl),
+                  const SizedBox(height: 9),
+                  _ProfileInputField(
+                    label: 'Mahalla va uy manzili',
+                    controller: streetCtrl,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: LiquidActionButton(
+                          label: 'Bekor qilish',
+                          icon: CupertinoIcons.xmark,
+                          isPrimary: false,
+                          onPressed: () => Navigator.pop(sheetContext),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: LiquidActionButton(
+                          label: 'Saqlash',
+                          icon: CupertinoIcons.checkmark_alt,
+                          onPressed: () {
+                            userProfile.value = profile.copyWith(
+                              displayName: nameCtrl.text.trim(),
+                              phone: phoneCtrl.text.trim(),
+                              email: emailCtrl.text.trim(),
+                              region: regionCtrl.text.trim(),
+                              district: districtCtrl.text.trim(),
+                              streetAddress: streetCtrl.text.trim(),
+                              passportOrPinfl: pinflCtrl.text.trim(),
+                            );
+                            Navigator.pop(sheetContext);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -43,140 +359,184 @@ class _ProfilPageState extends State<ProfilPage> {
             return ValueListenableBuilder<List<ActivityEntry>>(
               valueListenable: ActivityHistoryRepository.instance.entries,
               builder: (context, historyEntries, _) {
-                final activeRequests = historyEntries
-                    .where(
-                      (e) =>
-                          e.category == ActivityCategory.consultation ||
-                          e.category == ActivityCategory.lawyer,
-                    )
-                    .toList(growable: false);
+                final docxCount = generatedDocs.isNotEmpty
+                    ? generatedDocs.length
+                    : profile.savedDocuments;
 
                 return CustomScrollView(
                   key: const ValueKey<String>('profile-page'),
                   physics: const BouncingScrollPhysics(),
-                  slivers: [
+                  slivers: <Widget>[
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                      sliver: SliverToBoxAdapter(
-                        child: _ProfileTopBar(
-                          profile: profile,
-                          onNotificationTap: () =>
-                              _toggleNotifications(profile),
-                          onSecurityTap: () => _showSecuritySheet(profile),
-                        ),
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-                      sliver: SliverToBoxAdapter(
-                        child: _DigitalLegalIdCard(
-                          profile: profile,
-                          documentsCount: generatedDocs.length,
-                          activeRequestsCount: activeRequests.length,
-                          totalActivitiesCount: historyEntries.length,
-                          onEditTap: () => _showEditProfileSheet(profile),
-                          onAvatarTap: () => _openAvatarViewer(profile),
-                          onAvatarUploadTap: () => _pickAvatarImage(profile),
-                          onDocumentsTap: () =>
-                              _showGeneratedDocumentsSheet(generatedDocs),
-                          onRequestsTap: () =>
-                              _showActiveRequestsSheet(activeRequests),
-                          onCompletionTap: () => _showEditProfileSheet(profile),
-                        ),
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
-                      sliver: SliverToBoxAdapter(
-                        child: _SectionHeader(
-                          title: 'Shaxsiy yuridik rekvizitlar',
-                          trailing: 'Arizalar uchun',
-                          trailingIcon: CupertinoIcons.doc_person_fill,
-                        ),
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 11, 20, 0),
-                      sliver: SliverToBoxAdapter(
-                        child: _LegalRequisitesCard(
-                          profile: profile,
-                          onEditTap: () => _showEditProfileSheet(profile),
-                        ),
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 11),
-                      sliver: SliverToBoxAdapter(
-                        child: _SectionHeader(
-                          title: 'Mening xizmatlarim va kabinetim',
-                          trailing: 'Jonli holat',
-                          trailingIcon: CupertinoIcons.bolt_horizontal_circle_fill,
-                        ),
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.fromLTRB(18, 6, 18, 118),
                       sliver: SliverList(
-                        delegate: SliverChildListDelegate([
-                          _WorkspaceActionTile(
-                            icon: CupertinoIcons.doc_checkmark_fill,
-                            title: 'Yaratilgan da’vo arizalari (DOCX)',
-                            subtitle: generatedDocs.isEmpty
-                                ? 'Hozircha yaratilgan DOCX ariza yo‘q'
-                                : 'Oxirgi: ${generatedDocs.first.title}',
-                            badge: '${generatedDocs.length} ta fayl',
-                            color: const Color(0xFF67E2B8),
-                            onTap: () =>
-                                _showGeneratedDocumentsSheet(generatedDocs),
+                        delegate: SliverChildListDelegate(<Widget>[
+                          // Top Header Row
+                          _ProfileTopHeader(
+                            profile: profile,
+                            onEditTap: () => _showEditProfileSheet(profile),
+                            onQrTap: () => _showQrShareModal(profile),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // 1. Official YAN360 Passport / Digital ID Card (Screenshot 4)
+                          // Automatically upgrades to a more stylish VIP Diplomatic Edition for Mijoz!
+                          _YanPassportIdCard(
+                            profile: profile,
+                            onPhotoTap: () => _openAvatarViewer(profile),
+                            onCameraTap: () => _pickAvatarImage(profile),
+                            onCopyField: _copyToClipboard,
+                            onQrShareTap: () => _showQrShareModal(profile),
+                            onEditTap: () => _showEditProfileSheet(profile),
+                          ),
+                          const SizedBox(height: 14),
+
+                          // 2. Quick Stats & Readiness Strip
+                          _ProfileReadinessAndStatsCard(
+                            profile: profile,
+                            docxCount: docxCount,
+                            requestsCount: 24 + profile.activeApplications,
+                            totalHistoryCount: 64 + historyEntries.length,
+                            onEditTap: () => _showEditProfileSheet(profile),
+                          ),
+                          const SizedBox(height: 18),
+
+                          // 3. Shaxsiy yuridik rekvizitlar (High-Contrast Dark Navy Typography)
+                          const _SectionHeaderRow(
+                            title: 'Shaxsiy yuridik rekvizitlar',
+                            badgeText: 'Arizalar uchun',
+                            icon: CupertinoIcons.doc_person_fill,
                           ),
                           const SizedBox(height: 10),
-                          _WorkspaceActionTile(
-                            icon: CupertinoIcons.briefcase_fill,
-                            title: 'Advokat va konsultatsiya murojaatlari',
-                            subtitle: activeRequests.isEmpty
-                                ? 'Yangi konsultatsiya yoki advokat yollash'
-                                : 'Faol so‘rovlar: ${activeRequests.length} ta yozuv',
-                            badge: '${activeRequests.length} ta',
-                            color: const Color(0xFF83AAFF),
-                            onTap: () =>
-                                _showActiveRequestsSheet(activeRequests),
+                          _CredentialsDetailCard(
+                            profile: profile,
+                            onCopy: _copyToClipboard,
+                            onEditTap: () => _showEditProfileSheet(profile),
+                          ),
+                          const SizedBox(height: 18),
+
+                          // 4. Faol Rol va Kabinet Rejimi (4-Role Switcher)
+                          const _SectionHeaderRow(
+                            title: 'Faol rol va kabinet rejimi',
+                            badgeText: '4 xil profil',
+                            icon: CupertinoIcons.person_2_square_stack_fill,
                           ),
                           const SizedBox(height: 10),
-                          _WorkspaceActionTile(
-                            icon: CupertinoIcons.chat_bubble_2_fill,
-                            title: 'Fikr-mulohaza va xizmatni baholash',
-                            subtitle:
-                                'Taklif qoldirish yoki YAN360 xizmatlarini baholash',
-                            badge: 'Aloqa',
-                            color: const Color(0xFFFFC979),
-                            onTap: _showFeedbackAndRatingSheet,
+                          LiquidGlassWindow(
+                            padding: const EdgeInsets.all(15),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  profile.subscriptionStatusLabel,
+                                  style: const TextStyle(
+                                    color: YanColors.mutedText,
+                                    fontSize: 12.4,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: UserRole.values.map((role) {
+                                    final selected = profile.roleType == role;
+                                    return LiquidActionButton(
+                                      label: role.label,
+                                      icon: role.icon,
+                                      isPrimary: selected,
+                                      compact: true,
+                                      onPressed: () =>
+                                          userProfile.switchRole(role),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+
+                          // 5. Mening xizmatlarim va xavfsizlik
+                          const _SectionHeaderRow(
+                            title: 'Mening xizmatlarim va kabinetim',
+                            badgeText: 'Jonli holat',
+                            icon: CupertinoIcons.shield_lefthalf_fill,
+                          ),
+                          const SizedBox(height: 10),
+                          LiquidGlassWindow(
+                            padding: const EdgeInsets.all(15),
+                            child: Column(
+                              children: <Widget>[
+                                Row(
+                                  children: <Widget>[
+                                    Expanded(
+                                      child: LiquidActionButton(
+                                        label: 'Ariza yozdirish',
+                                        icon: CupertinoIcons.doc_text_fill,
+                                        isPrimary: false,
+                                        onPressed: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute<void>(
+                                              builder: (_) =>
+                                                  const LawyerDraftRequestPage(),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: LiquidActionButton(
+                                        label: 'Advokat yollash',
+                                        icon: CupertinoIcons.briefcase_fill,
+                                        onPressed: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute<void>(
+                                              builder: (_) =>
+                                                  const AdvokatYollashPage(),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: <Widget>[
+                                    Expanded(
+                                      child: LiquidActionButton(
+                                        label: 'Rasmni yangilash',
+                                        icon: CupertinoIcons.camera_fill,
+                                        isNeutral: true,
+                                        onPressed: () =>
+                                            _pickAvatarImage(profile),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: LiquidActionButton(
+                                        label: 'Hisobdan chiqish',
+                                        icon: CupertinoIcons.square_arrow_right,
+                                        isDestructive: true,
+                                        onPressed: () {
+                                          Navigator.of(context).pushReplacement(
+                                            MaterialPageRoute<void>(
+                                              builder: (_) =>
+                                                  const IntroScreen(),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ]),
                       ),
                     ),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 11),
-                      sliver: SliverToBoxAdapter(
-                        child: _SectionHeader(
-                          title: 'Xavfsizlik va tizim',
-                          trailing: profile.hasPinCode
-                              ? 'PIN + Biometrika'
-                              : 'Himoyalangan',
-                          trailingIcon: CupertinoIcons.lock_shield_fill,
-                        ),
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 125),
-                      sliver: SliverToBoxAdapter(
-                        child: _SecurityAndAccountCard(
-                          profile: profile,
-                          onSecurityTap: () => _showSecuritySheet(profile),
-                          onPinTap: () => _showPinSetupSheet(profile),
-                          onLogoutTap: _confirmLogout,
-                        ),
-                      ),
-                    ),
                   ],
                 );
               },
@@ -186,1761 +546,974 @@ class _ProfilPageState extends State<ProfilPage> {
       },
     );
   }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Avatar management
-  // ──────────────────────────────────────────────────────────────────────────
-
-  Future<void> _pickAvatarImage(UserProfileData profile) async {
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) {
-        return _ProfileBottomSheet(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const _SheetHandle(),
-              const SizedBox(height: 18),
-              const Text(
-                'Profil rasmini boshqarish',
-                style: TextStyle(
-                  color: Color(0xFFF5F8FF),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Galereyadan rasm tanlang yoki kameradan foydalaning.',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.52),
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 20),
-              _SourceButton(
-                icon: CupertinoIcons.photo_on_rectangle,
-                label: 'Galereyadan tanlash',
-                subtitle: 'Qurilma xotirasidagi suratlar',
-                color: const Color(0xFF83AAFF),
-                onTap: () => Navigator.pop(sheetCtx, 'gallery'),
-              ),
-              const SizedBox(height: 10),
-              _SourceButton(
-                icon: CupertinoIcons.camera_fill,
-                label: 'Kamerada suratga olish',
-                subtitle: 'Yangi rasmga tushish',
-                color: const Color(0xFF67E2B8),
-                onTap: () => Navigator.pop(sheetCtx, 'camera'),
-              ),
-              if (profile.avatarFile != null) ...[
-                const SizedBox(height: 10),
-                _SourceButton(
-                  icon: CupertinoIcons.trash_fill,
-                  label: 'Joriy rasmni o‘chirish',
-                  subtitle: 'Harfli avatar ko‘rinishiga qaytish',
-                  color: const Color(0xFFFF8F9C),
-                  onTap: () => Navigator.pop(sheetCtx, 'remove'),
-                ),
-              ],
-              const SizedBox(height: 12),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (choice == null) return;
-    if (choice == 'remove') {
-      userProfile.value = profile.copyWith(clearAvatar: true);
-      await ActivityHistoryRepository.instance.record(
-        title: 'Profil rasmi o‘chirildi',
-        description: 'Standart harfli avatar tiklandi',
-        category: ActivityCategory.profile,
-        statusLabel: 'Yangilandi',
-      );
-      _showMessage('Profil rasmi o‘chirildi');
-      return;
-    }
-
-    try {
-      final picked = await _picker.pickImage(
-        source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
-        imageQuality: 85,
-        maxWidth: 1024,
-        maxHeight: 1024,
-      );
-      if (picked == null) return;
-
-      final file = File(picked.path);
-      userProfile.value = profile.copyWith(avatarFile: file);
-      await ActivityHistoryRepository.instance.record(
-        title: 'Profil rasmi yangilandi',
-        description: 'Shaxsiy kabinet uchun yangi rasm o‘rnatildi',
-        category: ActivityCategory.profile,
-        statusLabel: 'Bajarildi',
-      );
-      _showMessage('Profil rasmi muvaffaqiyatli yangilandi ✓');
-    } catch (_) {
-      _showMessage('Rasm tanlashda xatolik yuz berdi.');
-    }
-  }
-
-  void _openAvatarViewer(UserProfileData profile) {
-    if (profile.avatarFile == null) {
-      _pickAvatarImage(profile);
-      return;
-    }
-    Navigator.of(context).push(
-      PageRouteBuilder<void>(
-        opaque: false,
-        pageBuilder: (_, _, _) =>
-            FullScreenPhotoPage(file: profile.avatarFile!),
-      ),
-    );
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Full Legal Profile Editor Sheet
-  // ──────────────────────────────────────────────────────────────────────────
-
-  Future<void> _showEditProfileSheet(UserProfileData profile) async {
-    final nameCtrl = TextEditingController(text: profile.displayName);
-    final phoneCtrl = TextEditingController(text: profile.phone);
-    final emailCtrl = TextEditingController(text: profile.email);
-    final streetCtrl = TextEditingController(text: profile.streetAddress);
-    final passportCtrl = TextEditingController(text: profile.passportOrPinfl);
-
-    String? selectedRegion =
-        AlimonyLocationCatalog.regions.contains(profile.region)
-        ? profile.region
-        : AlimonyLocationCatalog.regions.first;
-    String? selectedDistrict = AlimonyLocationCatalog.districtsFor(
-      selectedRegion,
-    ).contains(profile.district)
-        ? profile.district
-        : AlimonyLocationCatalog.districtsFor(selectedRegion).firstOrNull;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final bottomInset = MediaQuery.viewInsetsOf(sheetContext).bottom;
-            final districts = AlimonyLocationCatalog.districtsFor(
-              selectedRegion,
-            );
-
-            return Padding(
-              padding: EdgeInsets.only(bottom: bottomInset),
-              child: _ProfileBottomSheet(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.84,
-                  ),
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _SheetHandle(),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            const _SheetBrandMark(),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Yuridik rekvizitlarni tahrirlash',
-                                    style: TextStyle(
-                                      color: Color(0xFFF5F8FF),
-                                      fontSize: 19,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    'Bu ma’lumotlar da’vo arizalarini tez to‘ldirishda xizmat qiladi.',
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.54,
-                                      ),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        _ProfileInputField(
-                          controller: nameCtrl,
-                          label: 'To‘liq F.I.Sh.',
-                          hint: 'Familiya, ism, otasining ismi',
-                          icon: CupertinoIcons.person_fill,
-                          capitalization: TextCapitalization.words,
-                        ),
-                        const SizedBox(height: 12),
-                        _ProfileInputField(
-                          controller: phoneCtrl,
-                          label: 'Telefon raqami',
-                          hint: '+998 90 123 45 67',
-                          icon: CupertinoIcons.phone_fill,
-                          keyboardType: TextInputType.phone,
-                        ),
-                        const SizedBox(height: 12),
-                        _ProfileInputField(
-                          controller: emailCtrl,
-                          label: 'Email manzili',
-                          hint: 'name@example.com',
-                          icon: CupertinoIcons.mail_solid,
-                          keyboardType: TextInputType.emailAddress,
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _ProfileDropdown(
-                                label: 'Viloyat / shahar',
-                                value: selectedRegion,
-                                options: AlimonyLocationCatalog.regions,
-                                onChanged: (val) {
-                                  setSheetState(() {
-                                    selectedRegion = val;
-                                    final nextDistricts =
-                                        AlimonyLocationCatalog.districtsFor(
-                                          val,
-                                        );
-                                    selectedDistrict = nextDistricts.isNotEmpty
-                                        ? nextDistricts.first
-                                        : null;
-                                  });
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _ProfileDropdown(
-                                label: 'Tuman / shahar',
-                                value: districts.contains(selectedDistrict)
-                                    ? selectedDistrict
-                                    : null,
-                                options: districts,
-                                onChanged: (val) {
-                                  setSheetState(() => selectedDistrict = val);
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        _ProfileInputField(
-                          controller: streetCtrl,
-                          label: 'MFY, ko‘cha va uy raqami',
-                          hint: 'Masalan: Mustaqillik MFY, 12-uy',
-                          icon: CupertinoIcons.location_solid,
-                          capitalization: TextCapitalization.sentences,
-                        ),
-                        const SizedBox(height: 12),
-                        _ProfileInputField(
-                          controller: passportCtrl,
-                          label: 'Pasport seriyasi / ID yoki JSHSHIR',
-                          hint: 'Masalan: AD 1234567',
-                          icon: CupertinoIcons.creditcard_fill,
-                          capitalization: TextCapitalization.characters,
-                        ),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 52,
-                          child: FilledButton.icon(
-                            onPressed: () async {
-                              final newName = nameCtrl.text.trim();
-                              if (newName.isEmpty) {
-                                _showMessage('To‘liq ismingizni kiriting.');
-                                return;
-                              }
-                              final updated = profile.copyWith(
-                                displayName: newName,
-                                phone: phoneCtrl.text.trim(),
-                                email: emailCtrl.text.trim(),
-                                region: selectedRegion ?? profile.region,
-                                district: selectedDistrict ?? profile.district,
-                                streetAddress: streetCtrl.text.trim(),
-                                passportOrPinfl: passportCtrl.text.trim(),
-                              );
-                              userProfile.value = updated;
-                              Navigator.of(sheetContext).pop();
-                              await ActivityHistoryRepository.instance.record(
-                                title: 'Shaxsiy yuridik rekvizitlar yangilandi',
-                                description:
-                                    '${updated.displayName} • ${updated.fullAddress}',
-                                category: ActivityCategory.profile,
-                                statusLabel:
-                                    'To‘liqlik: ${updated.completionPercent}',
-                                metadata: <String, String>{
-                                  'F.I.Sh.': updated.displayName,
-                                  'Telefon': updated.phone,
-                                  'Email': updated.email,
-                                  'Manzil': updated.fullAddress,
-                                  if (updated.passportOrPinfl.isNotEmpty)
-                                    'Pasport / ID': updated.passportOrPinfl,
-                                },
-                              );
-                              _showMessage(
-                                'Rekvizitlar saqlandi (${updated.completionPercent}) ✓',
-                              );
-                            },
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF4A79E0),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                            ),
-                            icon: const Icon(CupertinoIcons.checkmark_alt),
-                            label: const Text(
-                              'Ma’lumotlarni saqlash',
-                              style: TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    nameCtrl.dispose();
-    phoneCtrl.dispose();
-    emailCtrl.dispose();
-    streetCtrl.dispose();
-    passportCtrl.dispose();
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Live Generated Documents Sheet
-  // ──────────────────────────────────────────────────────────────────────────
-
-  void _showGeneratedDocumentsSheet(List<GeneratedDocument> docs) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) {
-        return _ProfileBottomSheet(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(sheetCtx).height * 0.75,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _SheetHandle(),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF67E2B8).withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(13),
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.doc_checkmark_fill,
-                        color: Color(0xFF67E2B8),
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Yaratilgan DOCX hujjatlar',
-                            style: TextStyle(
-                              color: Color(0xFFF5F8FF),
-                              fontSize: 19,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Text(
-                            'Jami: ${docs.length} ta tayyor da’vo arizasi',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.52),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                if (docs.isEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.045),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      'Hozircha yaratilgan DOCX hujjatlar mavjud emas. Bosh sahifadagi xizmatlardan birini tanlab, 1 daqiqada rasmiy ariza tayyorlashingiz mumkin.',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.65),
-                        fontSize: 13,
-                        height: 1.45,
-                      ),
-                    ),
-                  )
-                else
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: docs.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 9),
-                      itemBuilder: (context, index) {
-                        final doc = docs[index];
-                        final dateStr =
-                            '${doc.createdAt.day.toString().padLeft(2, '0')}.'
-                            '${doc.createdAt.month.toString().padLeft(2, '0')}.'
-                            '${doc.createdAt.year}';
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 13,
-                            vertical: 11,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.055),
-                            borderRadius: BorderRadius.circular(15),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.085),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                CupertinoIcons.doc_text_fill,
-                                color: Color(0xFF67E2B8),
-                                size: 20,
-                              ),
-                              const SizedBox(width: 11),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      doc.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Color(0xFFF2F6FC),
-                                        fontSize: 13.2,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      'DOCX • $dateStr',
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.45,
-                                        ),
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              TextButton.icon(
-                                onPressed: () {
-                                  Navigator.pop(sheetCtx);
-                                  OpenFilex.open(doc.path);
-                                },
-                                icon: const Icon(
-                                  CupertinoIcons.arrow_up_right_square,
-                                  size: 15,
-                                  color: Color(0xFF9DBBFF),
-                                ),
-                                label: const Text(
-                                  'Ochish',
-                                  style: TextStyle(
-                                    color: Color(0xFF9DBBFF),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Active Consultation & Lawyer Requests Sheet
-  // ──────────────────────────────────────────────────────────────────────────
-
-  void _showActiveRequestsSheet(List<ActivityEntry> requests) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) {
-        return _ProfileBottomSheet(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(sheetCtx).height * 0.78,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _SheetHandle(),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF83AAFF).withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(13),
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.briefcase_fill,
-                        color: Color(0xFF83AAFF),
-                        size: 21,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Advokat va konsultatsiyalar',
-                            style: TextStyle(
-                              color: Color(0xFFF5F8FF),
-                              fontSize: 19,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Text(
-                            'Faol murojaatlar: ${requests.length} ta',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.52),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                if (requests.isNotEmpty)
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: requests.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 9),
-                      itemBuilder: (context, index) {
-                        final item = requests[index];
-                        return Container(
-                          padding: const EdgeInsets.all(13),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.055),
-                            borderRadius: BorderRadius.circular(15),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.085),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 7,
-                                      vertical: 2.5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: item.accentColor.withValues(
-                                        alpha: 0.15,
-                                      ),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      item.statusLabel,
-                                      style: TextStyle(
-                                        color: item.accentColor,
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    '${item.dateFormatted} • ${item.timeFormatted}',
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.45,
-                                      ),
-                                      fontSize: 10.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 7),
-                              Text(
-                                item.title,
-                                style: const TextStyle(
-                                  color: Color(0xFFF3F6FC),
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                item.description,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.55),
-                                  fontSize: 11.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () {
-                          Navigator.pop(sheetCtx);
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const AdvokatYollashPage(),
-                            ),
-                          );
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF3E70E2),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 13),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(13),
-                          ),
-                        ),
-                        icon: const Icon(CupertinoIcons.videocam_fill, size: 16),
-                        label: const Text(
-                          'Konsultatsiya / Advokat',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(sheetCtx);
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const LawyerDraftRequestPage(),
-                            ),
-                          );
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF9DBBFF),
-                          side: BorderSide(
-                            color: const Color(
-                              0xFF9DBBFF,
-                            ).withValues(alpha: 0.35),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 13),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(13),
-                          ),
-                        ),
-                        icon: const Icon(CupertinoIcons.doc_person, size: 16),
-                        label: const Text(
-                          'Ariza buyurtma',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Project 2 Feedback & Service Rating Sheet
-  // ──────────────────────────────────────────────────────────────────────────
-
-  Future<void> _showFeedbackAndRatingSheet() async {
-    final feedbackCtrl = TextEditingController();
-    var selectedRating = 'A’lo 🤩';
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final bottomInset = MediaQuery.viewInsetsOf(sheetCtx).bottom;
-            const ratings = <String>['Qoniqarsiz 😡', 'Yaxshi 😐', 'A’lo 🤩'];
-
-            return Padding(
-              padding: EdgeInsets.only(bottom: bottomInset),
-              child: _ProfileBottomSheet(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const _SheetHandle(),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Fikr-mulohaza va baholash',
-                      style: TextStyle(
-                        color: Color(0xFFF5F8FF),
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'YAN360 platformasi ishlashi bo‘yicha bahoyingiz va taklifingizni yuboring.',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.56),
-                        fontSize: 12.5,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: ratings.map((label) {
-                        final active = selectedRating == label;
-                        return Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: GestureDetector(
-                              onTap: () =>
-                                  setSheetState(() => selectedRating = label),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: active
-                                      ? const Color(
-                                          0xFF4A79E0,
-                                        ).withValues(alpha: 0.28)
-                                      : Colors.white.withValues(alpha: 0.05),
-                                  borderRadius: BorderRadius.circular(13),
-                                  border: Border.all(
-                                    color: active
-                                        ? const Color(0xFF8AB0FF)
-                                        : Colors.white.withValues(alpha: 0.09),
-                                  ),
-                                ),
-                                child: Text(
-                                  label,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: active
-                                        ? Colors.white
-                                        : Colors.white70,
-                                    fontSize: 12,
-                                    fontWeight: active
-                                        ? FontWeight.w800
-                                        : FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 14),
-                    _ProfileInputField(
-                      controller: feedbackCtrl,
-                      label: 'Murojaat yoki taklif matni',
-                      hint:
-                          'Taklifingiz yoki kuzatilgan muammoni batafsil yozing...',
-                      icon: CupertinoIcons.chat_bubble_text_fill,
-                      maxLines: 3,
-                      capitalization: TextCapitalization.sentences,
-                    ),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: FilledButton.icon(
-                        onPressed: () async {
-                          final msg = feedbackCtrl.text.trim();
-                          Navigator.pop(sheetCtx);
-                          await ActivityHistoryRepository.instance.record(
-                            title: 'Xizmat baholandi: $selectedRating',
-                            description: msg.isEmpty
-                                ? 'YAN360 platformasiga baho yuborildi'
-                                : msg,
-                            category: ActivityCategory.profile,
-                            statusLabel: 'Qabul qilindi',
-                            metadata: <String, String>{
-                              'Baho': selectedRating,
-                              'Foydalanuvchi': userProfile.value.displayName,
-                              'Telefon': userProfile.value.phone,
-                              if (msg.isNotEmpty) 'Xabar': msg,
-                            },
-                          );
-                          _showMessage(
-                            'Fikr-mulohazangiz ma’muriyatga yetkazildi. Rahmat! ✓',
-                          );
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF4A79E0),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        icon: const Icon(CupertinoIcons.paperplane_fill, size: 16),
-                        label: const Text(
-                          'Yuborish',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-    feedbackCtrl.dispose();
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Security, PIN & Notifications
-  // ──────────────────────────────────────────────────────────────────────────
-
-  void _toggleNotifications(UserProfileData profile) {
-    final next = !profile.notificationsEnabled;
-    userProfile.value = profile.copyWith(notificationsEnabled: next);
-    _showMessage(
-      next
-          ? 'Bildirishnomalar yoqildi'
-          : 'Bildirishnomalar vaqtincha o‘chirildi',
-    );
-  }
-
-  Future<void> _showSecuritySheet(UserProfileData profile) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) {
-        return ValueListenableBuilder<UserProfileData>(
-          valueListenable: userProfile,
-          builder: (context, currentProfile, _) {
-            return _ProfileBottomSheet(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const _SheetHandle(),
-                  const SizedBox(height: 18),
-                  const Text(
-                    'Xavfsizlik markazi',
-                    style: TextStyle(
-                      color: Color(0xFFF5F8FF),
-                      fontSize: 21,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Shaxsiy ma’lumotlaringiz va DOCX hujjatlaringiz himoyasini boshqaring.',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.56),
-                      fontSize: 12.5,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  _SecuritySetting(
-                    icon: CupertinoIcons.lock_shield_fill,
-                    title: 'Biometrik himoya (Face ID / Touch ID)',
-                    subtitle: 'Ilovaga kirishda biometrik tasdiqlash',
-                    value: currentProfile.biometricEnabled,
-                    onChanged: (value) {
-                      userProfile.value = currentProfile.copyWith(
-                        biometricEnabled: value,
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  _SecuritySetting(
-                    icon: CupertinoIcons.bell_fill,
-                    title: 'Push-bildirishnomalar',
-                    subtitle: 'Sud va ariza holati bo‘yicha xabarnomalar',
-                    value: currentProfile.notificationsEnabled,
-                    onChanged: (value) {
-                      userProfile.value = currentProfile.copyWith(
-                        notificationsEnabled: value,
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  _SourceButton(
-                    icon: CupertinoIcons.number_square_fill,
-                    label: currentProfile.hasPinCode
-                        ? 'Maxfiy PIN-kodni o‘zgartirish'
-                        : '4 xonali PIN-kod o‘rnatish',
-                    subtitle: currentProfile.hasPinCode
-                        ? 'Faol PIN-kod o‘rnatilgan'
-                        : 'Qo‘shimcha himoya kodi',
-                    color: const Color(0xFF83AAFF),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      _showPinSetupSheet(currentProfile);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _showPinSetupSheet(UserProfileData profile) async {
-    final pinCtrl = TextEditingController(text: profile.pinCode ?? '');
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) {
-        final bottomInset = MediaQuery.viewInsetsOf(sheetCtx).bottom;
-        return Padding(
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: _ProfileBottomSheet(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _SheetHandle(),
-                const SizedBox(height: 18),
-                const Text(
-                  'Maxfiy PIN-kod',
-                  style: TextStyle(
-                    color: Color(0xFFF5F8FF),
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Yuridik hujjatlar bo‘limini himoyalash uchun 4 xonali raqam kiriting.',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.56),
-                    fontSize: 12.5,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _ProfileInputField(
-                  controller: pinCtrl,
-                  label: '4 xonali PIN-kod',
-                  hint: '••••',
-                  icon: CupertinoIcons.lock_fill,
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    if (profile.hasPinCode) ...[
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            userProfile.value = profile.copyWith(
-                              clearPinCode: true,
-                            );
-                            Navigator.pop(sheetCtx);
-                            _showMessage('PIN-kod o‘chirildi');
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFFFF9AA8),
-                            side: BorderSide(
-                              color: const Color(
-                                0xFFFF9AA8,
-                              ).withValues(alpha: 0.35),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                          child: const Text('PIN-kodni o‘chirish'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Expanded(
-                      flex: 2,
-                      child: FilledButton(
-                        onPressed: () async {
-                          final digits = pinCtrl.text.replaceAll(
-                            RegExp(r'\D'),
-                            '',
-                          );
-                          if (digits.length != 4) {
-                            _showMessage('4 ta raqamdan iborat kod kiriting.');
-                            return;
-                          }
-                          userProfile.value = profile.copyWith(pinCode: digits);
-                          Navigator.pop(sheetCtx);
-                          await ActivityHistoryRepository.instance.record(
-                            title: 'Xavfsizlik PIN-kodi o‘rnatildi',
-                            description:
-                                'Shaxsiy kabinet 4 xonali PIN-kod bilan himoyalandi',
-                            category: ActivityCategory.profile,
-                            statusLabel: 'Faol',
-                          );
-                          _showMessage('PIN-kod muvaffaqiyatli saqlandi ✓');
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF4A79E0),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: const Text(
-                          'PIN-kodni saqlash',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    pinCtrl.dispose();
-  }
-
-  void _confirmLogout() {
-    showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogCtx) {
-        return CupertinoAlertDialog(
-          title: const Text('Hisobdan chiqish'),
-          content: const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text(
-              'Haqiqatan ham YAN360 shaxsiy kabinetidan chiqmoqchimisiz? Saqlangan DOCX hujjatlaringiz qurilmada qoladi.',
-            ),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Bekor qilish'),
-            ),
-            CupertinoDialogAction(
-              isDestructiveAction: true,
-              onPressed: () {
-                Navigator.pop(dialogCtx);
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const IntroScreen(),
-                  ),
-                  (_) => false,
-                );
-              },
-              child: const Text('Chiqish'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.fromLTRB(
-            20,
-            0,
-            20,
-            98 + MediaQuery.paddingOf(context).bottom,
-          ),
-          backgroundColor: const Color(0xFF23364C),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      );
-  }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Digital Legal ID Card (Replaces the bulky empty box + 3 generic stat squares)
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _DigitalLegalIdCard extends StatelessWidget {
-  const _DigitalLegalIdCard({
-    required this.profile,
-    required this.documentsCount,
-    required this.activeRequestsCount,
-    required this.totalActivitiesCount,
-    required this.onEditTap,
-    required this.onAvatarTap,
-    required this.onAvatarUploadTap,
-    required this.onDocumentsTap,
-    required this.onRequestsTap,
-    required this.onCompletionTap,
-  });
-
-  final UserProfileData profile;
-  final int documentsCount;
-  final int activeRequestsCount;
-  final int totalActivitiesCount;
-  final VoidCallback onEditTap;
-  final VoidCallback onAvatarTap;
-  final VoidCallback onAvatarUploadTap;
-  final VoidCallback onDocumentsTap;
-  final VoidCallback onRequestsTap;
-  final VoidCallback onCompletionTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final missing = profile.missingProfileItems;
-
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            Color(0xFF1A3A63),
-            Color(0xFF102542),
-            Color(0xFF0C1C33),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: const Color(0xFF8DB1F0).withValues(alpha: 0.25),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0A1D3B).withValues(alpha: 0.45),
-            blurRadius: 28,
-            offset: const Offset(0, 14),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -30,
-            top: -20,
-            child: Opacity(
-              opacity: 0.07,
-              child: Image.asset(
-                'assets/logo.png',
-                width: 185,
-                height: 185,
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top badge bar
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF67E2B8).withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFF67E2B8).withValues(alpha: 0.26),
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            CupertinoIcons.checkmark_seal_fill,
-                            color: Color(0xFF7AE8C0),
-                            size: 13,
-                          ),
-                          SizedBox(width: 5),
-                          Text(
-                            'VERIFIED LEGAL ID',
-                            style: TextStyle(
-                              color: Color(0xFFC9FAEA),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.7,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      profile.clientId,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.46),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: onEditTap,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 11,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.09),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.14),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              CupertinoIcons.pencil,
-                              color: Color(0xFFDCE8FF),
-                              size: 13,
-                            ),
-                            SizedBox(width: 5),
-                            Text(
-                              'Tahrirlash',
-                              style: TextStyle(
-                                color: Color(0xFFDCE8FF),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                // Horizontal Identity Row
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Stack(
-                      alignment: Alignment.bottomRight,
-                      children: [
-                        GestureDetector(
-                          onTap: onAvatarTap,
-                          child: Hero(
-                            tag: 'profile-avatar',
-                            child: Container(
-                              width: 78,
-                              height: 78,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: <Color>[
-                                    Color(0xFF3E70E2),
-                                    Color(0xFF1B3F8B),
-                                  ],
-                                ),
-                                border: Border.all(
-                                  color: const Color(
-                                    0xFF82AEFF,
-                                  ).withValues(alpha: 0.60),
-                                  width: 2.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(
-                                      0xFF3060D0,
-                                    ).withValues(alpha: 0.40),
-                                    blurRadius: 18,
-                                  ),
-                                ],
-                              ),
-                              child: ClipOval(
-                                child: buildAvatarContent(
-                                  profile,
-                                  initialsSize: 26,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: onAvatarUploadTap,
-                          child: Container(
-                            width: 27,
-                            height: 27,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF4A79E0),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: const Color(0xFF102542),
-                                width: 2,
-                              ),
-                            ),
-                            child: const Icon(
-                              CupertinoIcons.camera_fill,
-                              color: Colors.white,
-                              size: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            profile.displayName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFFF7F9FF),
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              height: 1.15,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          Row(
-                            children: [
-                              const Icon(
-                                CupertinoIcons.phone_fill,
-                                size: 12,
-                                color: Color(0xFF8FB4FF),
-                              ),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  profile.phone,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.78),
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              const Icon(
-                                CupertinoIcons.location_solid,
-                                size: 12,
-                                color: Color(0xFF67E2B8),
-                              ),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  '${profile.region}, ${profile.district}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.56),
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                // Dynamic completion bar
-                GestureDetector(
-                  onTap: onCompletionTap,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Text(
-                              'Yuridik profil to‘liqligi',
-                              style: TextStyle(
-                                color: Color(0xFFD9E7FC),
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              profile.completionPercent,
-                              style: const TextStyle(
-                                color: Color(0xFF7CE0B4),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 7),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: LinearProgressIndicator(
-                            value: profile.profileCompletion,
-                            minHeight: 6,
-                            color: const Color(0xFF67E2B8),
-                            backgroundColor: const Color(0xFF284363),
-                          ),
-                        ),
-                        if (missing.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'To‘ldirish tavsiya etiladi: ${missing.join(' • ')}',
-                            style: TextStyle(
-                              color: const Color(
-                                0xFFFFD18B,
-                              ).withValues(alpha: 0.90),
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                // Integrated 3-column live workspace metrics bar
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 11,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      _InlineMetricButton(
-                        value: documentsCount.toString(),
-                        label: 'DOCX Hujjatlar',
-                        color: const Color(0xFF67E2B8),
-                        onTap: onDocumentsTap,
-                      ),
-                      Container(
-                        width: 1,
-                        height: 28,
-                        color: Colors.white.withValues(alpha: 0.09),
-                      ),
-                      _InlineMetricButton(
-                        value: activeRequestsCount.toString(),
-                        label: 'Murojaatlar',
-                        color: const Color(0xFF83AAFF),
-                        onTap: onRequestsTap,
-                      ),
-                      Container(
-                        width: 1,
-                        height: 28,
-                        color: Colors.white.withValues(alpha: 0.09),
-                      ),
-                      _InlineMetricButton(
-                        value: totalActivitiesCount.toString(),
-                        label: 'Jami faoliyat',
-                        color: const Color(0xFFFFC979),
-                        onTap: onRequestsTap,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InlineMetricButton extends StatelessWidget {
-  const _InlineMetricButton({
-    required this.value,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  final String value;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                color: color,
-                fontSize: 19,
-                fontWeight: FontWeight.w800,
-                height: 1.05,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.56),
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Personal Legal Requisites Card
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _LegalRequisitesCard extends StatelessWidget {
-  const _LegalRequisitesCard({
+class _ProfileTopHeader extends StatelessWidget {
+  const _ProfileTopHeader({
     required this.profile,
     required this.onEditTap,
+    required this.onQrTap,
   });
 
   final UserProfileData profile;
   final VoidCallback onEditTap;
-
-  @override
-  Widget build(BuildContext context) {
-    String localCourt = 'Tanlanmagan';
-    try {
-      if (profile.district.trim().isNotEmpty) {
-        localCourt =
-            '${AlimonyLocationCatalog.courtForDistrict(profile.district)} sudi';
-      }
-    } catch (_) {
-      localCourt = profile.district;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.052),
-        borderRadius: BorderRadius.circular(19),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.085),
-        ),
-      ),
-      child: Column(
-        children: [
-          _RequisiteRow(
-            icon: CupertinoIcons.placemark_fill,
-            label: 'Yashash manzili',
-            value: profile.fullAddress,
-            color: const Color(0xFF83AAFF),
-          ),
-          const SizedBox(height: 10),
-          _RequisiteRow(
-            icon: CupertinoIcons.building_2_fill,
-            label: 'Hududiy fuqarolik sudi',
-            value: localCourt,
-            color: const Color(0xFF67E2B8),
-          ),
-          const SizedBox(height: 10),
-          _RequisiteRow(
-            icon: CupertinoIcons.mail_solid,
-            label: 'Elektron pochta',
-            value: profile.email.isEmpty ? 'Kiritilmagan' : profile.email,
-            color: const Color(0xFFC8B2FF),
-          ),
-          const SizedBox(height: 10),
-          _RequisiteRow(
-            icon: CupertinoIcons.creditcard_fill,
-            label: 'Pasport / JSHSHIR',
-            value: profile.passportOrPinfl.isEmpty
-                ? 'Kiritilmagan (tahrirlash orqali qo‘shing)'
-                : profile.passportOrPinfl,
-            color: const Color(0xFFFFC979),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: onEditTap,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFADC4FF),
-                side: BorderSide(
-                  color: const Color(0xFFADC4FF).withValues(alpha: 0.26),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 11),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              icon: const Icon(CupertinoIcons.slider_horizontal_3, size: 15),
-              label: const Text(
-                'Rekvizitlarni yangilash',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RequisiteRow extends StatelessWidget {
-  const _RequisiteRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
+  final VoidCallback onQrTap;
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.13),
-            borderRadius: BorderRadius.circular(9),
+      children: <Widget>[
+        SizedBox(
+          width: 38,
+          height: 38,
+          child: Image.asset(
+            'assets/logo.png',
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
           ),
-          child: Icon(icon, color: color, size: 15),
         ),
-        const SizedBox(width: 11),
+        const SizedBox(width: 10),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'YAN360',
+                style: TextStyle(
+                  color: YanColors.primaryNavy,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              Text(
+                'SHAXSIY YURIDIK KABINET VA GUVOHNOMA',
+                style: TextStyle(
+                  color: YanColors.mutedText,
+                  fontSize: 10.2,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.7,
+                ),
+              ),
+            ],
+          ),
+        ),
+        GestureDetector(
+          onTap: onQrTap,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: YanColors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: YanColors.border),
+            ),
+            child: const Icon(
+              CupertinoIcons.qrcode,
+              color: YanColors.primaryNavy,
+              size: 19,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: onEditTap,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: YanColors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: YanColors.border),
+            ),
+            child: const Icon(
+              CupertinoIcons.slider_horizontal_3,
+              color: YanColors.primaryBlue,
+              size: 18,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Official YAN360 Passport / Şəxsiyyət Vəsiqəsi Style ID Card (Screenshot 4)
+// With rectangular photo, medium shining firm logo watermark at the background,
+// copyable FIN / Document fields, bottom QR share strip, and Mijoz VIP styling!
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _YanPassportIdCard extends StatelessWidget {
+  const _YanPassportIdCard({
+    required this.profile,
+    required this.onPhotoTap,
+    required this.onCameraTap,
+    required this.onCopyField,
+    required this.onQrShareTap,
+    required this.onEditTap,
+  });
+
+  final UserProfileData profile;
+  final VoidCallback onPhotoTap;
+  final VoidCallback onCameraTap;
+  final void Function(String label, String value) onCopyField;
+  final VoidCallback onQrShareTap;
+  final VoidCallback onEditTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isMijoz = profile.roleType == UserRole.mijoz;
+    final isAdvokat = profile.roleType == UserRole.advokat;
+    final passportNumber = profile.passportOrPinfl.trim().isNotEmpty
+        ? profile.passportOrPinfl.trim()
+        : (isAdvokat ? profile.lawyerLicenseNumber : 'AA 4829104');
+    final contractedLawyer = YanRoleDataCatalog.byId(
+      profile.contractedLawyerId,
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: YanColors.white,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(
+          color: isMijoz
+              ? YanColors.primaryBlue.withValues(alpha: 0.45)
+              : YanColors.border,
+          width: isMijoz ? 1.5 : 1.2,
+        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: YanColors.primaryNavy.withValues(
+              alpha: isMijoz ? 0.11 : 0.07,
+            ),
+            blurRadius: 26,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: <Widget>[
+          // Upper Passport Body with Guilloche Network + Shining Firm Logo Watermark
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isMijoz
+                      ? const <Color>[
+                          Color(0xFFEAF4FF),
+                          Color(0xFFD9ECFF),
+                          Color(0xFFE3F6F1),
+                        ]
+                      : const <Color>[
+                          Color(0xFFF3F8FF),
+                          Color(0xFFE5F0FF),
+                          Color(0xFFDCEBFA),
+                        ],
+                ),
+              ),
+              child: Stack(
+                children: <Widget>[
+                  // Official Passport Guilloche & Constellation Lines
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _PassportGuillochePainter(isVip: isMijoz),
+                      ),
+                    ),
+                  ),
+                  // Medium-size Shining YAN360 Firm Logo Watermark in the Background
+                  Positioned(
+                    right: 44,
+                    top: 22,
+                    bottom: 12,
+                    child: IgnorePointer(
+                      child: Container(
+                        width: 132,
+                        height: 132,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: <BoxShadow>[
+                            BoxShadow(
+                              color: YanColors.cyanAccent.withValues(
+                                alpha: isMijoz ? 0.22 : 0.14,
+                              ),
+                              blurRadius: 32,
+                              spreadRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: Opacity(
+                          opacity: isMijoz ? 0.22 : 0.16,
+                          child: Image.asset(
+                            'assets/logo.png',
+                            fit: BoxFit.contain,
+                            filterQuality: FilterQuality.high,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Foreground Passport Content
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        // Passport Top Header Row
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Row(
+                                    children: <Widget>[
+                                      Text(
+                                        isMijoz
+                                            ? 'Shaxsiy Yuridik Guvohnoma • VIP'
+                                            : 'Shaxsiy Yuridik Guvohnoma',
+                                        style: const TextStyle(
+                                          color: YanColors.primaryNavy,
+                                          fontSize: 15.5,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: -0.2,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      const Icon(
+                                        CupertinoIcons.checkmark_seal_fill,
+                                        size: 16,
+                                        color: YanColors.successGreen,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isMijoz
+                                        ? 'YAN360 PRIVILEGE PASSPORT • SHARTNOMA № ${profile.contractNumber ?? "SH-2026/084"}'
+                                        : 'YAN360 DIGITAL LEGAL ID • O‘ZBEKISTON RESPUBLIKASI',
+                                    style: const TextStyle(
+                                      color: YanColors.mutedText,
+                                      fontSize: 9.6,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isMijoz
+                                    ? YanColors.successGreen
+                                    : YanColors.primaryBlue,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                profile.roleType.shortBadge,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9.8,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Main Passport Row: Rectangular Photo on Left + Credentials & Copy Buttons on Right
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            // Rectangular ID Portrait Photo (Screenshot 4 style)
+                            GestureDetector(
+                              onTap: onPhotoTap,
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: <Widget>[
+                                  Container(
+                                    width: 96,
+                                    height: 120,
+                                    decoration: BoxDecoration(
+                                      color: YanColors.primaryNavy,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: isMijoz
+                                            ? YanColors.successGreen
+                                            : Colors.white,
+                                        width: 2.2,
+                                      ),
+                                      boxShadow: <BoxShadow>[
+                                        BoxShadow(
+                                          color: YanColors.primaryNavy
+                                              .withValues(alpha: 0.16),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 5),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(14),
+                                      child: profile.avatarFile != null
+                                          ? Image.file(
+                                              profile.avatarFile!,
+                                              fit: BoxFit.cover,
+                                              filterQuality: FilterQuality.high,
+                                            )
+                                          : Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: <Widget>[
+                                                const Icon(
+                                                  CupertinoIcons.person_fill,
+                                                  color: Color(0xFF9ED8FF),
+                                                  size: 42,
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  profile.initials,
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w900,
+                                                    letterSpacing: 1.0,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    right: -5,
+                                    bottom: -5,
+                                    child: GestureDetector(
+                                      onTap: onCameraTap,
+                                      child: Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          color: YanColors.primaryBlue,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 1.8,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          CupertinoIcons.camera_fill,
+                                          color: Colors.white,
+                                          size: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+
+                            // Right Column: Holder Name, YAN-ID (FIN), Passport Number + Copy Buttons
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  const Text(
+                                    'FUQARO / F.I.SH.',
+                                    style: TextStyle(
+                                      color: YanColors.mutedText,
+                                      fontSize: 9.8,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 1),
+                                  Text(
+                                    profile.displayName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: YanColors.primaryNavy,
+                                      fontSize: 16.2,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+
+                                  // Row 1: YAN-ID / FIN with Copy Button
+                                  _PassportFieldWithCopy(
+                                    label: 'SHAXSIY YAN-ID (FIN)',
+                                    value: profile.clientId,
+                                    onCopy: () => onCopyField(
+                                      'YAN-ID',
+                                      profile.clientId,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 7),
+
+                                  // Row 2: Guvohnoma / Pasport raqami with Copy Button
+                                  _PassportFieldWithCopy(
+                                    label: isAdvokat
+                                        ? 'ADVOKAT LITSENZIYASI'
+                                        : 'GUVOHNOMA / PASPORT RAQAMI',
+                                    value: passportNumber,
+                                    onCopy: () => onCopyField(
+                                      'Pasport / Guvohnoma raqami',
+                                      passportNumber,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        // Special Mijoz VIP Diplomatic Privilege Strip inside the Passport Card
+                        if (isMijoz) ...<Widget>[
+                          const SizedBox(height: 13),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 11,
+                              vertical: 8.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.78),
+                              borderRadius: BorderRadius.circular(13),
+                              border: Border.all(
+                                color: YanColors.successGreen.withValues(
+                                  alpha: 0.45,
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              children: <Widget>[
+                                const Icon(
+                                  CupertinoIcons.shield_lefthalf_fill,
+                                  color: YanColors.primaryBlue,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 7),
+                                Expanded(
+                                  child: Text(
+                                    'Biriktirilgan advokat: ${contractedLawyer.fullName} • Imtiyoz: -30% / -50%',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: YanColors.primaryNavy,
+                                      fontSize: 11.2,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Bottom White Action Bar (Matches "QR paylaş" in Screenshot 4)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            decoration: const BoxDecoration(
+              color: YanColors.white,
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(25)),
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onQrShareTap,
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Icon(
+                          CupertinoIcons.qrcode,
+                          color: YanColors.primaryBlue,
+                          size: 18,
+                        ),
+                        SizedBox(width: 7),
+                        Text(
+                          'QR Guvohnomani ulashish',
+                          style: TextStyle(
+                            color: YanColors.primaryNavy,
+                            fontSize: 13.4,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 20,
+                  color: YanColors.divider,
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onEditTap,
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Icon(
+                          CupertinoIcons.pencil_outline,
+                          color: YanColors.primaryBlue,
+                          size: 18,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Ma’lumotni tahrirlash',
+                          style: TextStyle(
+                            color: YanColors.primaryNavy,
+                            fontSize: 13.2,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PassportFieldWithCopy extends StatelessWidget {
+  const _PassportFieldWithCopy({
+    required this.label,
+    required this.value,
+    required this.onCopy,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+            children: <Widget>[
               Text(
                 label,
+                style: const TextStyle(
+                  color: YanColors.mutedText,
+                  fontSize: 9.8,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: YanColors.primaryNavy,
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+        GestureDetector(
+          onTap: onCopy,
+          child: Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.88),
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: YanColors.border),
+            ),
+            child: const Icon(
+              CupertinoIcons.doc_on_doc,
+              color: YanColors.primaryBlue,
+              size: 16,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PassportGuillochePainter extends CustomPainter {
+  const _PassportGuillochePainter({required this.isVip});
+
+  final bool isVip;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final linePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.9
+      ..color = YanColors.primaryBlue.withValues(alpha: isVip ? 0.13 : 0.09);
+
+    final nodePaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = YanColors.white.withValues(alpha: 0.65);
+
+    final p1 = Path()
+      ..moveTo(size.width * 0.25, 0)
+      ..lineTo(size.width * 0.62, size.height * 0.45)
+      ..lineTo(size.width * 0.95, size.height * 0.18)
+      ..lineTo(size.width * 0.78, size.height);
+
+    final p2 = Path()
+      ..moveTo(size.width * 0.42, size.height)
+      ..lineTo(size.width * 0.62, size.height * 0.45)
+      ..lineTo(size.width, size.height * 0.68);
+
+    canvas.drawPath(p1, linePaint);
+    canvas.drawPath(p2, linePaint);
+
+    canvas.drawCircle(
+      Offset(size.width * 0.62, size.height * 0.45),
+      4.5,
+      nodePaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.85, size.height * 0.28),
+      3.5,
+      nodePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PassportGuillochePainter oldDelegate) =>
+      oldDelegate.isVip != isVip;
+}
+
+class _ProfileReadinessAndStatsCard extends StatelessWidget {
+  const _ProfileReadinessAndStatsCard({
+    required this.profile,
+    required this.docxCount,
+    required this.requestsCount,
+    required this.totalHistoryCount,
+    required this.onEditTap,
+  });
+
+  final UserProfileData profile;
+  final int docxCount;
+  final int requestsCount;
+  final int totalHistoryCount;
+  final VoidCallback onEditTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final completion = profile.profileCompletion;
+    final pct = (completion * 100).round();
+    final barColor = pct < 50
+        ? YanColors.destructiveRed
+        : pct < 80
+        ? const Color(0xFFF59E0B)
+        : YanColors.successGreen;
+
+    return LiquidGlassWindow(
+      padding: const EdgeInsets.all(15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const Expanded(
+                child: Text(
+                  'Yuridik profil to‘liqligi',
+                  style: TextStyle(
+                    color: YanColors.primaryNavy,
+                    fontSize: 13.8,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                '${profile.completionPercent} • ${pct >= 80 ? "Mukammal" : "To‘ldiring"}',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.45),
-                  fontSize: 10.5,
+                  color: barColor == YanColors.successGreen
+                      ? const Color(0xFF098562)
+                      : barColor,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: completion.clamp(0.1, 1.0),
+              minHeight: 7,
+              backgroundColor: YanColors.lightBlue,
+              valueColor: AlwaysStoppedAnimation<Color>(barColor),
+            ),
+          ),
+          const SizedBox(height: 13),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _ProfileStatItem(
+                  value: '$docxCount',
+                  label: 'DOCX Hujjatlar',
+                  color: YanColors.successGreen,
+                ),
+              ),
+              Container(width: 1, height: 32, color: YanColors.divider),
+              Expanded(
+                child: _ProfileStatItem(
+                  value: '$requestsCount',
+                  label: 'Murojaatlar',
+                  color: YanColors.primaryBlue,
+                ),
+              ),
+              Container(width: 1, height: 32, color: YanColors.divider),
+              Expanded(
+                child: _ProfileStatItem(
+                  value: '$totalHistoryCount',
+                  label: 'Jami faoliyat',
+                  color: YanColors.primaryNavy,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileStatItem extends StatelessWidget {
+  const _ProfileStatItem({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  final String value;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: <Widget>[
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(
+            color: YanColors.mutedText,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionHeaderRow extends StatelessWidget {
+  const _SectionHeaderRow({
+    required this.title,
+    required this.badgeText,
+    required this.icon,
+  });
+
+  final String title;
+  final String badgeText;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: YanColors.primaryNavy,
+              fontSize: 17.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.2,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: YanColors.lightBlue,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: YanColors.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(icon, size: 13, color: YanColors.primaryBlue),
+              const SizedBox(width: 5),
+              Text(
+                badgeText,
+                style: const TextStyle(
+                  color: YanColors.primaryNavy,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CredentialsDetailCard extends StatelessWidget {
+  const _CredentialsDetailCard({
+    required this.profile,
+    required this.onCopy,
+    required this.onEditTap,
+  });
+
+  final UserProfileData profile;
+  final void Function(String label, String value) onCopy;
+  final VoidCallback onEditTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final passportText = profile.passportOrPinfl.trim().isNotEmpty
+        ? profile.passportOrPinfl.trim()
+        : 'AA 4829104 (Tasdiqlangan)';
+
+    return LiquidGlassWindow(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: <Widget>[
+          _CredentialTile(
+            icon: CupertinoIcons.location_solid,
+            iconBg: const Color(0xFFE8F2FF),
+            iconColor: YanColors.primaryBlue,
+            label: 'Yashash manzili (Ariza va da’volar uchun)',
+            value: profile.fullAddress,
+            onCopy: () => onCopy('Manzil', profile.fullAddress),
+          ),
+          const Divider(height: 18, color: YanColors.divider),
+          _CredentialTile(
+            icon: CupertinoIcons.building_2_fill,
+            iconBg: const Color(0xFFE6FAF3),
+            iconColor: YanColors.successGreen,
+            label: 'Biriktirilgan sud hududi',
+            value:
+                'Fuqarolik ishlari bo‘yicha ${profile.district} tumanlararo sudi',
+            onCopy: () => onCopy('Sud hududi', profile.district),
+          ),
+          const Divider(height: 18, color: YanColors.divider),
+          _CredentialTile(
+            icon: CupertinoIcons.mail_solid,
+            iconBg: const Color(0xFFEDF4FF),
+            iconColor: YanColors.primaryBlue,
+            label: 'Rasmiy elektron pochta va telefon',
+            value: '${profile.email} • ${profile.phone}',
+            onCopy: () => onCopy('Telefon', profile.phone),
+          ),
+          const Divider(height: 18, color: YanColors.divider),
+          _CredentialTile(
+            icon: CupertinoIcons.creditcard_fill,
+            iconBg: const Color(0xFFEAF5FF),
+            iconColor: YanColors.primaryNavy,
+            label: 'Pasport seriyasi / JSHSHIR',
+            value: passportText,
+            onCopy: () => onCopy('Pasport', passportText),
+          ),
+          const SizedBox(height: 14),
+           SizedBox(
+            width: double.infinity,
+            child: LiquidActionButton(
+              label: 'Rekvizitlarni yangilash',
+              icon: CupertinoIcons.slider_horizontal_3,
+              isPrimary: false,
+              onPressed: onEditTap,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CredentialTile extends StatelessWidget {
+  const _CredentialTile({
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.label,
+    required this.value,
+    required this.onCopy,
+  });
+
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final String label;
+  final String value;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: iconBg,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: iconColor, size: 19),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                label,
+                style: const TextStyle(
+                  color: YanColors.mutedText,
+                  fontSize: 11.4,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1948,776 +1521,74 @@ class _RequisiteRow extends StatelessWidget {
               Text(
                 value,
                 style: const TextStyle(
-                  color: Color(0xFFF1F5FC),
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
+                  color: YanColors.primaryNavy,
+                  fontSize: 13.6,
+                  fontWeight: FontWeight.w800,
+                  height: 1.25,
                 ),
               ),
             ],
           ),
         ),
-      ],
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Security & Account Management Card
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _SecurityAndAccountCard extends StatelessWidget {
-  const _SecurityAndAccountCard({
-    required this.profile,
-    required this.onSecurityTap,
-    required this.onPinTap,
-    required this.onLogoutTap,
-  });
-
-  final UserProfileData profile;
-  final VoidCallback onSecurityTap;
-  final VoidCallback onPinTap;
-  final VoidCallback onLogoutTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onSecurityTap,
-            borderRadius: BorderRadius.circular(18),
-            child: Ink(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF153329).withValues(alpha: 0.72),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: const Color(0xFF75D9AF).withValues(alpha: 0.20),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF75D9AF).withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(13),
-                    ),
-                    child: const Icon(
-                      CupertinoIcons.lock_shield_fill,
-                      color: Color(0xFF83DEB7),
-                      size: 21,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          profile.biometricEnabled
-                              ? 'Biometrik himoya va shifrlash faol'
-                              : 'Biometrik himoyani yoqish',
-                          style: const TextStyle(
-                            color: Color(0xFFE9F8F0),
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          profile.hasPinCode
-                              ? '4 xonali PIN-kod va biometrik qulf o‘rnatilgan'
-                              : 'Qo‘shimcha 4 xonali PIN-kod o‘rnatish uchun bosing',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.56),
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    CupertinoIcons.chevron_right,
-                    color: Color(0xFF9BDCBF),
-                    size: 16,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onPinTap,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFD8E5FF),
-                  side: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.12),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                icon: const Icon(CupertinoIcons.lock_fill, size: 15),
-                label: Text(
-                  profile.hasPinCode ? 'PIN-kodni yangilash' : 'PIN-kod qo‘yish',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onLogoutTap,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFFF9FB2),
-                  side: BorderSide(
-                    color: const Color(0xFFFF8B9E).withValues(alpha: 0.25),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                icon: const Icon(CupertinoIcons.square_arrow_right, size: 16),
-                label: const Text(
-                  'Hisobdan chiqish',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Supporting Widgets
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _ProfileTopBar extends StatelessWidget {
-  const _ProfileTopBar({
-    required this.profile,
-    required this.onNotificationTap,
-    required this.onSecurityTap,
-  });
-
-  final UserProfileData profile;
-  final VoidCallback onNotificationTap;
-  final VoidCallback onSecurityTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 42,
-          height: 42,
-          padding: const EdgeInsets.all(7),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-          ),
-          child: Image.asset('assets/logo.png', fit: BoxFit.contain),
-        ),
-        const SizedBox(width: 11),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'YAN360',
-                style: TextStyle(
-                  color: Color(0xFFF3F6FC),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.3,
-                ),
-              ),
-              SizedBox(height: 2),
-              Text(
-                'SHAXSIY YURIDIK KABINET',
-                style: TextStyle(
-                  color: Color(0xFF8190A5),
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.9,
-                ),
-              ),
-            ],
-          ),
-        ),
-        _HeaderIconButton(
-          icon: profile.notificationsEnabled
-              ? CupertinoIcons.bell_fill
-              : CupertinoIcons.bell_slash,
-          tooltip: 'Bildirishnomalar',
-          showBadge: profile.notificationsEnabled,
-          onTap: onNotificationTap,
-        ),
-        const SizedBox(width: 8),
-        _HeaderIconButton(
-          icon: CupertinoIcons.shield_fill,
-          tooltip: 'Xavfsizlik sozlamalari',
-          onTap: onSecurityTap,
-        ),
-      ],
-    );
-  }
-}
-
-class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-    this.showBadge = false,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final bool showBadge;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(13),
+        GestureDetector(
+          onTap: onCopy,
           child: Container(
-            width: 42,
-            height: 42,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.065),
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.11)),
+              color: YanColors.lightBlue,
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(icon, color: const Color(0xFFB8C7DC), size: 19),
-                if (showBadge)
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF73D9AF),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-              ],
+            child: const Icon(
+              CupertinoIcons.doc_on_doc,
+              size: 15,
+              color: YanColors.primaryBlue,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    required this.trailing,
-    this.trailingIcon,
-  });
-
-  final String title;
-  final String trailing;
-  final IconData? trailingIcon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xFFF0F4FA),
-              fontSize: 16.5,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        if (trailingIcon != null) ...[
-          Icon(trailingIcon, color: const Color(0xFF79D8AE), size: 13),
-          const SizedBox(width: 5),
-        ],
-        Text(
-          trailing,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.46),
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
           ),
         ),
       ],
-    );
-  }
-}
-
-class _WorkspaceActionTile extends StatelessWidget {
-  const _WorkspaceActionTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.badge,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String badge;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(17),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.055),
-            borderRadius: BorderRadius.circular(17),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.085)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(13),
-                  border: Border.all(color: color.withValues(alpha: 0.22)),
-                ),
-                child: Icon(icon, color: color, size: 20),
-              ),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFFF0F4FA),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.48),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  badge,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Icon(
-                CupertinoIcons.chevron_right,
-                color: Colors.white.withValues(alpha: 0.35),
-                size: 14,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
 
 class _ProfileInputField extends StatelessWidget {
   const _ProfileInputField({
+    required this.label,
     required this.controller,
-    required this.label,
-    required this.hint,
-    required this.icon,
-    this.keyboardType,
-    this.maxLines = 1,
-    this.capitalization = TextCapitalization.none,
   });
 
+  final String label;
   final TextEditingController controller;
-  final String label;
-  final String hint;
-  final IconData icon;
-  final TextInputType? keyboardType;
-  final int maxLines;
-  final TextCapitalization capitalization;
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      textCapitalization: capitalization,
-      cursorColor: const Color(0xFF9DBBFF),
-      style: const TextStyle(
-        color: Color(0xFFF4F7FC),
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        labelStyle: TextStyle(
-          color: Colors.white.withValues(alpha: 0.52),
-          fontSize: 12.5,
-        ),
-        hintStyle: TextStyle(
-          color: Colors.white.withValues(alpha: 0.30),
-          fontSize: 12.5,
-        ),
-        prefixIcon: Icon(icon, color: const Color(0xFF9DBBFF), size: 18),
-        filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.055),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 15,
-          vertical: 14,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: Colors.white.withValues(alpha: 0.11),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          label,
+          style: const TextStyle(
+            color: YanColors.mutedText,
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
           ),
         ),
-        focusedBorder: const OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(14)),
-          borderSide: BorderSide(color: Color(0xFF84A9FF)),
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileDropdown extends StatelessWidget {
-  const _ProfileDropdown({
-    required this.label,
-    required this.value,
-    required this.options,
-    required this.onChanged,
-  });
-
-  final String label;
-  final String? value;
-  final List<String> options;
-  final ValueChanged<String?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      initialValue: options.contains(value) ? value : null,
-      isExpanded: true,
-      dropdownColor: const Color(0xFF152940),
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(
-          color: Colors.white.withValues(alpha: 0.52),
-          fontSize: 12,
-        ),
-        filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.055),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: Colors.white.withValues(alpha: 0.11),
+        const SizedBox(height: 4),
+        CupertinoTextField(
+          controller: controller,
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+          style: const TextStyle(
+            color: YanColors.primaryNavy,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
           ),
-        ),
-        focusedBorder: const OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(14)),
-          borderSide: BorderSide(color: Color(0xFF84A9FF)),
-        ),
-      ),
-      items: options
-          .map(
-            (e) => DropdownMenuItem<String>(
-              value: e,
-              child: Text(e, overflow: TextOverflow.ellipsis),
-            ),
-          )
-          .toList(growable: false),
-      onChanged: onChanged,
-    );
-  }
-}
-
-class _SourceButton extends StatelessWidget {
-  const _SourceButton({
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.085),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withValues(alpha: 0.22)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 20),
-              ),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        color: Color(0xFFF3F6FC),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.48),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                CupertinoIcons.chevron_right,
-                color: color.withValues(alpha: 0.60),
-                size: 15,
-              ),
-            ],
+            color: YanColors.lightBlue.withValues(alpha: 0.65),
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: YanColors.border),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ProfileBottomSheet extends StatelessWidget {
-  const _ProfileBottomSheet({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        8,
-        20,
-        20 + MediaQuery.paddingOf(context).bottom,
-      ),
-      decoration: const BoxDecoration(
-        color: Color(0xFF132437),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-      ),
-      child: child,
-    );
-  }
-}
-
-class _SheetHandle extends StatelessWidget {
-  const _SheetHandle();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 38,
-        height: 4,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.20),
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-    );
-  }
-}
-
-class _SheetBrandMark extends StatelessWidget {
-  const _SheetBrandMark();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 40,
-      height: 40,
-      padding: const EdgeInsets.all(7),
-      decoration: BoxDecoration(
-        color: const Color(0xFF4A79E0).withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFF9DBBFF).withValues(alpha: 0.22),
-        ),
-      ),
-      child: Image.asset('assets/logo.png', fit: BoxFit.contain),
-    );
-  }
-}
-
-class _SecuritySetting extends StatelessWidget {
-  const _SecuritySetting({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.055),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.085)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: const Color(0xFF7BE0B4).withValues(alpha: 0.13),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: const Color(0xFF86E5BA), size: 19),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Color(0xFFF1F5FA),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.46),
-                    fontSize: 10.5,
-                    height: 1.25,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          CupertinoSwitch(
-            value: value,
-            activeTrackColor: const Color(0xFF57B88D),
-            onChanged: onChanged,
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
