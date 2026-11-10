@@ -1,13 +1,10 @@
 name: legaltech_app
-description: "A new Flutter project."
-# The following line prevents the package from being accidentally published to
-# pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-
-version: 1.0.0+1
+description: "YAN360 — Premium LegalTech Platform with Supabase & E2EE."
+publish_to: 'none'
+version: 1.0.0+2
 
 environment:
-  sdk: ^3.13.3
+  sdk: ^3.11.0
 
 dependencies:
   flutter:
@@ -18,19 +15,17 @@ dependencies:
   archive: 3.6.1
   path_provider: 2.1.5
   open_filex: 4.7.0
+  supabase_flutter: ^2.8.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
   flutter_lints: ^6.0.0
 
 flutter:
-
   uses-material-design: true
 
   assets:
     - assets/logo.png
-    - assets/login_bg.jpg
     - assets/service_artwork/
     - assets/templates/
