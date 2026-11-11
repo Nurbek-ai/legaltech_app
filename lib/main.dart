@@ -47,7 +47,7 @@ String formatPhoneAsDummyEmail(String rawPhone) {
   if (digits.length == 9) {
     digits = '998$digits';
   }
-  return '$digits@testapp.com';
+  return 'yan360.$digits@gmail.com';
 }
 
 /// Maps Supabase `public.profiles.role` ('client', 'advocate', 'assistant')
