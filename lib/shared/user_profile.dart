@@ -1025,7 +1025,15 @@ class YanRoleDataCatalog {
     final normA = normalizeId(idA);
     final normB = normalizeId(idB);
     if (normA.isEmpty || normB.isEmpty) return false;
-    return normA == normB;
+    if (normA == normB) return true;
+    // Match 8-char YAN-XXXXXXXX short IDs against their full 32-char UUID prefix
+    if (normA.length == 8 && normB.length >= 16 && normB.startsWith(normA)) {
+      return true;
+    }
+    if (normB.length == 8 && normA.length >= 16 && normA.startsWith(normB)) {
+      return true;
+    }
+    return false;
   }
 
   /// Live list of "Advokatga ariza yozdirish" orders & completed `#ariza` deliveries.

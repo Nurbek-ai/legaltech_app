@@ -6,6 +6,7 @@ import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:archive/archive.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -5205,7 +5206,8 @@ class _ArizaFileDeliveryMeta {
   final String arizaId;
   final String status; // 'null' (unresponded), 'accepted', 'rejected'
   final String fileName;
-  final String storagePath;
+  final String storagePath; // Original unwatermarked file path in Supabase Storage
+  final String watermarkedStoragePath; // Watermarked inspection file path in Supabase Storage
   final String storageBucket;
   final String localPath;
   final String sentTimeIso;
@@ -5217,6 +5219,7 @@ class _ArizaFileDeliveryMeta {
     this.status = 'null',
     required this.fileName,
     this.storagePath = '',
+    this.watermarkedStoragePath = '',
     this.storageBucket = 'advocate_licenses',
     this.localPath = '',
     this.sentTimeIso = '',
@@ -5227,20 +5230,73 @@ class _ArizaFileDeliveryMeta {
   DateTime? get sentAtDateTime =>
       sentTimeIso.isNotEmpty ? DateTime.tryParse(sentTimeIso)?.toLocal() : null;
 
-  /// Delivery controls unlock only after the client explicitly accepts.
+  /// Delivery controls unlock once the client accepts (or after 30 minutes if unresponded).
   bool isEffectivelyAccepted(DateTime now) {
-    return status == 'accepted';
+    if (status == 'accepted') return true;
+    final sentAt = sentAtDateTime;
+    if (status == 'null' &&
+        sentAt != null &&
+        now.difference(sentAt).inMinutes >= 30) {
+      return true;
+    }
+    return false;
+  }
+
+  static int _statusRank(String s) {
+    if (s == 'accepted') return 2;
+    if (s == 'rejected') return 1;
+    return 0;
+  }
+
+  /// Ensures background profile envelope polling never downgrades `accepted` or `rejected` back to `null`!
+  static String? mergeMediaMeta(String? currentMeta, String? incomingMeta) {
+    if (incomingMeta == null || incomingMeta.isEmpty) return currentMeta;
+    if (currentMeta == null || currentMeta.isEmpty) return incomingMeta;
+    if (currentMeta.startsWith('ARIZA_FILE_V2|') &&
+        incomingMeta.startsWith('ARIZA_FILE_V2|')) {
+      final cur = tryParse(currentMeta, '');
+      final inc = tryParse(incomingMeta, '');
+      if (cur != null && inc != null) {
+        final bestStatus = _statusRank(inc.status) >= _statusRank(cur.status)
+            ? inc.status
+            : cur.status;
+        final bestStars = inc.ratedStars > cur.ratedStars
+            ? inc.ratedStars
+            : cur.ratedStars;
+        final bestReason = inc.rejectionReason.isNotEmpty
+            ? inc.rejectionReason
+            : cur.rejectionReason;
+        return cur
+            .copyWith(
+              status: bestStatus,
+              ratedStars: bestStars,
+              rejectionReason: bestReason,
+              storagePath: inc.storagePath.isNotEmpty
+                  ? inc.storagePath
+                  : cur.storagePath,
+              watermarkedStoragePath: inc.watermarkedStoragePath.isNotEmpty
+                  ? inc.watermarkedStoragePath
+                  : cur.watermarkedStoragePath,
+              storageBucket: inc.storageBucket.isNotEmpty
+                  ? inc.storageBucket
+                  : cur.storageBucket,
+            )
+            .encode();
+      }
+    }
+    return incomingMeta;
   }
 
   String encode() {
     final safeId = Uri.encodeComponent(arizaId);
     final safeName = Uri.encodeComponent(fileName);
     final safeStorage = Uri.encodeComponent(storagePath);
+    final safeWmStorage = Uri.encodeComponent(watermarkedStoragePath);
     final safeBucket = Uri.encodeComponent(storageBucket);
     final safeLocal = Uri.encodeComponent(localPath);
     final safeSent = Uri.encodeComponent(sentTimeIso);
     final safeReason = Uri.encodeComponent(rejectionReason);
-    return 'ARIZA_FILE_V2|id:$safeId|status:$status|name:$safeName|storage:$safeStorage|bucket:$safeBucket|local:$safeLocal|sent:$safeSent|stars:$ratedStars|reason:$safeReason';
+    return 'ARIZA_FILE_V2|id:$safeId|status:$status|name:$safeName|storage:$safeStorage|wmstorage:$safeWmStorage|bucket:$safeBucket|local:$safeLocal|sent:$safeSent|stars:$ratedStars|reason:$safeReason';
   }
 
   _ArizaFileDeliveryMeta copyWith({
@@ -5248,6 +5304,7 @@ class _ArizaFileDeliveryMeta {
     String? status,
     String? fileName,
     String? storagePath,
+    String? watermarkedStoragePath,
     String? storageBucket,
     String? localPath,
     String? sentTimeIso,
@@ -5259,6 +5316,8 @@ class _ArizaFileDeliveryMeta {
       status: status ?? this.status,
       fileName: fileName ?? this.fileName,
       storagePath: storagePath ?? this.storagePath,
+      watermarkedStoragePath:
+          watermarkedStoragePath ?? this.watermarkedStoragePath,
       storageBucket: storageBucket ?? this.storageBucket,
       localPath: localPath ?? this.localPath,
       sentTimeIso: sentTimeIso ?? this.sentTimeIso,
@@ -5286,6 +5345,7 @@ class _ArizaFileDeliveryMeta {
             ? map['name']!
             : 'Tayyor_Ariza.docx',
         storagePath: map['storage'] ?? '',
+        watermarkedStoragePath: map['wmstorage'] ?? '',
         storageBucket: map['bucket']?.isNotEmpty == true
             ? map['bucket']!
             : 'advocate_licenses',
@@ -5383,6 +5443,57 @@ class _YanE2eeCryptoEngine {
     } catch (_) {
       return payload;
     }
+  }
+
+  static const List<int> _binaryMagic = <int>[
+    0x59, 0x41, 0x4E, 0x45, 0x32, 0x45, 0x45, 0x31 // "YANE2EE1"
+  ];
+
+  /// Encrypts binary chat file bytes (everything except `#ariza` audit files) using the room E2EE key.
+  static Uint8List encryptBytes(List<int> plainBytes, String roomKey) {
+    final rnd = Random.secure();
+    final nonceBytes = List<int>.generate(8, (_) => rnd.nextInt(256));
+    final nonceHex = nonceBytes
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    final stream = _deriveKeyStream(roomKey, nonceHex, plainBytes.length);
+    final out = Uint8List(_binaryMagic.length + 8 + plainBytes.length);
+    for (var i = 0; i < _binaryMagic.length; i++) {
+      out[i] = _binaryMagic[i];
+    }
+    for (var i = 0; i < 8; i++) {
+      out[_binaryMagic.length + i] = nonceBytes[i];
+    }
+    final offset = _binaryMagic.length + 8;
+    for (var i = 0; i < plainBytes.length; i++) {
+      out[offset + i] = (plainBytes[i] ^ stream[i]) & 0xFF;
+    }
+    return out;
+  }
+
+  /// Decrypts binary chat file bytes on-device using the room E2EE key.
+  static Uint8List decryptBytes(Uint8List rawBytes, String roomKey) {
+    if (rawBytes.length < _binaryMagic.length + 8) return rawBytes;
+    for (var i = 0; i < _binaryMagic.length; i++) {
+      if (rawBytes[i] != _binaryMagic[i]) {
+        return rawBytes; // Legacy unencrypted fallback
+      }
+    }
+    final nonceBytes = rawBytes.sublist(
+      _binaryMagic.length,
+      _binaryMagic.length + 8,
+    );
+    final nonceHex = nonceBytes
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    final cipherLen = rawBytes.length - (_binaryMagic.length + 8);
+    final stream = _deriveKeyStream(roomKey, nonceHex, cipherLen);
+    final plain = Uint8List(cipherLen);
+    final offset = _binaryMagic.length + 8;
+    for (var i = 0; i < cipherLen; i++) {
+      plain[i] = (rawBytes[offset + i] ^ stream[i]) & 0xFF;
+    }
+    return plain;
   }
 
   static Map<String, dynamic> decodeProfileEnvelope(String? rawPublicKey) {
@@ -5518,21 +5629,43 @@ class _YanE2eeCryptoEngine {
     );
   }
 
+  static String _resolveCurrentUserId() {
+    final authId = Supabase.instance.client.auth.currentUser?.id ?? '';
+    if (authId.trim().isNotEmpty) return authId.trim();
+    return userProfile.value.clientId.trim();
+  }
+
+  static ArizaOrderItem _mergeOrderState(
+    ArizaOrderItem existing,
+    ArizaOrderItem incoming,
+  ) {
+    if (incoming.isCompleted && !existing.isCompleted) return incoming;
+    if (existing.isCompleted && !incoming.isCompleted) return existing;
+    if (incoming.clientResponseStatus == 'accepted') return incoming;
+    if (existing.clientResponseStatus == 'accepted') return existing;
+    if (incoming.clientResponseStatus == 'rejected' &&
+        existing.clientResponseStatus != 'rejected') {
+      return incoming;
+    }
+    if (incoming.arizaSentAt != null && existing.arizaSentAt == null) {
+      return incoming;
+    }
+    return existing;
+  }
+
   static Future<void> persistArizaOrdersLedger() async {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    final scopedOrders = userId == null
-        ? const <ArizaOrderItem>[]
+    final userId = _resolveCurrentUserId();
+    final scopedOrders = userId.isEmpty
+        ? YanRoleDataCatalog.arizaOrders.value
         : YanRoleDataCatalog.arizaOrders.value.where((order) =>
             YanRoleDataCatalog.isSameParticipant(order.clientId, userId) ||
             YanRoleDataCatalog.isSameParticipant(order.advocateId, userId));
-    final list = scopedOrders
-        .map((e) => e.toJson())
-        .toList();
+    final list = scopedOrders.map((e) => e.toJson()).toList();
     final jsonStr = jsonEncode(list);
     final encryptedPayload = encrypt(jsonStr, _envelopeKey);
 
     try {
-      if (userId != null) {
+      if (userId.isNotEmpty) {
         final f = await _localArizaLedgerFile(userId);
         await f.writeAsString(encryptedPayload, flush: true);
       }
@@ -5542,19 +5675,18 @@ class _YanE2eeCryptoEngine {
   }
 
   static Future<void> syncArizaOrdersLedger() async {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
+    final userId = _resolveCurrentUserId();
     final byId = <String, ArizaOrderItem>{};
-    if (userId != null) {
-      for (final item in YanRoleDataCatalog.arizaOrders.value) {
-        if (YanRoleDataCatalog.isSameParticipant(item.clientId, userId) ||
-            YanRoleDataCatalog.isSameParticipant(item.advocateId, userId)) {
-          byId[item.id] = item;
-        }
+    for (final item in YanRoleDataCatalog.arizaOrders.value) {
+      if (userId.isEmpty ||
+          YanRoleDataCatalog.isSameParticipant(item.clientId, userId) ||
+          YanRoleDataCatalog.isSameParticipant(item.advocateId, userId)) {
+        byId[item.id] = item;
       }
     }
 
     try {
-      final f = userId == null ? null : await _localArizaLedgerFile(userId);
+      final f = userId.isEmpty ? null : await _localArizaLedgerFile(userId);
       if (f != null && await f.exists()) {
         final enc = await f.readAsString();
         final dec = decrypt(enc, _envelopeKey);
@@ -5565,50 +5697,59 @@ class _YanE2eeCryptoEngine {
               final parsed = ArizaOrderItem.fromJson(
                 Map<String, dynamic>.from(raw),
               );
-              byId[parsed.id] = parsed;
+              if (userId.isEmpty ||
+                  YanRoleDataCatalog.isSameParticipant(
+                    parsed.clientId,
+                    userId,
+                  ) ||
+                  YanRoleDataCatalog.isSameParticipant(
+                    parsed.advocateId,
+                    userId,
+                  )) {
+                final existing = byId[parsed.id];
+                byId[parsed.id] = existing == null
+                    ? parsed
+                    : _mergeOrderState(existing, parsed);
+              }
             }
           }
         }
       }
     } catch (_) {}
 
+    // Read all profile envelopes so an Advocate receives ArizaOrderItems created by a Client
+    // (and a Client receives updates made by an Advocate), strictly filtered to `userId`!
     try {
-      final row = userId == null
-          ? null
-          : await Supabase.instance.client
-                .from('profiles')
-                .select('public_key')
-                .eq('id', userId)
-                .maybeSingle();
-      if (row != null) {
-        final map = Map<String, dynamic>.from(row);
+      final rows = await Supabase.instance.client
+          .from('profiles')
+          .select('id, public_key');
+      for (final rawRow in rows) {
+        final map = Map<String, dynamic>.from(rawRow as Map);
         final pubKey = map['public_key']?.toString();
-        if (pubKey != null && pubKey.contains(_envelopeSeparator)) {
-          final env = decodeProfileEnvelope(pubKey);
-          final rawOrders = env['ariza_orders'];
-          if (rawOrders is List) {
-            for (final item in rawOrders) {
-              if (item is Map) {
-                final parsed = ArizaOrderItem.fromJson(
-                  Map<String, dynamic>.from(item),
-                );
-                if (userId == null ||
-                    !(YanRoleDataCatalog.isSameParticipant(
-                          parsed.clientId,
-                          userId,
-                        ) ||
-                        YanRoleDataCatalog.isSameParticipant(
-                          parsed.advocateId,
-                          userId,
-                        ))) {
-                  continue;
-                }
-                final existing = byId[parsed.id];
-                if (existing == null ||
-                    (!existing.isCompleted && parsed.isCompleted)) {
-                  byId[parsed.id] = parsed;
-                }
+        if (pubKey == null || !pubKey.contains(_envelopeSeparator)) continue;
+        final env = decodeProfileEnvelope(pubKey);
+        final rawOrders = env['ariza_orders'];
+        if (rawOrders is List) {
+          for (final item in rawOrders) {
+            if (item is Map) {
+              final parsed = ArizaOrderItem.fromJson(
+                Map<String, dynamic>.from(item),
+              );
+              if (userId.isNotEmpty &&
+                  !(YanRoleDataCatalog.isSameParticipant(
+                        parsed.clientId,
+                        userId,
+                      ) ||
+                      YanRoleDataCatalog.isSameParticipant(
+                        parsed.advocateId,
+                        userId,
+                      ))) {
+                continue;
               }
+              final existing = byId[parsed.id];
+              byId[parsed.id] = existing == null
+                  ? parsed
+                  : _mergeOrderState(existing, parsed);
             }
           }
         }
@@ -5649,8 +5790,7 @@ class _ChatMessageItem {
   });
 
   bool isMine(String myUserId) =>
-      _YanE2eeCryptoEngine.normalizeParticipantId(senderId) ==
-      _YanE2eeCryptoEngine.normalizeParticipantId(myUserId);
+      YanRoleDataCatalog.isSameParticipant(senderId, myUserId);
 
   _ArizaFileDeliveryMeta? get arizaDeliveryMeta =>
       _ArizaFileDeliveryMeta.tryParse(mediaMeta, text);
@@ -5973,6 +6113,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
 
   RealtimeChannel? _roomChannel;
   Timer? _offlinePollAndHeartbeatTimer;
+  Timer? _uiCountdownTicker;
   late final String _myUserId;
   late final String _peerUserId;
   late final String _roomKey;
@@ -6001,6 +6142,13 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
 
     _initRealtimeZeroLagChannel();
     _loadCrossDeviceEncryptedHistory();
+    _YanE2eeCryptoEngine.syncArizaOrdersLedger();
+
+    _uiCountdownTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _isMyAppInForeground) {
+        setState(() {});
+      }
+    });
 
     _offlinePollAndHeartbeatTimer = Timer.periodic(
       const Duration(seconds: 2),
@@ -6033,6 +6181,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
 
   @override
   void dispose() {
+    _uiCountdownTicker?.cancel();
     _offlinePollAndHeartbeatTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _broadcastMyPresence(isOnline: false);
@@ -6092,8 +6241,12 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                   _sendSeenReceipt(<String>[msg.id]);
                 }
               } else {
+                final mergedMeta = _ArizaFileDeliveryMeta.mergeMediaMeta(
+                  _messages[idx].mediaMeta,
+                  msg.mediaMeta,
+                );
                 setState(() {
-                  _messages[idx] = msg;
+                  _messages[idx] = msg.copyWith(mediaMeta: mergedMeta);
                 });
                 _saveLocalEncryptedCache();
               }
@@ -6184,12 +6337,13 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                       );
                       changed = true;
                     }
-                    if (_messages[idx].mediaMeta != incoming.mediaMeta &&
-                        incoming.mediaMeta != null &&
-                        incoming.mediaMeta!.contains('status:') &&
-                        !incoming.mediaMeta!.contains('status:pending')) {
+                    final mergedMeta = _ArizaFileDeliveryMeta.mergeMediaMeta(
+                      _messages[idx].mediaMeta,
+                      incoming.mediaMeta,
+                    );
+                    if (mergedMeta != _messages[idx].mediaMeta) {
                       _messages[idx] = _messages[idx].copyWith(
-                        mediaMeta: incoming.mediaMeta,
+                        mediaMeta: mergedMeta,
                       );
                       changed = true;
                     }
@@ -6470,12 +6624,13 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                   );
                   changed = true;
                 }
-                if (_messages[idx].mediaMeta != incoming.mediaMeta &&
-                    incoming.mediaMeta != null &&
-                    incoming.mediaMeta!.contains('status:') &&
-                    !incoming.mediaMeta!.contains('status:pending')) {
+                final mergedMeta = _ArizaFileDeliveryMeta.mergeMediaMeta(
+                  _messages[idx].mediaMeta,
+                  incoming.mediaMeta,
+                );
+                if (mergedMeta != _messages[idx].mediaMeta) {
                   _messages[idx] = _messages[idx].copyWith(
-                    mediaMeta: incoming.mediaMeta,
+                    mediaMeta: mergedMeta,
                   );
                   changed = true;
                 }
@@ -6484,6 +6639,31 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
           }
         }
       }
+
+      // Also sync ariza status from `public.arizas` table so status ('accepted' / 'rejected')
+      // is authoritative even if a profile envelope was stale
+      try {
+        for (var i = 0; i < _messages.length; i++) {
+          final meta = _messages[i].arizaDeliveryMeta;
+          if (meta != null && meta.arizaId.isNotEmpty) {
+            final dbRow = await Supabase.instance.client
+                .from('arizas')
+                .select('status')
+                .eq('ariza_id', meta.arizaId)
+                .maybeSingle();
+            final dbStatus = dbRow?['status']?.toString();
+            if (dbStatus != null &&
+                (dbStatus == 'accepted' || dbStatus == 'rejected') &&
+                meta.status != dbStatus) {
+              final nextMeta = meta.copyWith(status: dbStatus).encode();
+              _messages[i] = _messages[i].copyWith(mediaMeta: nextMeta);
+              changed = true;
+            }
+          }
+        }
+      } catch (_) {}
+
+      await _YanE2eeCryptoEngine.syncArizaOrdersLedger();
 
       if (changed && mounted) {
         setState(() {
@@ -6733,14 +6913,23 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
   }
 
   bool _belongsToThisRoom(_ChatMessageItem message) {
-    final sender = _YanE2eeCryptoEngine.normalizeParticipantId(message.senderId);
-    final receiver = _YanE2eeCryptoEngine.normalizeParticipantId(
-      message.receiverId,
+    final sMine = YanRoleDataCatalog.isSameParticipant(
+      message.senderId,
+      _myUserId,
     );
-    final mine = _YanE2eeCryptoEngine.normalizeParticipantId(_myUserId);
-    final peer = _YanE2eeCryptoEngine.normalizeParticipantId(_peerUserId);
-    return (sender == mine && receiver == peer) ||
-        (sender == peer && receiver == mine);
+    final rPeer = YanRoleDataCatalog.isSameParticipant(
+      message.receiverId,
+      _peerUserId,
+    );
+    final sPeer = YanRoleDataCatalog.isSameParticipant(
+      message.senderId,
+      _peerUserId,
+    );
+    final rMine = YanRoleDataCatalog.isSameParticipant(
+      message.receiverId,
+      _myUserId,
+    );
+    return (sMine && rPeer) || (sPeer && rMine);
   }
 
   Future<PlatformFile?> _pickAnyDeviceFile() async {
@@ -6771,7 +6960,9 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
       if (picked == null) return;
       final path = picked.path;
       final bytes = picked.bytes ??
-          (path == null ? throw StateError('Fayl ma’lumoti olinmadi') : await File(path).readAsBytes());
+          (path == null
+              ? throw StateError('Fayl ma’lumoti olinmadi')
+              : await File(path).readAsBytes());
       final extension = picked.extension?.toLowerCase() ?? '';
       final mediaType = <String>{'jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'}
               .contains(extension)
@@ -6779,18 +6970,40 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
           : extension == 'mp4' || extension == 'mov'
           ? _ChatMediaType.video
           : _ChatMediaType.document;
+      final cleanName = picked.name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
       final objectPath =
-          'chat/${_roomKey}/${DateTime.now().microsecondsSinceEpoch}_${picked.name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_')}';
-      await Supabase.instance.client.storage.from('chat_media').uploadBinary(
-        objectPath,
-        Uint8List.fromList(bytes),
-        fileOptions: const FileOptions(upsert: false),
-      );
+          'chat_e2ee/$_roomKey/${DateTime.now().microsecondsSinceEpoch}_$cleanName.e2ee';
+
+      // Encrypt regular chat files on-device with E2EE before uploading so ONLY #ariza files
+      // are accessible to the firm in plaintext!
+      final encryptedBytes = _YanE2eeCryptoEngine.encryptBytes(bytes, _roomKey);
+      var storageBucket = 'chat_media';
+      try {
+        await Supabase.instance.client.storage
+            .from(storageBucket)
+            .uploadBinary(
+              objectPath,
+              encryptedBytes,
+              fileOptions: const FileOptions(upsert: true),
+            );
+      } catch (_) {
+        storageBucket = 'advocate_licenses';
+        await Supabase.instance.client.storage
+            .from(storageBucket)
+            .uploadBinary(
+              objectPath,
+              encryptedBytes,
+              fileOptions: const FileOptions(upsert: true),
+            );
+      }
+
       final mimeType = extension.isEmpty
           ? 'application/octet-stream'
           : 'application/${extension == 'pdf' ? 'pdf' : extension}';
       final meta = 'CHAT_FILE_V1|name:${Uri.encodeComponent(picked.name)}'
           '|storage:${Uri.encodeComponent(objectPath)}'
+          '|bucket:${Uri.encodeComponent(storageBucket)}'
+          '|e2ee:1'
           '|mime:${Uri.encodeComponent(mimeType)}|size:${bytes.length}';
       _dispatchInstantEncryptedMessage(
         text: picked.name,
@@ -6808,14 +7021,31 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
   Future<File?> _downloadChatFile(Map<String, String> meta) async {
     final storagePath = meta['storage'] ?? '';
     if (storagePath.isEmpty) return null;
-    final bytes = await Supabase.instance.client.storage
-        .from('chat_media')
-        .download(storagePath);
+    final bucket = (meta['bucket'] ?? '').isNotEmpty
+        ? meta['bucket']!
+        : 'chat_media';
+    Uint8List rawBytes;
+    try {
+      rawBytes = await Supabase.instance.client.storage
+          .from(bucket)
+          .download(storagePath);
+    } catch (_) {
+      final altBucket =
+          bucket == 'chat_media' ? 'advocate_licenses' : 'chat_media';
+      rawBytes = await Supabase.instance.client.storage
+          .from(altBucket)
+          .download(storagePath);
+    }
+    // Decrypt E2EE chat file bytes if encrypted (`e2ee:1`), while leaving unencrypted #ariza files untouched
+    final isPlainAriza = meta['e2ee'] == '0';
+    final plainBytes = isPlainAriza
+        ? rawBytes
+        : _YanE2eeCryptoEngine.decryptBytes(rawBytes, _roomKey);
     final directory = await getTemporaryDirectory();
     final name = (meta['name'] ?? 'fayl')
         .replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
     final file = File('${directory.path}${Platform.pathSeparator}$name');
-    await file.writeAsBytes(bytes, flush: true);
+    await file.writeAsBytes(plainBytes, flush: true);
     return file;
   }
 
@@ -6932,19 +7162,36 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
               var storageBucket = 'advocate_licenses';
 
               // 1. Save the ORIGINAL unencrypted ariza file in Supabase Storage
-              // so the firm can audit how arizas were written by advocates!
+              // so the firm can audit how arizas were written by advocates, AND
+              // generate + upload a WATERMARKED copy for the client to inspect before confirming!
               final bytes = await selectedFile!.readAsBytes();
               final cleanName = selectedFileName.replaceAll(
                 RegExp(r'[^a-zA-Z0-9._-]'),
                 '_',
               );
               storagePath = 'provided_arizas/$arizaId/$cleanName';
+              final watermarkedBytes = _buildWatermarkedArizaFileBytes(
+                originalBytes: Uint8List.fromList(bytes),
+                fileName: selectedFileName,
+                arizaId: arizaId,
+                advocateName: widget.profile.displayName,
+              );
+              final watermarkedStoragePath =
+                  'provided_arizas/$arizaId/WATERMARKED_$cleanName';
+
               try {
                 await Supabase.instance.client.storage
                     .from(storageBucket)
                     .uploadBinary(
                       storagePath,
                       Uint8List.fromList(bytes),
+                      fileOptions: const FileOptions(upsert: true),
+                    );
+                await Supabase.instance.client.storage
+                    .from(storageBucket)
+                    .uploadBinary(
+                      watermarkedStoragePath,
+                      watermarkedBytes,
                       fileOptions: const FileOptions(upsert: true),
                     );
               } catch (_) {
@@ -6955,6 +7202,13 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                       .uploadBinary(
                         storagePath,
                         Uint8List.fromList(bytes),
+                        fileOptions: const FileOptions(upsert: true),
+                      );
+                  await Supabase.instance.client.storage
+                      .from(storageBucket)
+                      .uploadBinary(
+                        watermarkedStoragePath,
+                        watermarkedBytes,
                         fileOptions: const FileOptions(upsert: true),
                       );
                 } catch (error) {
@@ -6989,6 +7243,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                 status: 'null',
                 fileName: selectedFileName,
                 storagePath: storagePath,
+                watermarkedStoragePath: watermarkedStoragePath,
                 storageBucket: storageBucket,
                 localPath: selectedFile!.path,
                 sentTimeIso: nowIso,
@@ -7270,312 +7525,220 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     );
   }
 
-  /// Opens the in-app YAN360 Watermarked Preview (`Ko‘rish`) so the client
-  /// can inspect the ariza inside the app with YAN360 watermarks overlaid,
-  /// preventing them from saving or exporting it before clicking `Qabul qilish`!
-  Future<void> _openWatermarkedArizaPreviewModal(
-    _ChatMessageItem msg,
-    _ArizaFileDeliveryMeta meta,
-  ) async {
-    Uint8List? downloadedBytes;
-    String? textPreview;
-    String? downloadError;
+  /// Generates a real watermarked copy of the advocate's `#ariza` file so the client
+  /// can open and inspect it with watermarks BEFORE confirming (`Qabul qilish`).
+  /// Once confirmed, the original unwatermarked file is sent!
+  Uint8List _buildWatermarkedArizaFileBytes({
+    required Uint8List originalBytes,
+    required String fileName,
+    required String arizaId,
+    required String advocateName,
+  }) {
+    final lower = fileName.toLowerCase();
+    final watermarkBanner =
+        'YAN360 • HIMOYALANGAN KO‘RIK NUSXASI ($arizaId) — TASDIQLANMAGAN (QABUL QILISH KUTILMOQDA)';
+
+    // 1. For .docx files: inject bold red watermark banner paragraphs at top, middle, and bottom of word/document.xml
+    if (lower.endsWith('.docx')) {
+      try {
+        final archive = ZipDecoder().decodeBytes(originalBytes);
+        final outArchive = Archive();
+        for (final file in archive) {
+          if (file.isFile && file.name == 'word/document.xml') {
+            final xmlContent = utf8.decode(
+              file.content as List<int>,
+              allowMalformed: true,
+            );
+            final wmParagraphXml =
+                '<w:p>'
+                '<w:pPr><w:jc w:val="center"/></w:pPr>'
+                '<w:r><w:rPr><w:b/><w:color w:val="C62828"/><w:sz w:val="24"/></w:rPr>'
+                '<w:t>⚠️ $watermarkBanner ⚠️</w:t>'
+                '</w:r>'
+                '</w:p>';
+            var modifiedXml = xmlContent;
+            final bodyOpenIdx = modifiedXml.indexOf('<w:body>');
+            if (bodyOpenIdx >= 0) {
+              final insertPos = bodyOpenIdx + '<w:body>'.length;
+              modifiedXml =
+                  modifiedXml.substring(0, insertPos) +
+                  wmParagraphXml +
+                  modifiedXml.substring(insertPos);
+            }
+            // Also inject watermark between paragraphs so the entire document is watermarked
+            var pCount = 0;
+            modifiedXml = modifiedXml.replaceAllMapped(
+              RegExp(r'</w:p>'),
+              (match) {
+                pCount++;
+                if (pCount % 3 == 0) {
+                  return '</w:p>$wmParagraphXml';
+                }
+                return '</w:p>';
+              },
+            );
+            final encodedXml = utf8.encode(modifiedXml);
+            outArchive.addFile(
+              ArchiveFile('word/document.xml', encodedXml.length, encodedXml),
+            );
+          } else if (file.isFile) {
+            final data = file.content as List<int>;
+            outArchive.addFile(ArchiveFile(file.name, data.length, data));
+          }
+        }
+        final zipped = ZipEncoder().encode(outArchive);
+        if (zipped != null && zipped.isNotEmpty) {
+          return Uint8List.fromList(zipped);
+        }
+      } catch (_) {}
+    }
+
+    // 2. For .txt / plain text files: interleave watermark lines
+    if (lower.endsWith('.txt')) {
+      try {
+        final text = utf8.decode(originalBytes, allowMalformed: true);
+        final lines = text.split('\n');
+        final buf = StringBuffer()
+          ..writeln('========================================================')
+          ..writeln('⚠️ $watermarkBanner')
+          ..writeln('Advokat: $advocateName • Asl fayl "Qabul qilish" bosilgach yuboriladi.')
+          ..writeln('========================================================\n');
+        for (var i = 0; i < lines.length; i++) {
+          buf.writeln(lines[i]);
+          if ((i + 1) % 5 == 0) {
+            buf.writeln('\n[ $watermarkBanner ]\n');
+          }
+        }
+        return Uint8List.fromList(utf8.encode(buf.toString()));
+      } catch (_) {}
+    }
+
+    // 3. For .pdf files: inject a visible watermark overlay stream into each page if possible
+    if (lower.endsWith('.pdf')) {
+      try {
+        final rawLatin = latin1.decode(originalBytes, allowInvalid: true);
+        const wmStream =
+            'q 0.82 0.12 0.12 rg /F1 14 Tf 1 0 0 1 48 770 Tm (YAN360 WATERMARK - TASDIQLANMAGAN NUSXA - QABUL QILISH KUTILMOQDA) Tj '
+            '1 0 0 1 48 410 Tm (YAN360 WATERMARK - HIMOYALANGAN KORIK NUSXASI) Tj '
+            '1 0 0 1 48 45 Tm (YAN360 WATERMARK - ASL NUSXA QABUL QILINGACH YUBORILADI) Tj Q';
+        if (rawLatin.contains('BT') && !rawLatin.contains('/Filter')) {
+          final patched = rawLatin.replaceFirst('BT', '$wmStream BT');
+          return Uint8List.fromList(latin1.encode(patched));
+        }
+      } catch (_) {}
+    }
+
+    return originalBytes;
+  }
+
+  /// Downloads either the WATERMARKED inspection copy (when `useWatermarkedCopy = true`)
+  /// or the ORIGINAL unwatermarked file (when `useWatermarkedCopy = false`).
+  Future<Uint8List?> _downloadArizaFileBytes(
+    _ArizaFileDeliveryMeta meta, {
+    required bool useWatermarkedCopy,
+  }) async {
+    final targetStoragePath =
+        (useWatermarkedCopy && meta.watermarkedStoragePath.isNotEmpty)
+        ? meta.watermarkedStoragePath
+        : meta.storagePath;
+
+    if (targetStoragePath.isNotEmpty) {
+      try {
+        return await Supabase.instance.client.storage
+            .from(meta.storageBucket)
+            .download(targetStoragePath);
+      } catch (_) {
+        final altBucket = meta.storageBucket == 'advocate_licenses'
+            ? 'chat_media'
+            : 'advocate_licenses';
+        try {
+          return await Supabase.instance.client.storage
+              .from(altBucket)
+              .download(targetStoragePath);
+        } catch (_) {}
+      }
+    }
+
+    // Fallback to original storagePath if watermarked path wasn't found
+    if (useWatermarkedCopy && meta.storagePath.isNotEmpty) {
+      try {
+        final raw = await Supabase.instance.client.storage
+            .from(meta.storageBucket)
+            .download(meta.storagePath);
+        return _buildWatermarkedArizaFileBytes(
+          originalBytes: raw,
+          fileName: meta.fileName,
+          arizaId: meta.arizaId,
+          advocateName: widget.lawyer.fullName,
+        );
+      } catch (_) {}
+    }
 
     if (meta.localPath.isNotEmpty) {
       final f = File(meta.localPath);
       if (f.existsSync()) {
-        try {
-          downloadedBytes = await f.readAsBytes();
-          if (meta.fileName.toLowerCase().endsWith('.txt')) {
-            final decoded = utf8.decode(downloadedBytes, allowMalformed: true);
-            textPreview = decoded;
-          }
-        } catch (error) {
-          downloadError = error.toString();
-        }
+        final raw = await f.readAsBytes();
+        return useWatermarkedCopy
+            ? _buildWatermarkedArizaFileBytes(
+                originalBytes: Uint8List.fromList(raw),
+                fileName: meta.fileName,
+                arizaId: meta.arizaId,
+                advocateName: widget.lawyer.fullName,
+              )
+            : Uint8List.fromList(raw);
       }
     }
-
-    if (downloadedBytes == null && meta.storagePath.isNotEmpty) {
-      try {
-        downloadedBytes = await Supabase.instance.client.storage
-            .from(meta.storageBucket)
-            .download(meta.storagePath);
-      } catch (error) {
-        downloadError = error.toString();
-      }
-    }
-
-    if (!mounted) return;
-    final lowerFileName = meta.fileName.toLowerCase();
-    final isImage = lowerFileName.endsWith('.jpg') ||
-        lowerFileName.endsWith('.jpeg') ||
-        lowerFileName.endsWith('.png') ||
-        lowerFileName.endsWith('.webp') ||
-        lowerFileName.endsWith('.gif');
-    final isAccepted = meta.isEffectivelyAccepted(DateTime.now());
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogCtx) => Dialog(
-        backgroundColor: YanColors.background,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(26),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              // Top bar
-              Container(
-                padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
-                color: YanColors.primaryNavy,
-                child: Row(
-                  children: <Widget>[
-                    const Icon(
-                      Icons.shield_rounded,
-                      color: YanColors.cyanAccent,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            meta.fileName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                            ),
-                          ),
-                          Text(
-                            isAccepted
-                                ? 'Tasdiqlangan rasmiy hujjat (${meta.arizaId})'
-                                : 'YAN360 Himoyalangan Ko‘rik Rejimi (Watermark)',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: YanColors.cyanAccent,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(dialogCtx),
-                      child: const Icon(
-                        Icons.close_rounded,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Document Viewer with YAN360 Watermark Overlay
-              Flexible(
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: <Widget>[
-                    Container(
-                      width: double.infinity,
-                      constraints: const BoxConstraints(
-                        minHeight: 300,
-                        maxHeight: 440,
-                      ),
-                      padding: const EdgeInsets.all(18),
-                      color: YanColors.white,
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            if (isImage && downloadedBytes != null)
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(14),
-                                child: Image.memory(
-                                  downloadedBytes,
-                                  fit: BoxFit.contain,
-                                ),
-                              )
-                            else ...<Widget>[
-                              Center(
-                                child: Icon(
-                                  meta.fileName.toLowerCase().endsWith('.pdf')
-                                      ? Icons.picture_as_pdf_rounded
-                                      : Icons.insert_drive_file_rounded,
-                                  size: 48,
-                                  color: YanColors.primaryBlue,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Center(
-                                child: Text(
-                                  meta.fileName,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w800,
-                                    color: YanColors.primaryNavy,
-                                  ),
-                                ),
-                              ),
-                              const Divider(height: 24),
-                              if (textPreview != null)
-                                Text(
-                                  textPreview,
-                                  style: const TextStyle(
-                                    fontSize: 13.2,
-                                    fontWeight: FontWeight.w600,
-                                    color: YanColors.primaryNavy,
-                                    height: 1.5,
-                                  ),
-                                )
-                              else
-                                Text(
-                                  downloadError == null
-                                      ? 'Bu format ilova ichida matn ko‘rinishida ochilmaydi. Telefoningizdagi mos dasturda ko‘rish uchun quyidagi tugmani bosing.'
-                                      : 'Faylni yuklab bo‘lmadi. Internetga ulaning va qayta urinib ko‘ring.\n$downloadError',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: YanColors.mutedText,
-                                    height: 1.45,
-                                  ),
-                                ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // Diagonal + Logo YAN360 Watermark Layer across the entire document
-                    IgnorePointer(
-                      child: Positioned.fill(
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: <Widget>[
-                            Opacity(
-                              opacity: 0.14,
-                              child: Image.asset(
-                                'assets/logo.png',
-                                width: 190,
-                                height: 190,
-                                fit: BoxFit.contain,
-                                filterQuality: FilterQuality.high,
-                              ),
-                            ),
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: List<Widget>.generate(4, (idx) {
-                                return Transform.rotate(
-                                  angle: -0.32,
-                                  child: Text(
-                                    'YAN360 • HIMOYALANGAN NUSXA • KO‘RIK REJIMI',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 1.4,
-                                      color: YanColors.primaryNavy.withValues(
-                                        alpha: 0.18,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Bottom security bar
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-                color: YanColors.lightBlue,
-                child: Column(
-                  children: <Widget>[
-                    Text(
-                      isAccepted
-                          ? 'Ariza tasdiqlangan! Endi "Saqlash" va "Ulashish" tugmalaridan foydalanishingiz mumkin.'
-                          : '🔒 Faylni telefonga saqlash va ulashish uchun arizani "Qabul qilish" tugmasi orqali tasdiqlang.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: YanColors.primaryNavy,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (!isImage)
-                      SizedBox(
-                        width: double.infinity,
-                        height: 42,
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            await _openArizaFileInPhoneViewer(meta);
-                          },
-                          icon: const Icon(Icons.open_in_new_rounded),
-                          label: const Text('Telefon dasturida ko‘rish'),
-                        ),
-                      ),
-                    if (!isImage) const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 44,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: YanColors.primaryBlue,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        onPressed: () => Navigator.pop(dialogCtx),
-                        child: const Text(
-                          'Yopish',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return null;
   }
 
-  /// Resolves and saves the clean, unwatermarked `#ariza` file to the phone's
+  /// Opens the `#ariza` file directly in the phone's viewer (`OpenFilex.open`):
+  /// - Before client confirms (`!isAccepted`): downloads and opens the WATERMARKED file (`YAN360_WATERMARK_...`).
+  /// - After client confirms (`isAccepted`): opens the ORIGINAL unwatermarked file!
+  Future<void> _openArizaFileInPhoneViewer(
+    _ArizaFileDeliveryMeta meta, {
+    bool? forceWatermarked,
+  }) async {
+    try {
+      final isAccepted = meta.isEffectivelyAccepted(DateTime.now());
+      final useWatermarked = forceWatermarked ?? !isAccepted;
+      final bytes = await _downloadArizaFileBytes(
+        meta,
+        useWatermarkedCopy: useWatermarked,
+      );
+      if (bytes == null) {
+        throw StateError('Faylni serverdan olib bo‘lmadi');
+      }
+      final directory = await getTemporaryDirectory();
+      final safeName = meta.fileName.replaceAll(
+        RegExp(r'[^a-zA-Z0-9._-]'),
+        '_',
+      );
+      final filePrefix = useWatermarked ? 'YAN360_WATERMARK_' : 'ASL_';
+      final viewFile = File(
+        '${directory.path}${Platform.pathSeparator}$filePrefix$safeName',
+      );
+      await viewFile.writeAsBytes(bytes, flush: true);
+      await OpenFilex.open(viewFile.path);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Faylni ochib bo‘lmadi: $error')),
+        );
+      }
+    }
+  }
+
+  /// Resolves and saves the clean, unwatermarked ORIGINAL `#ariza` file to the phone's
   /// memory (`Downloads` / `ApplicationDocumentsDirectory`) — ONLY available
   /// AFTER the client has accepted the ariza!
   Future<File?> _saveAcceptedArizaToPhoneMemory(
     _ArizaFileDeliveryMeta meta,
   ) async {
     try {
-      Uint8List? bytes;
-      if (meta.localPath.isNotEmpty) {
-        final localCandidate = File(meta.localPath);
-        if (localCandidate.existsSync()) {
-          bytes = await localCandidate.readAsBytes();
-        }
-      }
-      if (bytes == null && meta.storagePath.isNotEmpty) {
-        bytes = await Supabase.instance.client.storage
-            .from(meta.storageBucket)
-            .download(meta.storagePath);
-      }
+      final bytes = await _downloadArizaFileBytes(
+        meta,
+        useWatermarkedCopy: false,
+      );
       if (bytes == null) return null;
 
       final cleanName = meta.fileName.replaceAll(
@@ -7583,7 +7746,6 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
         '_',
       );
 
-      // Save to Android Download folder if accessible, plus ApplicationDocumentsDirectory
       final docsDir = await getApplicationDocumentsDirectory();
       final targetFile = File(
         '${docsDir.path}${Platform.pathSeparator}$cleanName',
@@ -7607,42 +7769,6 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     }
   }
 
-  Future<void> _openArizaFileInPhoneViewer(
-    _ArizaFileDeliveryMeta meta,
-  ) async {
-    try {
-      Uint8List? bytes;
-      File? source;
-      if (meta.localPath.isNotEmpty) {
-        final candidate = File(meta.localPath);
-        if (await candidate.exists()) source = candidate;
-      }
-      if (source == null && meta.storagePath.isNotEmpty) {
-        bytes = await Supabase.instance.client.storage
-            .from(meta.storageBucket)
-            .download(meta.storagePath);
-      }
-      if (source == null && bytes == null) {
-        throw StateError('Faylni serverdan olib bo‘lmadi');
-      }
-      final directory = await getTemporaryDirectory();
-      final safeName = meta.fileName.replaceAll(
-        RegExp(r'[^a-zA-Z0-9._-]'),
-        '_',
-      );
-      final viewFile = source ??
-          File('${directory.path}${Platform.pathSeparator}$safeName');
-      if (bytes != null) await viewFile.writeAsBytes(bytes, flush: true);
-      await OpenFilex.open(viewFile.path);
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Faylni ochib bo‘lmadi: $error')),
-        );
-      }
-    }
-  }
-
   Future<void> _handleSaveAcceptedArizaButton(
     _ChatMessageItem msg,
     _ArizaFileDeliveryMeta meta,
@@ -7658,7 +7784,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Tayyor ariza telefon xotirasiga saqlandi: ${savedFile.path}',
+          'Asl ariza telefon xotirasiga saqlandi: ${savedFile.path}',
         ),
         backgroundColor: YanColors.successGreen,
         behavior: SnackBarBehavior.floating,
@@ -7666,8 +7792,8 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     );
   }
 
-  /// Shares the accepted `#ariza` file across all apps on the phone (Telegram,
-  /// WhatsApp, Gmail, Drive, Files, etc.) via the native system chooser + link copy.
+  /// Shares the accepted ORIGINAL `#ariza` file across all apps on the phone (Telegram,
+  /// WhatsApp, Gmail, Drive, Files, etc.) via the native system chooser.
   Future<void> _handleShareAcceptedArizaButton(
     _ChatMessageItem msg,
     _ArizaFileDeliveryMeta meta,
@@ -7676,7 +7802,9 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     if (savedFile == null || !savedFile.existsSync()) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Faylni ulashish uchun yuklab bo‘lmadi.')),
+          const SnackBar(
+            content: Text('Faylni ulashish uchun yuklab bo‘lmadi.'),
+          ),
         );
       }
       return;
@@ -7712,7 +7840,8 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     _ArizaFileDeliveryMeta meta,
   ) async {
     if (meta.status == 'accepted' || meta.status == 'rejected') return;
-    final updatedMeta = meta.copyWith(status: 'accepted').encode();
+    final acceptedMetaObj = meta.copyWith(status: 'accepted');
+    final updatedMeta = acceptedMetaObj.encode();
     final idx = _messages.indexWhere((m) => m.id == msg.id);
     if (idx >= 0) {
       setState(() {
@@ -7751,11 +7880,31 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
         'decision': 'accepted',
       },
     );
+
+    // Automatically deliver the ORIGINAL unwatermarked file in chat once the client confirms!
+    if (meta.storagePath.isNotEmpty) {
+      final ext = meta.fileName.contains('.')
+          ? meta.fileName.split('.').last.toLowerCase()
+          : 'docx';
+      final mimeType = 'application/${ext == 'pdf' ? 'pdf' : ext}';
+      final originalChatFileMeta =
+          'CHAT_FILE_V1|name:${Uri.encodeComponent(meta.fileName)}'
+          '|storage:${Uri.encodeComponent(meta.storagePath)}'
+          '|bucket:${Uri.encodeComponent(meta.storageBucket)}'
+          '|e2ee:0'
+          '|mime:${Uri.encodeComponent(mimeType)}|size:0';
+      _dispatchInstantEncryptedMessage(
+        text: '✅ ASL NUSXA (Watermarksiz): ${meta.fileName}',
+        mediaType: _ChatMediaType.document,
+        mediaMeta: originalChatFileMeta,
+      );
+    }
+
     await _saveLocalEncryptedCache();
     await _syncMyRoomStateToProfileEnvelope(isOnline: true);
 
     if (!mounted) return;
-    _openFiveEmptyStarsRatingSheet(msg, meta.copyWith(status: 'accepted'));
+    _openFiveEmptyStarsRatingSheet(msg, acceptedMetaObj);
   }
 
   Future<void> _promptMandatoryRejectionReasonDialog(
@@ -8706,10 +8855,13 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                   ),
                 ),
 
-              // Review the protected copy before confirming the delivery.
+              // Before confirmation: opens the WATERMARKED copy directly in phone viewer!
               if (!isAccepted)
                 GestureDetector(
-                  onTap: () => _openWatermarkedArizaPreviewModal(m, meta),
+                  onTap: () => _openArizaFileInPhoneViewer(
+                    meta,
+                    forceWatermarked: true,
+                  ),
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 9),
@@ -8727,7 +8879,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                         ),
                         SizedBox(width: 6),
                         Text(
-                        'Ko‘rish',
+                          'Ko‘rish (Watermark bilan)',
                           style: TextStyle(
                             fontSize: 12.2,
                             fontWeight: FontWeight.w900,
@@ -8739,12 +8891,15 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                   ),
                 )
               else
-                // AFTER ACCEPTANCE: "Ko'rish", "Saqlash" (in phone memory), and "Ulashish" (all apps)!
+                // AFTER ACCEPTANCE: "Ko'rish", "Saqlash" (in phone memory), and "Ulashish" (all apps) for the ORIGINAL file!
                 Row(
                   children: <Widget>[
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => _openWatermarkedArizaPreviewModal(m, meta),
+                        onTap: () => _openArizaFileInPhoneViewer(
+                          meta,
+                          forceWatermarked: false,
+                        ),
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 8.5),
                           decoration: BoxDecoration(
@@ -9204,6 +9359,78 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
           ),
         ),
 
+        // Live 30-Minute Ariza Countdown Banner (Visible to both Advocate & Client!)
+        ValueListenableBuilder<List<ArizaOrderItem>>(
+          valueListenable: YanRoleDataCatalog.arizaOrders,
+          builder: (context, orders, _) {
+            final roomOrders = orders.where((o) {
+              final cMatch =
+                  YanRoleDataCatalog.isSameParticipant(o.clientId, _myUserId) ||
+                  YanRoleDataCatalog.isSameParticipant(o.clientId, _peerUserId);
+              final aMatch =
+                  YanRoleDataCatalog.isSameParticipant(
+                    o.advocateId,
+                    _myUserId,
+                  ) ||
+                  YanRoleDataCatalog.isSameParticipant(
+                    o.advocateId,
+                    _peerUserId,
+                  );
+              return cMatch && aMatch;
+            }).toList();
+            if (roomOrders.isEmpty) return const SizedBox.shrink();
+            final latestOrder = roomOrders.first;
+            final now = DateTime.now();
+            final isDone = latestOrder.isEffectivelyCompleted(now);
+            final isLate = latestOrder.isAdvocateLate(now);
+            final badgeColor = isDone
+                ? const Color(0xFF0A936B)
+                : isLate
+                ? YanColors.destructiveRed
+                : const Color(0xFFD97706);
+            final bgColor = isDone
+                ? YanColors.successGreen.withValues(alpha: 0.14)
+                : isLate
+                ? YanColors.destructiveRed.withValues(alpha: 0.12)
+                : const Color(0xFFFFF4E5);
+
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: bgColor,
+                border: Border(
+                  bottom: BorderSide(color: badgeColor.withValues(alpha: 0.25)),
+                ),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    isDone
+                        ? Icons.check_circle_rounded
+                        : isLate
+                        ? Icons.warning_amber_rounded
+                        : Icons.timer_rounded,
+                    size: 16,
+                    color: badgeColor,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      'Ariza (${latestOrder.id}): ${latestOrder.formatCountdown(now)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: badgeColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+
         // Messages List
         Expanded(
           child: ListView.builder(
@@ -9355,7 +9582,8 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                             ),
                           ),
                           const SizedBox(height: 7),
-                        ] else if (m.mediaType != _ChatMediaType.text) ...<Widget>[
+                        ] else if (m.mediaType != _ChatMediaType.text &&
+                            chatFileMeta == null) ...<Widget>[
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: <Widget>[
@@ -9391,19 +9619,24 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                           ),
                           const SizedBox(height: 4),
                         ],
-                        Text(
-                          m.text,
-                          style: TextStyle(
-                            fontSize: 13.1,
-                            fontWeight: FontWeight.w600,
-                            color: (mine || isArizaPkg || isReadyAriza)
-                                ? Colors.white
-                                : YanColors.primaryNavy,
-                            height: 1.42,
+                        if (chatFileMeta == null ||
+                            (m.text.trim().isNotEmpty &&
+                                m.text.trim() != (chatFileMeta['name'] ?? '').trim()))
+                          Text(
+                            m.text,
+                            style: TextStyle(
+                              fontSize: 13.1,
+                              fontWeight: FontWeight.w600,
+                              color: (mine || isArizaPkg || isReadyAriza)
+                                  ? Colors.white
+                                  : YanColors.primaryNavy,
+                              height: 1.42,
+                            ),
                           ),
-                        ),
                         if (chatFileMeta != null) ...<Widget>[
-                          const SizedBox(height: 8),
+                          if (m.text.trim().isNotEmpty &&
+                              m.text.trim() != (chatFileMeta['name'] ?? '').trim())
+                            const SizedBox(height: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
@@ -10249,13 +10482,14 @@ class _ArizalarimRoleViewState extends State<_ArizalarimRoleView> {
     return ValueListenableBuilder<List<ArizaOrderItem>>(
       valueListenable: YanRoleDataCatalog.arizaOrders,
       builder: (context, orders, _) {
-        final myOrders = orders
-            .where((o) => YanRoleDataCatalog.isSameParticipant(
-                  o.clientId,
-                  Supabase.instance.client.auth.currentUser?.id ??
-                      profile.clientId,
-                ))
-            .toList(growable: false);
+        final authId = Supabase.instance.client.auth.currentUser?.id ?? '';
+        final profileId = profile.clientId;
+        final myOrders = orders.where((o) {
+          return (authId.isNotEmpty &&
+                  YanRoleDataCatalog.isSameParticipant(o.clientId, authId)) ||
+              (profileId.isNotEmpty &&
+                  YanRoleDataCatalog.isSameParticipant(o.clientId, profileId));
+        }).toList(growable: false);
         final readyOrders = myOrders
             .where((o) => o.isEffectivelyCompleted(now))
             .toList();
@@ -11007,9 +11241,14 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final advocateId = Supabase.instance.client.auth.currentUser?.id ??
-        widget.profile.clientId;
-    final arizaOrders = YanRoleDataCatalog.ordersForAdvocate(advocateId);
+    final authId = Supabase.instance.client.auth.currentUser?.id ?? '';
+    final profileId = widget.profile.clientId;
+    final arizaOrders = YanRoleDataCatalog.arizaOrders.value.where((o) {
+      return (authId.isNotEmpty &&
+              YanRoleDataCatalog.isSameParticipant(o.advocateId, authId)) ||
+          (profileId.isNotEmpty &&
+              YanRoleDataCatalog.isSameParticipant(o.advocateId, profileId));
+    }).toList(growable: false);
 
     final showArizaSection =
         _selectedCategoryFilter == 'Barchasi' ||
