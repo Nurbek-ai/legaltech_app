@@ -7,9 +7,11 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/bosh_sahifa_page.dart';
@@ -612,9 +614,7 @@ class _IntroScreenState extends State<IntroScreen>
       }
 
       userProfile.value = userProfile.value.copyWith(
-        clientId: user != null
-            ? 'YAN-${user.id.substring(0, 8).toUpperCase()}'
-            : userProfile.value.clientId,
+        clientId: user?.id ?? userProfile.value.clientId,
         displayName: resolvedName,
         phone: phone,
         email: dummyEmail,
@@ -3269,7 +3269,7 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
     try {
       final byId = <String, Map<String, dynamic>>{};
 
-      final ratingBuckets = <String, List<int>>{};
+      final ratingBuckets = <String, Map<String, int>>{};
       try {
         final allRows = await Supabase.instance.client
             .from('profiles')
@@ -3292,12 +3292,16 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
                   final advId = r['advocate_id']?.toString() ?? '';
                   final stars = (r['stars'] as num?)?.toInt() ?? 0;
                   if (advId.isNotEmpty && stars >= 1 && stars <= 5) {
+                    final ratingId = r['ariza_id']?.toString().trim() ?? '';
+                    final uniqueKey = ratingId.isEmpty
+                        ? '${map['id']}:legacy:${ratingBuckets.length}:${stars}'
+                        : ratingId;
                     ratingBuckets
                         .putIfAbsent(
                           _YanE2eeCryptoEngine.normalizeParticipantId(advId),
-                          () => <int>[],
+                          () => <String, int>{},
                         )
-                        .add(stars);
+                        .putIfAbsent(uniqueKey, () => stars);
                   }
                 }
               }
@@ -3336,7 +3340,7 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
         final starsList = ratingBuckets[normId];
         if (starsList != null && starsList.isNotEmpty) {
           final baseSum = base.rating * base.feedbackCount;
-          final addedSum = starsList.fold<int>(0, (a, b) => a + b);
+          final addedSum = starsList.values.fold<int>(0, (a, b) => a + b);
           final totalCount = base.feedbackCount + starsList.length;
           final avg = (baseSum + addedSum) / totalCount;
           return base.copyWith(
@@ -5202,6 +5206,7 @@ class _ArizaFileDeliveryMeta {
   final String status; // 'null' (unresponded), 'accepted', 'rejected'
   final String fileName;
   final String storagePath;
+  final String storageBucket;
   final String localPath;
   final String sentTimeIso;
   final int ratedStars; // 0 = not yet rated, 1..5 = rated by client
@@ -5212,6 +5217,7 @@ class _ArizaFileDeliveryMeta {
     this.status = 'null',
     required this.fileName,
     this.storagePath = '',
+    this.storageBucket = 'advocate_licenses',
     this.localPath = '',
     this.sentTimeIso = '',
     this.ratedStars = 0,
@@ -5221,26 +5227,20 @@ class _ArizaFileDeliveryMeta {
   DateTime? get sentAtDateTime =>
       sentTimeIso.isNotEmpty ? DateTime.tryParse(sentTimeIso)?.toLocal() : null;
 
-  /// True if client clicked `Qabul qilish` OR if 30 minutes have elapsed
-  /// since `sentTimeIso` without the client responding (`status == 'null'`).
+  /// Delivery controls unlock only after the client explicitly accepts.
   bool isEffectivelyAccepted(DateTime now) {
-    if (status == 'accepted') return true;
-    if ((status == 'null' || status == 'pending') && sentAtDateTime != null) {
-      if (now.difference(sentAtDateTime!).inMinutes >= 30) {
-        return true;
-      }
-    }
-    return false;
+    return status == 'accepted';
   }
 
   String encode() {
     final safeId = Uri.encodeComponent(arizaId);
     final safeName = Uri.encodeComponent(fileName);
     final safeStorage = Uri.encodeComponent(storagePath);
+    final safeBucket = Uri.encodeComponent(storageBucket);
     final safeLocal = Uri.encodeComponent(localPath);
     final safeSent = Uri.encodeComponent(sentTimeIso);
     final safeReason = Uri.encodeComponent(rejectionReason);
-    return 'ARIZA_FILE_V2|id:$safeId|status:$status|name:$safeName|storage:$safeStorage|local:$safeLocal|sent:$safeSent|stars:$ratedStars|reason:$safeReason';
+    return 'ARIZA_FILE_V2|id:$safeId|status:$status|name:$safeName|storage:$safeStorage|bucket:$safeBucket|local:$safeLocal|sent:$safeSent|stars:$ratedStars|reason:$safeReason';
   }
 
   _ArizaFileDeliveryMeta copyWith({
@@ -5248,6 +5248,7 @@ class _ArizaFileDeliveryMeta {
     String? status,
     String? fileName,
     String? storagePath,
+    String? storageBucket,
     String? localPath,
     String? sentTimeIso,
     int? ratedStars,
@@ -5258,6 +5259,7 @@ class _ArizaFileDeliveryMeta {
       status: status ?? this.status,
       fileName: fileName ?? this.fileName,
       storagePath: storagePath ?? this.storagePath,
+      storageBucket: storageBucket ?? this.storageBucket,
       localPath: localPath ?? this.localPath,
       sentTimeIso: sentTimeIso ?? this.sentTimeIso,
       ratedStars: ratedStars ?? this.ratedStars,
@@ -5284,6 +5286,9 @@ class _ArizaFileDeliveryMeta {
             ? map['name']!
             : 'Tayyor_Ariza.docx',
         storagePath: map['storage'] ?? '',
+        storageBucket: map['bucket']?.isNotEmpty == true
+            ? map['bucket']!
+            : 'advocate_licenses',
         localPath: map['local'] ?? '',
         sentTimeIso: map['sent'] ?? '',
         ratedStars: int.tryParse(map['stars'] ?? '0') ?? 0,
@@ -5315,9 +5320,7 @@ class _YanE2eeCryptoEngine {
       clean = clean.substring(4);
     }
     clean = clean.replaceAll(RegExp(r'[^a-z0-9]'), '');
-    if (clean.length >= 8) {
-      return clean.substring(0, 8);
-    }
+    // Keep the full identifier: truncating UUIDs made unrelated users collide.
     return clean.isEmpty ? 'anonuser' : clean;
   }
 
@@ -5486,6 +5489,15 @@ class _YanE2eeCryptoEngine {
       }
 
       final ordersList = YanRoleDataCatalog.arizaOrders.value
+          .where((order) =>
+              YanRoleDataCatalog.isSameParticipant(
+                order.clientId,
+                authUser.id,
+              ) ||
+              YanRoleDataCatalog.isSameParticipant(
+                order.advocateId,
+                authUser.id,
+              ))
           .take(25)
           .map((e) => e.toJson())
           .toList();
@@ -5499,36 +5511,51 @@ class _YanE2eeCryptoEngine {
     } catch (_) {}
   }
 
-  static Future<File> _localArizaLedgerFile() async {
+  static Future<File> _localArizaLedgerFile(String userId) async {
+    final safeUserId = normalizeParticipantId(userId);
     return File(
-      '${Directory.systemTemp.path}${Platform.pathSeparator}yan360_ariza_orders.json',
+      '${Directory.systemTemp.path}${Platform.pathSeparator}yan360_ariza_orders_$safeUserId.json',
     );
   }
 
   static Future<void> persistArizaOrdersLedger() async {
-    final list = YanRoleDataCatalog.arizaOrders.value
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    final scopedOrders = userId == null
+        ? const <ArizaOrderItem>[]
+        : YanRoleDataCatalog.arizaOrders.value.where((order) =>
+            YanRoleDataCatalog.isSameParticipant(order.clientId, userId) ||
+            YanRoleDataCatalog.isSameParticipant(order.advocateId, userId));
+    final list = scopedOrders
         .map((e) => e.toJson())
         .toList();
     final jsonStr = jsonEncode(list);
     final encryptedPayload = encrypt(jsonStr, _envelopeKey);
 
     try {
-      final f = await _localArizaLedgerFile();
-      await f.writeAsString(encryptedPayload, flush: true);
+      if (userId != null) {
+        final f = await _localArizaLedgerFile(userId);
+        await f.writeAsString(encryptedPayload, flush: true);
+      }
     } catch (_) {}
 
     await updateMyProfileE2eeEnvelope();
   }
 
   static Future<void> syncArizaOrdersLedger() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
     final byId = <String, ArizaOrderItem>{};
-    for (final item in YanRoleDataCatalog.arizaOrders.value) {
-      byId[item.id] = item;
+    if (userId != null) {
+      for (final item in YanRoleDataCatalog.arizaOrders.value) {
+        if (YanRoleDataCatalog.isSameParticipant(item.clientId, userId) ||
+            YanRoleDataCatalog.isSameParticipant(item.advocateId, userId)) {
+          byId[item.id] = item;
+        }
+      }
     }
 
     try {
-      final f = await _localArizaLedgerFile();
-      if (await f.exists()) {
+      final f = userId == null ? null : await _localArizaLedgerFile(userId);
+      if (f != null && await f.exists()) {
         final enc = await f.readAsString();
         final dec = decrypt(enc, _envelopeKey);
         final list = jsonDecode(dec);
@@ -5546,9 +5573,15 @@ class _YanE2eeCryptoEngine {
     } catch (_) {}
 
     try {
-      final rows = await Supabase.instance.client.from('profiles').select();
-      for (final row in rows) {
-        final map = Map<String, dynamic>.from(row as Map);
+      final row = userId == null
+          ? null
+          : await Supabase.instance.client
+                .from('profiles')
+                .select('public_key')
+                .eq('id', userId)
+                .maybeSingle();
+      if (row != null) {
+        final map = Map<String, dynamic>.from(row);
         final pubKey = map['public_key']?.toString();
         if (pubKey != null && pubKey.contains(_envelopeSeparator)) {
           final env = decodeProfileEnvelope(pubKey);
@@ -5559,6 +5592,17 @@ class _YanE2eeCryptoEngine {
                 final parsed = ArizaOrderItem.fromJson(
                   Map<String, dynamic>.from(item),
                 );
+                if (userId == null ||
+                    !(YanRoleDataCatalog.isSameParticipant(
+                          parsed.clientId,
+                          userId,
+                        ) ||
+                        YanRoleDataCatalog.isSameParticipant(
+                          parsed.advocateId,
+                          userId,
+                        ))) {
+                  continue;
+                }
                 final existing = byId[parsed.id];
                 if (existing == null ||
                     (!existing.isCompleted && parsed.isCompleted)) {
@@ -5663,6 +5707,7 @@ class _ChatMessageItem {
   }
 
   Map<String, dynamic> toServerJson(String roomKey) {
+    final rawMediaMeta = mediaMeta;
     final cipher = encryptedCiphertext.isNotEmpty
         ? encryptedCiphertext
         : _YanE2eeCryptoEngine.encrypt(text, roomKey);
@@ -5674,7 +5719,9 @@ class _ChatMessageItem {
       'sender_name': senderName,
       'encrypted_content': cipher,
       'media_type': mediaType.name,
-      'media_meta': mediaMeta,
+      'media_meta': rawMediaMeta == null
+          ? null
+          : _YanE2eeCryptoEngine.encrypt(rawMediaMeta, roomKey),
       'is_seen': isSeen,
       'sent_at': sentAt.toIso8601String(),
       'seen_at': seenAt?.toIso8601String(),
@@ -5710,7 +5757,12 @@ class _ChatMessageItem {
       isSeen: map['is_seen'] == true,
       seenAt: DateTime.tryParse(map['seen_at']?.toString() ?? '')?.toLocal(),
       mediaType: resolvedMedia,
-      mediaMeta: map['media_meta']?.toString(),
+      mediaMeta: map['media_meta'] == null
+          ? null
+          : _YanE2eeCryptoEngine.decrypt(
+              map['media_meta'].toString(),
+              roomKey,
+            ),
     );
   }
 }
@@ -6021,6 +6073,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
             callback: (payload) {
               if (!mounted) return;
               final msg = _ChatMessageItem.fromServerJson(payload, _roomKey);
+              if (!_belongsToThisRoom(msg)) return;
               final idx = _messages.indexWhere((m) => m.id == msg.id);
               if (idx < 0) {
                 final resolved = (_isMyAppInForeground && !msg.isMine(_myUserId))
@@ -6073,6 +6126,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                   advocateName: advName,
                   stars: stars,
                   clientName: clientName,
+                  ratingId: payload['ariza_id']?.toString() ?? '',
                 );
               }
             },
@@ -6110,6 +6164,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                     Map<String, dynamic>.from(item),
                     _roomKey,
                   );
+                  if (!_belongsToThisRoom(incoming)) continue;
                   final idx = _messages.indexWhere((m) => m.id == incoming.id);
                   if (idx < 0) {
                     final resolved =
@@ -6324,7 +6379,10 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     if (_isPollingProfiles) return;
     _isPollingProfiles = true;
     try {
-      final rows = await Supabase.instance.client.from('profiles').select();
+      final rows = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .inFilter('id', <String>[_myUserId, _peerUserId]);
       var changed = false;
       final newlySeenIncomingIds = <String>[];
       final now = DateTime.now();
@@ -6392,6 +6450,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                 Map<String, dynamic>.from(item),
                 _roomKey,
               );
+              if (!_belongsToThisRoom(incoming)) continue;
               final idx = _messages.indexWhere((m) => m.id == incoming.id);
               if (idx < 0) {
                 final resolved =
@@ -6459,6 +6518,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                 Map<String, dynamic>.from(item),
                 _roomKey,
               );
+              if (!_belongsToThisRoom(msg)) continue;
               byId[msg.id] = msg;
             }
           }
@@ -6621,14 +6681,6 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     _syncMyRoomStateToProfileEnvelope(isOnline: true);
   }
 
-  void _sendAttachment(_ChatMediaType type, String title, String meta) {
-    _dispatchInstantEncryptedMessage(
-      text: title,
-      mediaType: type,
-      mediaMeta: meta,
-    );
-  }
-
   // ==========================================================================
   // #ARIZA FILE PICKER (STORAGE / GALLERY / CAMERA) + SUPABASE 5-COLUMN DB SAVE
   // + YAN360 WATERMARK IN-APP PREVIEW (BEFORE ACCEPT) + SAVE & SHARE (AFTER ACCEPT)
@@ -6667,94 +6719,139 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     } catch (_) {}
   }
 
-  Future<List<File>> _discoverDeviceStorageFiles() async {
-    final found = <File>[];
-    final seenPaths = <String>{};
-
-    void addIfValid(File f) {
-      try {
-        if (f.existsSync() && !seenPaths.contains(f.path)) {
-          final lower = f.path.toLowerCase();
-          if (lower.endsWith('.docx') ||
-              lower.endsWith('.pdf') ||
-              lower.endsWith('.doc') ||
-              lower.endsWith('.txt') ||
-              lower.endsWith('.jpg') ||
-              lower.endsWith('.jpeg') ||
-              lower.endsWith('.png')) {
-            seenPaths.add(f.path);
-            found.add(f);
-          }
-        }
-      } catch (_) {}
+  Future<File?> _materializePickedFile(PlatformFile picked) async {
+    if (picked.path != null && File(picked.path!).existsSync()) {
+      return File(picked.path!);
     }
+    final bytes = picked.bytes;
+    if (bytes == null) return null;
+    final dir = await getTemporaryDirectory();
+    final path = '${dir.path}${Platform.pathSeparator}${picked.name}';
+    final file = File(path);
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
 
-    try {
-      for (final doc in GeneratedDocumentRepository.instance.documents.value) {
-        addIfValid(File(doc.path));
+  bool _belongsToThisRoom(_ChatMessageItem message) {
+    final sender = _YanE2eeCryptoEngine.normalizeParticipantId(message.senderId);
+    final receiver = _YanE2eeCryptoEngine.normalizeParticipantId(
+      message.receiverId,
+    );
+    final mine = _YanE2eeCryptoEngine.normalizeParticipantId(_myUserId);
+    final peer = _YanE2eeCryptoEngine.normalizeParticipantId(_peerUserId);
+    return (sender == mine && receiver == peer) ||
+        (sender == peer && receiver == mine);
+  }
+
+  Future<PlatformFile?> _pickAnyDeviceFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      withData: true,
+      type: FileType.any,
+    );
+    return result?.files.single;
+  }
+
+  static Map<String, String>? _parseChatFileMeta(String? raw) {
+    if (raw == null || !raw.startsWith('CHAT_FILE_V1|')) return null;
+    final values = <String, String>{};
+    for (final part in raw.split('|').skip(1)) {
+      final index = part.indexOf(':');
+      if (index > 0) {
+        values[part.substring(0, index)] =
+            Uri.decodeComponent(part.substring(index + 1));
       }
-    } catch (_) {}
-
-    final candidateDirs = <Directory>[];
-    try {
-      candidateDirs.add(await getApplicationDocumentsDirectory());
-    } catch (_) {}
-    try {
-      final dl = await getDownloadsDirectory();
-      if (dl != null) candidateDirs.add(dl);
-    } catch (_) {}
-    for (final p in <String>[
-      '/storage/emulated/0/Download',
-      '/storage/emulated/0/Documents',
-    ]) {
-      candidateDirs.add(Directory(p));
     }
+    return values;
+  }
 
-    for (final dir in candidateDirs) {
-      try {
-        if (dir.existsSync()) {
-          for (final entity in dir.listSync(followLinks: false).take(40)) {
-            if (entity is File) {
-              addIfValid(entity);
-            }
-          }
-        }
-      } catch (_) {}
+  Future<void> _pickAndSendChatFile() async {
+    try {
+      final picked = await _pickAnyDeviceFile();
+      if (picked == null) return;
+      final path = picked.path;
+      final bytes = picked.bytes ??
+          (path == null ? throw StateError('Fayl ma’lumoti olinmadi') : await File(path).readAsBytes());
+      final extension = picked.extension?.toLowerCase() ?? '';
+      final mediaType = <String>{'jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'}
+              .contains(extension)
+          ? _ChatMediaType.image
+          : extension == 'mp4' || extension == 'mov'
+          ? _ChatMediaType.video
+          : _ChatMediaType.document;
+      final objectPath =
+          'chat/${_roomKey}/${DateTime.now().microsecondsSinceEpoch}_${picked.name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_')}';
+      await Supabase.instance.client.storage.from('chat_media').uploadBinary(
+        objectPath,
+        Uint8List.fromList(bytes),
+        fileOptions: const FileOptions(upsert: false),
+      );
+      final mimeType = extension.isEmpty
+          ? 'application/octet-stream'
+          : 'application/${extension == 'pdf' ? 'pdf' : extension}';
+      final meta = 'CHAT_FILE_V1|name:${Uri.encodeComponent(picked.name)}'
+          '|storage:${Uri.encodeComponent(objectPath)}'
+          '|mime:${Uri.encodeComponent(mimeType)}|size:${bytes.length}';
+      _dispatchInstantEncryptedMessage(
+        text: picked.name,
+        mediaType: mediaType,
+        mediaMeta: meta,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Fayl yuborilmadi: $error')),
+      );
     }
+  }
 
-    if (found.isEmpty) {
-      try {
-        final appDir = await getApplicationDocumentsDirectory();
-        final sampleFile = File(
-          '${appDir.path}${Platform.pathSeparator}Rasmiy_Sud_Davo_Arizasi_YAN360.docx',
+  Future<File?> _downloadChatFile(Map<String, String> meta) async {
+    final storagePath = meta['storage'] ?? '';
+    if (storagePath.isEmpty) return null;
+    final bytes = await Supabase.instance.client.storage
+        .from('chat_media')
+        .download(storagePath);
+    final directory = await getTemporaryDirectory();
+    final name = (meta['name'] ?? 'fayl')
+        .replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final file = File('${directory.path}${Platform.pathSeparator}$name');
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
+  Future<void> _openChatFile(Map<String, String> meta) async {
+    try {
+      final file = await _downloadChatFile(meta);
+      if (file != null) await OpenFilex.open(file.path);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Faylni ochib bo‘lmadi: $error')),
         );
-        if (!sampleFile.existsSync()) {
-          await sampleFile.writeAsString(
-            'FUQAROLIK ISHLARI BO‘YICHA SUDGA\n'
-            'DA’VO ARIZASI (YAN360 RASMIY HUJJAT)\n\n'
-            'Mazkur da’vo arizasi mijoz murojaati asosida rasmiy advokat tomonidan '
-            'tayyorlandi va huquqiy ekspertizadan o‘tkazildi.\n\n'
-            '1. Da’vogar va javobgar ma’lumotlari to‘liq tekshirildi.\n'
-            '2. Asoslovchi dalillar va huquqiy normalar keltirildi.\n'
-            '3. Suddan so‘raladigan talablar aniq bayon etildi.',
-            flush: true,
-          );
-        }
-        addIfValid(sampleFile);
-      } catch (_) {}
+      }
     }
+  }
 
-    return found;
+  Future<void> _shareChatFile(Map<String, String> meta) async {
+    try {
+      final file = await _downloadChatFile(meta);
+      if (file != null) {
+        await Share.shareXFiles(<XFile>[XFile(file.path)], text: meta['name']);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Faylni ulashib bo‘lmadi: $error')),
+        );
+      }
+    }
   }
 
   Future<void> _openReadyArizaFileDeliveryModal({String? initialCaption}) async {
-    final storageFiles = await _discoverDeviceStorageFiles();
     if (!mounted) return;
 
-    File? selectedFile = storageFiles.isNotEmpty ? storageFiles.first : null;
-    String selectedFileName = selectedFile != null
-        ? selectedFile.path.split(Platform.pathSeparator).last
-        : '';
+    File? selectedFile;
+    String selectedFileName = '';
     final captionController = TextEditingController(
       text: initialCaption ??
           '#ariza Rasmiy tayyorlangan ariza hujjati. "Ko‘rish" tugmasi orqali tekshirib, "Qabul qilish" yoki "Rad etish" tugmasini bosing.',
@@ -6794,6 +6891,25 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
               } catch (_) {}
             }
 
+            Future<void> pickFromDeviceStorage() async {
+              try {
+                final picked = await _pickAnyDeviceFile();
+                if (picked == null) return;
+                final file = await _materializePickedFile(picked);
+                if (file == null) return;
+                setSheetState(() {
+                  selectedFile = file;
+                  selectedFileName = picked.name;
+                });
+              } catch (error) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Fayl tanlanmadi: $error')),
+                  );
+                }
+              }
+            }
+
             Future<void> uploadAndSendArizaFile() async {
               if (selectedFile == null || selectedFileName.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -6813,24 +6929,44 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
               final nowIso = now.toUtc().toIso8601String();
               final arizaId = 'ARZ-${now.millisecondsSinceEpoch}';
               var storagePath = '';
+              var storageBucket = 'advocate_licenses';
 
               // 1. Save the ORIGINAL unencrypted ariza file in Supabase Storage
               // so the firm can audit how arizas were written by advocates!
+              final bytes = await selectedFile!.readAsBytes();
+              final cleanName = selectedFileName.replaceAll(
+                RegExp(r'[^a-zA-Z0-9._-]'),
+                '_',
+              );
+              storagePath = 'provided_arizas/$arizaId/$cleanName';
               try {
-                final bytes = await selectedFile!.readAsBytes();
-                final cleanName = selectedFileName.replaceAll(
-                  RegExp(r'[^a-zA-Z0-9._-]'),
-                  '_',
-                );
-                storagePath = 'provided_arizas/$arizaId/$cleanName';
                 await Supabase.instance.client.storage
-                    .from('advocate_licenses')
+                    .from(storageBucket)
                     .uploadBinary(
                       storagePath,
                       Uint8List.fromList(bytes),
                       fileOptions: const FileOptions(upsert: true),
                     );
-              } catch (_) {}
+              } catch (_) {
+                storageBucket = 'chat_media';
+                try {
+                  await Supabase.instance.client.storage
+                      .from(storageBucket)
+                      .uploadBinary(
+                        storagePath,
+                        Uint8List.fromList(bytes),
+                        fileOptions: const FileOptions(upsert: true),
+                      );
+                } catch (error) {
+                  if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Ariza fayli yuklanmadi: $error')),
+                    );
+                  }
+                  return;
+                }
+              }
 
               // 2. Save the 5-column record in Supabase `public.arizas`:
               // ariza_id, advocate_id, client_id, sent_time, status (null initially)
@@ -6853,6 +6989,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                 status: 'null',
                 fileName: selectedFileName,
                 storagePath: storagePath,
+                storageBucket: storageBucket,
                 localPath: selectedFile!.path,
                 sentTimeIso: nowIso,
                 ratedStars: 0,
@@ -7022,91 +7159,14 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                         ],
                       ),
                       const SizedBox(height: 12),
-
-                      if (storageFiles.isNotEmpty) ...<Widget>[
-                        const Text(
-                          'QURILMA XOTIRASIDAGI HUJJATLAR (DOCX / PDF / RASM):',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w900,
-                            color: YanColors.mutedText,
-                            letterSpacing: 0.4,
-                          ),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: pickFromDeviceStorage,
+                          icon: const Icon(Icons.folder_open_rounded),
+                          label: const Text('Ichki xotiradan istalgan faylni tanlash'),
                         ),
-                        const SizedBox(height: 6),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 150),
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: storageFiles.length,
-                            itemBuilder: (_, i) {
-                              final f = storageFiles[i];
-                              final name = f.path
-                                  .split(Platform.pathSeparator)
-                                  .last;
-                              final isSelected = selectedFile?.path == f.path;
-                              return GestureDetector(
-                                onTap: () {
-                                  setSheetState(() {
-                                    selectedFile = f;
-                                    selectedFileName = name;
-                                  });
-                                },
-                                child: Container(
-                                  margin: const EdgeInsets.only(bottom: 6),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 9,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? YanColors.lightBlue
-                                        : YanColors.white,
-                                    borderRadius: BorderRadius.circular(13),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? YanColors.primaryBlue
-                                          : YanColors.border,
-                                      width: isSelected ? 1.4 : 1.0,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: <Widget>[
-                                      Icon(
-                                        name.toLowerCase().endsWith('.pdf')
-                                            ? Icons.picture_as_pdf_rounded
-                                            : Icons.description_rounded,
-                                        size: 19,
-                                        color: YanColors.primaryBlue,
-                                      ),
-                                      const SizedBox(width: 9),
-                                      Expanded(
-                                        child: Text(
-                                          name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 12.8,
-                                            fontWeight: FontWeight.w700,
-                                            color: YanColors.primaryNavy,
-                                          ),
-                                        ),
-                                      ),
-                                      if (isSelected)
-                                        const Icon(
-                                          Icons.check_circle_rounded,
-                                          size: 18,
-                                          color: YanColors.successGreen,
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
+                      ),
 
                       if (selectedFile != null)
                         Container(
@@ -7218,36 +7278,41 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     _ArizaFileDeliveryMeta meta,
   ) async {
     Uint8List? downloadedBytes;
-    String textPreview = msg.text;
+    String? textPreview;
+    String? downloadError;
 
     if (meta.localPath.isNotEmpty) {
       final f = File(meta.localPath);
       if (f.existsSync()) {
         try {
           downloadedBytes = await f.readAsBytes();
-          if (meta.fileName.toLowerCase().endsWith('.txt') ||
-              meta.fileName.toLowerCase().endsWith('.docx')) {
+          if (meta.fileName.toLowerCase().endsWith('.txt')) {
             final decoded = utf8.decode(downloadedBytes, allowMalformed: true);
-            if (!decoded.startsWith('PK')) {
-              textPreview = '$textPreview\n\n$decoded';
-            }
+            textPreview = decoded;
           }
-        } catch (_) {}
+        } catch (error) {
+          downloadError = error.toString();
+        }
       }
     }
 
     if (downloadedBytes == null && meta.storagePath.isNotEmpty) {
       try {
         downloadedBytes = await Supabase.instance.client.storage
-            .from('advocate_licenses')
+            .from(meta.storageBucket)
             .download(meta.storagePath);
-      } catch (_) {}
+      } catch (error) {
+        downloadError = error.toString();
+      }
     }
 
     if (!mounted) return;
-    final isImage = meta.fileName.toLowerCase().endsWith('.jpg') ||
-        meta.fileName.toLowerCase().endsWith('.jpeg') ||
-        meta.fileName.toLowerCase().endsWith('.png');
+    final lowerFileName = meta.fileName.toLowerCase();
+    final isImage = lowerFileName.endsWith('.jpg') ||
+        lowerFileName.endsWith('.jpeg') ||
+        lowerFileName.endsWith('.png') ||
+        lowerFileName.endsWith('.webp') ||
+        lowerFileName.endsWith('.gif');
     final isAccepted = meta.isEffectivelyAccepted(DateTime.now());
 
     await showDialog<void>(
@@ -7337,28 +7402,50 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                                 ),
                               )
                             else ...<Widget>[
-                              const Text(
-                                'O‘ZBEKISTON RESPUBLIKASI SUD ORGANLARIGA\nRASMIY HUQUQIY ARIZA LOYIHASI',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w900,
-                                  color: YanColors.primaryNavy,
+                              Center(
+                                child: Icon(
+                                  meta.fileName.toLowerCase().endsWith('.pdf')
+                                      ? Icons.picture_as_pdf_rounded
+                                      : Icons.insert_drive_file_rounded,
+                                  size: 48,
+                                  color: YanColors.primaryBlue,
                                 ),
                               ),
-                              const Divider(height: 20),
-                              Text(
-                                'Hujjat ID: ${meta.arizaId}\n'
-                                'Fayl: ${meta.fileName}\n'
-                                'Mas’ul advokat: ${widget.lawyer.fullName}\n\n'
-                                '$textPreview',
-                                style: const TextStyle(
-                                  fontSize: 13.2,
-                                  fontWeight: FontWeight.w600,
-                                  color: YanColors.primaryNavy,
-                                  height: 1.5,
+                              const SizedBox(height: 12),
+                              Center(
+                                child: Text(
+                                  meta.fileName,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    color: YanColors.primaryNavy,
+                                  ),
                                 ),
                               ),
+                              const Divider(height: 24),
+                              if (textPreview != null)
+                                Text(
+                                  textPreview,
+                                  style: const TextStyle(
+                                    fontSize: 13.2,
+                                    fontWeight: FontWeight.w600,
+                                    color: YanColors.primaryNavy,
+                                    height: 1.5,
+                                  ),
+                                )
+                              else
+                                Text(
+                                  downloadError == null
+                                      ? 'Bu format ilova ichida matn ko‘rinishida ochilmaydi. Telefoningizdagi mos dasturda ko‘rish uchun quyidagi tugmani bosing.'
+                                      : 'Faylni yuklab bo‘lmadi. Internetga ulaning va qayta urinib ko‘ring.\n$downloadError',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: YanColors.mutedText,
+                                    height: 1.45,
+                                  ),
+                                ),
                             ],
                           ],
                         ),
@@ -7428,6 +7515,19 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                       ),
                     ),
                     const SizedBox(height: 10),
+                    if (!isImage)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 42,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            await _openArizaFileInPhoneViewer(meta);
+                          },
+                          icon: const Icon(Icons.open_in_new_rounded),
+                          label: const Text('Telefon dasturida ko‘rish'),
+                        ),
+                      ),
+                    if (!isImage) const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
                       height: 44,
@@ -7461,7 +7561,6 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
   /// memory (`Downloads` / `ApplicationDocumentsDirectory`) — ONLY available
   /// AFTER the client has accepted the ariza!
   Future<File?> _saveAcceptedArizaToPhoneMemory(
-    _ChatMessageItem msg,
     _ArizaFileDeliveryMeta meta,
   ) async {
     try {
@@ -7474,9 +7573,10 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
       }
       if (bytes == null && meta.storagePath.isNotEmpty) {
         bytes = await Supabase.instance.client.storage
-            .from('advocate_licenses')
+            .from(meta.storageBucket)
             .download(meta.storagePath);
       }
+      if (bytes == null) return null;
 
       final cleanName = meta.fileName.replaceAll(
         RegExp(r'[^a-zA-Z0-9._-]'),
@@ -7488,11 +7588,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
       final targetFile = File(
         '${docsDir.path}${Platform.pathSeparator}$cleanName',
       );
-      if (bytes != null) {
-        await targetFile.writeAsBytes(bytes, flush: true);
-      } else {
-        await targetFile.writeAsString(msg.text, flush: true);
-      }
+      await targetFile.writeAsBytes(bytes, flush: true);
 
       try {
         final androidDl = Directory('/storage/emulated/0/Download');
@@ -7500,11 +7596,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
           final dlFile = File(
             '${androidDl.path}${Platform.pathSeparator}$cleanName',
           );
-          if (bytes != null) {
-            await dlFile.writeAsBytes(bytes, flush: true);
-          } else {
-            await dlFile.writeAsString(msg.text, flush: true);
-          }
+          await dlFile.writeAsBytes(bytes, flush: true);
           return dlFile;
         }
       } catch (_) {}
@@ -7515,16 +7607,58 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     }
   }
 
+  Future<void> _openArizaFileInPhoneViewer(
+    _ArizaFileDeliveryMeta meta,
+  ) async {
+    try {
+      Uint8List? bytes;
+      File? source;
+      if (meta.localPath.isNotEmpty) {
+        final candidate = File(meta.localPath);
+        if (await candidate.exists()) source = candidate;
+      }
+      if (source == null && meta.storagePath.isNotEmpty) {
+        bytes = await Supabase.instance.client.storage
+            .from(meta.storageBucket)
+            .download(meta.storagePath);
+      }
+      if (source == null && bytes == null) {
+        throw StateError('Faylni serverdan olib bo‘lmadi');
+      }
+      final directory = await getTemporaryDirectory();
+      final safeName = meta.fileName.replaceAll(
+        RegExp(r'[^a-zA-Z0-9._-]'),
+        '_',
+      );
+      final viewFile = source ??
+          File('${directory.path}${Platform.pathSeparator}$safeName');
+      if (bytes != null) await viewFile.writeAsBytes(bytes, flush: true);
+      await OpenFilex.open(viewFile.path);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Faylni ochib bo‘lmadi: $error')),
+        );
+      }
+    }
+  }
+
   Future<void> _handleSaveAcceptedArizaButton(
     _ChatMessageItem msg,
     _ArizaFileDeliveryMeta meta,
   ) async {
-    final savedFile = await _saveAcceptedArizaToPhoneMemory(msg, meta);
+    final savedFile = await _saveAcceptedArizaToPhoneMemory(meta);
     if (!mounted) return;
+    if (savedFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Faylni telefonga saqlab bo‘lmadi.')),
+      );
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Tayyor ariza telefon xotirasiga saqlandi: ${savedFile?.path ?? meta.fileName}',
+          'Tayyor ariza telefon xotirasiga saqlandi: ${savedFile.path}',
         ),
         backgroundColor: YanColors.successGreen,
         behavior: SnackBarBehavior.floating,
@@ -7538,31 +7672,34 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     _ChatMessageItem msg,
     _ArizaFileDeliveryMeta meta,
   ) async {
-    final savedFile = await _saveAcceptedArizaToPhoneMemory(msg, meta);
-    var publicUrl = '';
-    if (meta.storagePath.isNotEmpty) {
-      try {
-        publicUrl = Supabase.instance.client.storage
-            .from('advocate_licenses')
-            .getPublicUrl(meta.storagePath);
-      } catch (_) {}
+    final savedFile = await _saveAcceptedArizaToPhoneMemory(meta);
+    if (savedFile == null || !savedFile.existsSync()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Faylni ulashish uchun yuklab bo‘lmadi.')),
+        );
+      }
+      return;
     }
-
-    if (publicUrl.isNotEmpty) {
-      await Clipboard.setData(ClipboardData(text: publicUrl));
-    }
-
-    if (savedFile != null && savedFile.existsSync()) {
-      try {
-        await OpenFilex.open(savedFile.path);
-      } catch (_) {}
+    try {
+      await Share.shareXFiles(
+        <XFile>[XFile(savedFile.path)],
+        text: meta.fileName,
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ulashish oynasi ochilmadi: $error')),
+        );
+      }
+      return;
     }
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Ulashish oynasi ochildi (${meta.fileName})${publicUrl.isNotEmpty ? " • Havola nusxalandi" : ""}',
+          'Ulashish oynasi ochildi (${meta.fileName})',
         ),
         backgroundColor: YanColors.primaryNavy,
         behavior: SnackBarBehavior.floating,
@@ -7574,6 +7711,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     _ChatMessageItem msg,
     _ArizaFileDeliveryMeta meta,
   ) async {
+    if (meta.status == 'accepted' || meta.status == 'rejected') return;
     final updatedMeta = meta.copyWith(status: 'accepted').encode();
     final idx = _messages.indexWhere((m) => m.id == msg.id);
     if (idx >= 0) {
@@ -7787,6 +7925,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     _ArizaFileDeliveryMeta meta, {
     int initialStars = 0,
   }) async {
+    if (meta.ratedStars > 0) return;
     var selectedStars = initialStars;
 
     await showModalBottomSheet<void>(
@@ -7937,6 +8076,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     _ArizaFileDeliveryMeta meta,
     int stars,
   ) async {
+    if (meta.ratedStars > 0 || stars < 1 || stars > 5) return;
     final updatedMeta = meta
         .copyWith(status: 'accepted', ratedStars: stars)
         .encode();
@@ -7952,6 +8092,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
       advocateName: widget.lawyer.fullName,
       stars: stars,
       clientName: widget.profile.displayName,
+      ratingId: meta.arizaId,
     );
 
     _roomChannel?.sendBroadcastMessage(
@@ -7961,6 +8102,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
         'media_meta': updatedMeta,
         'decision': 'rated',
         'rated_stars': stars,
+        'ariza_id': meta.arizaId,
         'advocate_id': _peerUserId,
         'advocate_name': widget.lawyer.fullName,
         'client_name': widget.profile.displayName,
@@ -7974,6 +8116,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
         'advocate_id': _peerUserId,
         'advocate_name': widget.lawyer.fullName,
         'stars': stars,
+        'ariza_id': meta.arizaId,
         'client_name': widget.profile.displayName,
         'timestamp': DateTime.now().toUtc().toIso8601String(),
       },
@@ -8449,6 +8592,15 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
               ),
               const SizedBox(height: 14),
               _AttachmentOptionTile(
+                icon: Icons.attach_file_rounded,
+                title: 'Qurilmadan istalgan fayl yuborish',
+                subtitle: 'Rasm, PDF, hujjat, audio, video va boshqa fayllar',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAndSendChatFile();
+                },
+              ),
+              _AttachmentOptionTile(
                 icon: Icons.verified_rounded,
                 title: 'Tayyor rasmiy arizani topshirish (#ariza)',
                 subtitle:
@@ -8456,45 +8608,6 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                 onTap: () {
                   Navigator.pop(ctx);
                   _openReadyArizaFileDeliveryModal();
-                },
-              ),
-              _AttachmentOptionTile(
-                icon: Icons.description_rounded,
-                title: 'PDF / Sud hujjati yuborish',
-                subtitle: 'Da’vo arizasi, qaror yoki shartnoma nusxasi',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _sendAttachment(
-                    _ChatMediaType.document,
-                    'Sud_hujjati_E2EE.pdf',
-                    '1.4 MB • E2EE PDF',
-                  );
-                },
-              ),
-              _AttachmentOptionTile(
-                icon: Icons.image_rounded,
-                title: 'Rasm / Skaner nusxa yuborish',
-                subtitle: 'Guvohnoma yoki chek tasviri',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _sendAttachment(
-                    _ChatMediaType.image,
-                    'Hujjat_skaner_tasviri.jpg',
-                    '2.1 MB • E2EE Rasm',
-                  );
-                },
-              ),
-              _AttachmentOptionTile(
-                icon: Icons.mic_rounded,
-                title: 'Ovozli xabar yuborish',
-                subtitle: '0:24 E2EE shifrlangan audio yozuv',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _sendAttachment(
-                    _ChatMediaType.voice,
-                    'Ovozli murojaat (0:24)',
-                    '0:24 • E2EE Voice',
-                  );
                 },
               ),
             ],
@@ -8518,6 +8631,15 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
   ///   + `Qabul qilish` and `Rad etish` buttons.
   /// - After client accepts: `Ko‘rish` + `Saqlash` (phone memory) + `Ulashish` (all apps)
   ///   + 5 Empty Stars (`☆ ☆ ☆ ☆ ☆`) rating!
+  String _formatArizaResponseCountdown(DateTime sentAt, DateTime now) {
+    final remaining = sentAt.add(const Duration(minutes: 30)).difference(now);
+    if (remaining.isNegative) return 'muddati tugagan';
+    final seconds = remaining.inSeconds;
+    final minutesPart = (seconds ~/ 60).toString().padLeft(2, '0');
+    final secondsPart = (seconds % 60).toString().padLeft(2, '0');
+    return '$minutesPart:$secondsPart';
+  }
+
   Widget _buildInteractiveArizaDeliveryControls(
     _ChatMessageItem m,
     _ArizaFileDeliveryMeta meta,
@@ -8564,7 +8686,27 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
               ),
               const SizedBox(height: 9),
 
-              // BEFORE ACCEPTANCE: Only "Ko'rish (YAN360 Watermark)" is available!
+              if (meta.status == 'null' && meta.sentAtDateTime != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: <Widget>[
+                      const Icon(Icons.timer_outlined,
+                          size: 14, color: Colors.white),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Javob muddati: ${_formatArizaResponseCountdown(meta.sentAtDateTime!, now)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Review the protected copy before confirming the delivery.
               if (!isAccepted)
                 GestureDetector(
                   onTap: () => _openWatermarkedArizaPreviewModal(m, meta),
@@ -8585,7 +8727,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                         ),
                         SizedBox(width: 6),
                         Text(
-                          'Ko‘rish (YAN360 Himoyalangan Ko‘rik)',
+                        'Ko‘rish',
                           style: TextStyle(
                             fontSize: 12.2,
                             fontWeight: FontWeight.w900,
@@ -8861,8 +9003,11 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                     final starNumber = idx + 1;
                     final isFilled = starNumber <= meta.ratedStars;
                     return GestureDetector(
-                      onTap: () =>
-                          _submitClientStarRating(m, meta, starNumber),
+                      onTap: meta.ratedStars == 0
+                          ? () =>
+                                _openFiveEmptyStarsRatingSheet(m, meta,
+                                    initialStars: starNumber)
+                          : null,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: Icon(
@@ -9072,6 +9217,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
               final isAutoWelcome = m.isAutoWelcomeMessage;
               final arizaMeta = m.arizaDeliveryMeta;
               final isReadyAriza = arizaMeta != null;
+              final chatFileMeta = _parseChatFileMeta(m.mediaMeta);
 
               return Align(
                 alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
@@ -9256,6 +9402,69 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                             height: 1.42,
                           ),
                         ),
+                        if (chatFileMeta != null) ...<Widget>[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 9,
+                            ),
+                            decoration: BoxDecoration(
+                              color: mine
+                                  ? Colors.white.withValues(alpha: 0.14)
+                                  : YanColors.lightBlue,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: <Widget>[
+                                Icon(
+                                  m.mediaType == _ChatMediaType.image
+                                      ? Icons.image_rounded
+                                      : m.mediaType == _ChatMediaType.video
+                                      ? Icons.videocam_rounded
+                                      : Icons.insert_drive_file_rounded,
+                                  color: mine
+                                      ? Colors.white
+                                      : YanColors.primaryBlue,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    chatFileMeta['name'] ?? m.text,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      color: mine
+                                          ? Colors.white
+                                          : YanColors.primaryNavy,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Ochish',
+                                  onPressed: () => _openChatFile(chatFileMeta),
+                                  icon: Icon(
+                                    Icons.open_in_new_rounded,
+                                    color: mine
+                                        ? Colors.white
+                                        : YanColors.primaryBlue,
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Ulashish',
+                                  onPressed: () => _shareChatFile(chatFileMeta),
+                                  icon: Icon(
+                                    Icons.share_rounded,
+                                    color: mine
+                                        ? Colors.white
+                                        : YanColors.primaryBlue,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         if (isReadyAriza)
                           _buildInteractiveArizaDeliveryControls(m, arizaMeta),
                         const SizedBox(height: 6),
@@ -10040,10 +10249,17 @@ class _ArizalarimRoleViewState extends State<_ArizalarimRoleView> {
     return ValueListenableBuilder<List<ArizaOrderItem>>(
       valueListenable: YanRoleDataCatalog.arizaOrders,
       builder: (context, orders, _) {
-        final readyOrders = orders
+        final myOrders = orders
+            .where((o) => YanRoleDataCatalog.isSameParticipant(
+                  o.clientId,
+                  Supabase.instance.client.auth.currentUser?.id ??
+                      profile.clientId,
+                ))
+            .toList(growable: false);
+        final readyOrders = myOrders
             .where((o) => o.isEffectivelyCompleted(now))
             .toList();
-        final activeOrders = orders
+        final activeOrders = myOrders
             .where((o) => !o.isEffectivelyCompleted(now))
             .toList();
 
@@ -10791,7 +11007,9 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final arizaOrders = YanRoleDataCatalog.arizaOrders.value;
+    final advocateId = Supabase.instance.client.auth.currentUser?.id ??
+        widget.profile.clientId;
+    final arizaOrders = YanRoleDataCatalog.ordersForAdvocate(advocateId);
 
     final showArizaSection =
         _selectedCategoryFilter == 'Barchasi' ||

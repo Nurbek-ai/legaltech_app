@@ -922,6 +922,7 @@ class AssistantTaskItem {
 }
 
 class YanRoleDataCatalog {
+  static final Set<String> _appliedArizaRatings = <String>{};
   YanRoleDataCatalog._();
 
   static const List<String> regions = <String>[
@@ -1008,9 +1009,45 @@ class YanRoleDataCatalog {
     return '$fee so‘m';
   }
 
+  /// Normalizes participant IDs (whether 'YAN-12345678' or full UUID '12345678-...')
+  /// so multi-advocate and multi-client checks are strictly isolated.
+  static String normalizeId(String rawId) {
+    var clean = rawId.trim().toLowerCase();
+    if (clean.startsWith('yan-')) {
+      clean = clean.substring(4);
+    }
+    clean = clean.replaceAll(RegExp(r'[^a-z0-9]'), '');
+    // Keep the full identifier: truncating UUIDs made unrelated users collide.
+    return clean;
+  }
+
+  static bool isSameParticipant(String idA, String idB) {
+    final normA = normalizeId(idA);
+    final normB = normalizeId(idB);
+    if (normA.isEmpty || normB.isEmpty) return false;
+    return normA == normB;
+  }
+
   /// Live list of "Advokatga ariza yozdirish" orders & completed `#ariza` deliveries.
   static final ValueNotifier<List<ArizaOrderItem>> arizaOrders =
       ValueNotifier<List<ArizaOrderItem>>(<ArizaOrderItem>[]);
+
+  /// Strictly returns ONLY orders belonging to the specified advocate!
+  /// Prevents any advocate from seeing another advocate's client orders.
+  static List<ArizaOrderItem> ordersForAdvocate(String advocateId) {
+    if (normalizeId(advocateId).isEmpty) return const <ArizaOrderItem>[];
+    return arizaOrders.value
+        .where((o) => isSameParticipant(o.advocateId, advocateId))
+        .toList(growable: false);
+  }
+
+  /// Strictly returns ONLY orders belonging to the specified client!
+  static List<ArizaOrderItem> ordersForClient(String clientId) {
+    if (normalizeId(clientId).isEmpty) return const <ArizaOrderItem>[];
+    return arizaOrders.value
+        .where((o) => isSameParticipant(o.clientId, clientId))
+        .toList(growable: false);
+  }
 
   static void upsertArizaOrder(ArizaOrderItem item) {
     final current = List<ArizaOrderItem>.from(arizaOrders.value);
@@ -1030,8 +1067,18 @@ class YanRoleDataCatalog {
     required String advocateName,
     required int stars,
     required String clientName,
+    String ratingId = '',
     String comment = '',
   }) {
+    final dedupeKey = ratingId.trim().isEmpty
+        ? ''
+        : '${normalizeId(advocateId)}:${ratingId.trim()}';
+    if (dedupeKey.isNotEmpty && !_appliedArizaRatings.add(dedupeKey)) {
+      final existing = registeredLawyers.value.where(
+        (lawyer) => isSameParticipant(lawyer.id, advocateId),
+      );
+      return existing.isEmpty ? stars.toDouble() : existing.first.rating;
+    }
     final clampedStars = stars.clamp(1, 5).toDouble();
     final currentList = List<LawyerDirectoryProfile>.from(
       registeredLawyers.value,
@@ -1041,7 +1088,7 @@ class YanRoleDataCatalog {
 
     for (var i = 0; i < currentList.length; i++) {
       final adv = currentList[i];
-      if (adv.id == advocateId ||
+      if (isSameParticipant(adv.id, advocateId) ||
           adv.fullName.toLowerCase() == advocateName.toLowerCase()) {
         final oldCount = adv.feedbackCount < 0 ? 0 : adv.feedbackCount;
         final nextCount = oldCount + 1;
@@ -1084,7 +1131,8 @@ class YanRoleDataCatalog {
     final current = List<ArizaOrderItem>.from(arizaOrders.value);
     for (var i = 0; i < current.length; i++) {
       final item = current[i];
-      if ((item.clientId == clientId || item.advocateId == advocateId) &&
+      if (isSameParticipant(item.clientId, clientId) &&
+          isSameParticipant(item.advocateId, advocateId) &&
           !item.isCompleted) {
         current[i] = item.copyWith(
           arizaSentAt: sentAt,
@@ -1105,7 +1153,8 @@ class YanRoleDataCatalog {
     final current = List<ArizaOrderItem>.from(arizaOrders.value);
     for (var i = 0; i < current.length; i++) {
       final item = current[i];
-      if (item.clientId == clientId || item.advocateId == advocateId) {
+      if (isSameParticipant(item.clientId, clientId) &&
+          isSameParticipant(item.advocateId, advocateId)) {
         current[i] = item.copyWith(
           isCompleted: false,
           clearArizaSentAt: true,
@@ -1130,7 +1179,8 @@ class YanRoleDataCatalog {
     var matched = false;
     for (var i = 0; i < current.length; i++) {
       final item = current[i];
-      if ((item.clientId == clientId || item.advocateId == advocateId) &&
+      if (isSameParticipant(item.clientId, clientId) &&
+          isSameParticipant(item.advocateId, advocateId) &&
           !item.isCompleted) {
         current[i] = item.copyWith(
           isCompleted: true,
@@ -1161,6 +1211,7 @@ class YanRoleDataCatalog {
           createdAt: now.subtract(const Duration(minutes: 5)),
           deadlineAt: now.add(const Duration(minutes: 25)),
           isCompleted: true,
+          clientResponseStatus: 'accepted',
           completedArizaText: arizaContent,
           completedAt: now,
           completedAttachmentMeta: attachmentMeta,
