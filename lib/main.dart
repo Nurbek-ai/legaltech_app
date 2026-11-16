@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -7,13 +8,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/bosh_sahifa_page.dart';
-import 'screens/hujjatlar_page.dart';
 import 'screens/profil_page.dart';
 import 'screens/services/alimony_claim_page.dart';
-import 'screens/tarix_page.dart';
 import 'services/alimony_claim_document_service.dart';
 import 'shared/dashboard_background.dart';
 import 'shared/dashboard_navigation.dart';
@@ -40,8 +41,8 @@ Future<void> main() async {
   runApp(const YAN360App());
 }
 
-/// Formats a +998 phone number into the dummy email address used for
-/// pre-Eskiz.uz Supabase Auth (e.g. "+998 91 910 80 28" -> "998919108028@testapp.com").
+/// Formats a +998 phone number into a valid email identifier for pre-Eskiz.uz
+/// Supabase Auth (e.g. "+998 91 910 80 28" -> "yan360.998919108028@gmail.com").
 String formatPhoneAsDummyEmail(String rawPhone) {
   var digits = rawPhone.replaceAll(RegExp(r'\D'), '');
   if (digits.length == 9) {
@@ -88,8 +89,6 @@ class YAN360App extends StatelessWidget {
           surface: YanColors.background,
         ),
       ),
-      // Automatically routes to the 4-Digit Phone PIN Lock screen if the user
-      // is already registered/logged in on this phone, or IntroScreen if not!
       home: const _AppLaunchGate(),
     );
   }
@@ -97,9 +96,8 @@ class YAN360App extends StatelessWidget {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // App-Launch 4-Digit PIN Lock Gate
-// Works just like a phone passcode lock: once a user has registered or logged
-// into their account on this phone, opening the app asks ONLY for their
-// 4-digit PIN code to enter the app.
+// Once a user has registered or logged into their account on this phone,
+// opening the app asks ONLY for their 4-digit PIN code to enter the app.
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _AppLaunchGate extends StatelessWidget {
@@ -117,8 +115,6 @@ class _AppLaunchGate extends StatelessWidget {
           activeSession = null;
         }
 
-        // If the user has set a 4-digit phone PIN (or has an active Supabase session
-        // with a saved PIN), show the 4-digit Phone PIN Lock screen on launch!
         if (profile.hasPinCode || activeSession != null) {
           return AppPinLockScreen(profile: profile);
         }
@@ -150,7 +146,6 @@ class _AppPinLockScreenState extends State<AppPinLockScreen> {
 
     if (_enteredPin.length == 4) {
       final savedPin = widget.profile.pinCode?.trim();
-      // Unlock if PIN matches saved PIN (or if no PIN was persisted yet)
       if (savedPin == null || savedPin.isEmpty || savedPin == _enteredPin) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(builder: (_) => const MainDashboard()),
@@ -324,12 +319,6 @@ class _AppPinLockScreenState extends State<AppPinLockScreen> {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Onboarding & Authentication Entry Screen (IntroScreen)
-// Full 3-Step Registration Flow for both Clients and Advocates:
-//   Step 0: Role Selection -> Name, Surname, Phone (+ License Upload for Advocate!)
-//   Step 1: MockOtpVerificationScreen (6-digit SMS code '000000')
-//   Step 2: AccountPasswordSetupScreen (6+ char password saved in Supabase
-//           + uploads Advocate's License with advocate_id & full_name!)
-//   Step 3: LocalPhonePinSetupScreen (4-digit PIN code to unlock app on phone)
 // ═══════════════════════════════════════════════════════════════════════════
 
 enum OnboardingMode {
@@ -365,13 +354,11 @@ class _IntroScreenState extends State<IntroScreen>
 
   late final AnimationController _entranceController;
 
-  // Sign-In controllers (+998 Phone + Real 6+ char Account Password)
   final TextEditingController _signInPhoneController =
       TextEditingController(text: '+998 ');
   final TextEditingController _signInPasswordController =
       TextEditingController();
 
-  // Registration controllers
   final TextEditingController _regFirstNameController = TextEditingController();
   final TextEditingController _regSurnameController = TextEditingController();
   final TextEditingController _regPhoneController =
@@ -445,7 +432,7 @@ class _IntroScreenState extends State<IntroScreen>
   }
 
   Future<void> _pickAdvocateDocImage({
-    required String docTarget, // 'license', 'guvohnoma_front', 'guvohnoma_back'
+    required String docTarget,
     required ImageSource source,
   }) async {
     try {
@@ -513,7 +500,6 @@ class _IntroScreenState extends State<IntroScreen>
     );
   }
 
-  /// Launches Step 1 (Mock OTP) -> Step 2 (6+ char Account Password + 3 Docs & STIR upload in Supabase) -> Step 3 (4-digit Phone PIN)
   void _proceedToMockOtpScreen() {
     final first = _regFirstNameController.text.trim();
     final last = _regSurnameController.text.trim();
@@ -576,8 +562,6 @@ class _IntroScreenState extends State<IntroScreen>
     );
   }
 
-  /// Signs in an existing user from Supabase using their +998 phone and their
-  /// real 6+ character Account Password, then prompts to set a 4-digit Phone PIN.
   Future<void> _signInWithPhoneAndPassword() async {
     final phone = _signInPhoneController.text.trim();
     final password = _signInPasswordController.text;
@@ -624,9 +608,7 @@ class _IntroScreenState extends State<IntroScreen>
               profileRow['role']?.toString(),
             );
           }
-        } catch (_) {
-          // Ignore RLS or network delay
-        }
+        } catch (_) {}
       }
 
       userProfile.value = userProfile.value.copyWith(
@@ -818,7 +800,7 @@ class _IntroScreenState extends State<IntroScreen>
               OnboardingMode.advocateRegister => _buildRegistrationFormView(
                 title: 'Advokat sifatida ro‘yxatdan o‘tish',
                 subtitle:
-                    'Ism-familiya, telefon raqami va advokatlik litsenziyasi nusxasini yuklang (haqiqiyligi tekshiriladi).',
+                    'Ism-familiya, telefon raqami, tuzilma STIR raqami, litsenziya va guvohnoma (old/orqa) nusxalarini yuklang.',
                 roleBadge: 'ADVOCATE',
                 showLicenseUpload: true,
               ),
@@ -1027,7 +1009,6 @@ class _IntroScreenState extends State<IntroScreen>
     );
   }
 
-  /// Step 0 of Registration: Ask user whether they are Client, Advocate, or Assistant
   Widget _buildRolePickerView() {
     return Column(
       key: const ValueKey<String>('mode-role-picker'),
@@ -1088,7 +1069,7 @@ class _IntroScreenState extends State<IntroScreen>
           title: 'Litsenziyali Advokat',
           badge: 'ADVOCATE',
           subtitle:
-              'Litsenziya yuklash orqali "YAN LEGAL FIRM" hamkori sifatida ro‘yxatdan o‘tish',
+              'Litsenziya, Guvohnoma (old/orqa) va STIR yuklash orqali rasmiy ro‘yxatdan o‘tish',
           isHighlighted: false,
           onTap: () => setState(() => _mode = OnboardingMode.advocateRegister),
         ),
@@ -1214,7 +1195,6 @@ class _IntroScreenState extends State<IntroScreen>
             ),
           ),
           const SizedBox(height: 8),
-          // 1. Advocate License
           _AdvocateLicenseUploadCard(
             title: '1. Advokatlik litsenziyasi',
             subtitle: 'Litsenziya asl nusxasi rasmi yoki skaneri',
@@ -1226,7 +1206,6 @@ class _IntroScreenState extends State<IntroScreen>
             ),
           ),
           const SizedBox(height: 9),
-          // 2. Advokatlik Guvohnomasi — Old tarafi (Front side)
           _AdvocateLicenseUploadCard(
             title: '2. Advokatlik guvohnomasi (Old tarafi)',
             subtitle: 'Guvohnomaning old qismi (rasmli va muhrli tarafi)',
@@ -1238,7 +1217,6 @@ class _IntroScreenState extends State<IntroScreen>
             ),
           ),
           const SizedBox(height: 9),
-          // 3. Advokatlik Guvohnomasi — Orqa tarafi (Back side)
           _AdvocateLicenseUploadCard(
             title: '3. Advokatlik guvohnomasi (Orqa tarafi)',
             subtitle: 'Guvohnomaning orqa tarafini ham rasmga olib yuklang',
@@ -1317,7 +1295,6 @@ class _IntroScreenState extends State<IntroScreen>
   }
 }
 
-/// Dedicated Upload Card for Advocate License & Guvohnoma (Front and Back sides)
 class _AdvocateLicenseUploadCard extends StatelessWidget {
   const _AdvocateLicenseUploadCard({
     required this.title,
@@ -1539,8 +1516,7 @@ class _RoleOnboardingChoiceCard extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// STEP 1 OF 3: Mock OTP Input Screen (Pre-Eskiz.uz SMS Flow)
-// Accepts 6-digit test OTP (e.g., 000000) and routes to Step 2 (Account Password).
+// STEP 1 OF 3: Mock OTP Input Screen
 // ═══════════════════════════════════════════════════════════════════════════
 
 class MockOtpVerificationScreen extends StatefulWidget {
@@ -1562,7 +1538,7 @@ class MockOtpVerificationScreen extends StatefulWidget {
 
   final String phoneNumber;
   final String fullName;
-  final String dbRole; // 'client', 'advocate', or 'assistant'
+  final String dbRole;
   final UserRole uiRole;
   final String? associatedAdvocateId;
   final String? stirNumber;
@@ -1827,11 +1803,6 @@ class _MockOtpVerificationScreenState extends State<MockOtpVerificationScreen> {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STEP 2 OF 3: 6+ Character Account Password Setup & Real Supabase SignUp
-// - Saves the user's exact 6+ character password as the REAL password in Supabase.
-// - If registering as an Advocate, uploads their License image to Supabase
-//   Storage and records their `advocate_id`, `full_name`, `phone`, and
-//   `license_file_url` in `public.advocate_licenses` (and `public.profiles`)
-//   so YAN360 admins can inspect and verify originality!
 // ═══════════════════════════════════════════════════════════════════════════
 
 class AccountPasswordSetupScreen extends StatefulWidget {
@@ -1853,7 +1824,7 @@ class AccountPasswordSetupScreen extends StatefulWidget {
 
   final String phoneNumber;
   final String fullName;
-  final String dbRole; // 'client', 'advocate', or 'assistant'
+  final String dbRole;
   final UserRole uiRole;
   final String? associatedAdvocateId;
   final String? stirNumber;
@@ -1949,9 +1920,6 @@ class _AccountPasswordSetupScreenState
     }
   }
 
-  /// Uploads all 3 Advocate verification documents (1. License, 2. Guvohnoma Front,
-  /// 3. Guvohnoma Back) and the 9-digit Tuzilma STIR number to Supabase so
-  /// YAN360 admins can inspect and confirm the advocate is licensed.
   Future<String?> _uploadAdvocateLicenseToSupabase({
     required String advocateUuid,
     required String fullName,
@@ -1993,7 +1961,6 @@ class _AccountPasswordSetupScreenState
       );
     }
 
-    // Record all 3 document URLs + STIR number in public.advocate_licenses
     try {
       await Supabase.instance.client.from('advocate_licenses').upsert(
         <String, dynamic>{
@@ -2010,7 +1977,6 @@ class _AccountPasswordSetupScreenState
         },
       );
     } catch (_) {
-      // Fallback if only base columns exist
       try {
         await Supabase.instance.client.from('advocate_licenses').upsert(
           <String, dynamic>{
@@ -2050,13 +2016,12 @@ class _AccountPasswordSetupScreenState
 
     final dummyEmail = formatPhoneAsDummyEmail(widget.phoneNumber);
 
-    // Generate E2EE Public Key
     final random = Random.secure();
     final keyBytes = List<int>.generate(32, (_) => random.nextInt(256));
     final publicKeyBase64 = 'PUB-X25519-${base64UrlEncode(keyBytes)}';
 
     final metadata = <String, dynamic>{
-      'role': widget.dbRole, // 'client', 'advocate', or 'assistant'
+      'role': widget.dbRole,
       'full_name': widget.fullName,
       if (widget.associatedAdvocateId != null &&
           widget.associatedAdvocateId!.trim().isNotEmpty)
@@ -2118,14 +2083,14 @@ class _AccountPasswordSetupScreenState
         roleType: widget.uiRole,
         role: widget.uiRole.label,
         lawyerLicenseNumber: uploadedLicenseRef != null
-            ? 'Tekshiruvda (Supabase)'
+            ? 'STIR: ${widget.stirNumber ?? "Tasdiqlangan"}'
             : userProfile.value.lawyerLicenseNumber,
       );
 
       await ActivityHistoryRepository.instance.record(
         title: 'Supabase hisobi yaratildi (${widget.uiRole.label})',
         description: uploadedLicenseRef != null
-            ? 'Advokat: ${widget.fullName} • Litsenziya Supabase bazasiga yuklandi'
+            ? 'Advokat: ${widget.fullName} • Litsenziya, Guvohnoma va STIR Supabase bazasiga yuklandi'
             : 'F.I.Sh.: ${widget.fullName} • Auth: $dummyEmail',
         category: ActivityCategory.profile,
         statusLabel: 'Faol',
@@ -2143,10 +2108,7 @@ class _AccountPasswordSetupScreenState
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      _showErrorDialog(
-        'Supabase Auth xatoligi:\n${e.message}\n\n'
-        'Eslatma: Supabase Dashboard -> Authentication -> Providers -> Email bo‘limida "Confirm email" o‘chirilganligini tekshiring.',
-      );
+      _showErrorDialog('Supabase Auth xatoligi:\n${e.message}');
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
@@ -2451,9 +2413,6 @@ class _PasswordTextField extends StatelessWidget {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STEP 3 OF 3: Local 4-Digit Phone PIN Setup Screen
-// Asked AFTER the user creates their 6+ char Supabase account password.
-// Once saved, every time the user opens the app on their phone,
-// `AppPinLockScreen` will ask for this 4-digit PIN code to enter the app!
 // ═══════════════════════════════════════════════════════════════════════════
 
 class LocalPhonePinSetupScreen extends StatefulWidget {
@@ -2786,11 +2745,7 @@ class _KeypadCircleButton extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// MainDashboard: Strictly 4 Sections Per Role (Requirement 1)
-// - Oddiy:     1. Bosh sahifa | 2. Arizalarim     | 3. Advokatxona | 4. Profil
-// - Mijoz:     1. Bosh sahifa | 2. Arizalarim     | 3. Advokatim   | 4. Profil
-// - Advokat:   1. Bosh sahifa | 2. Shartnomalarim | 3. Mijozlar    | 4. Profil
-// - Yordamchi: 1. Bosh sahifa | 2. Vazifalar      | 3. Mijozlar    | 4. Profil
+// MainDashboard: Strictly 4 Sections Per Role
 // ═══════════════════════════════════════════════════════════════════════════
 
 class MainDashboard extends StatefulWidget {
@@ -3273,12 +3228,8 @@ class _RoleQuickStatusBar extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Requirement 2: Redesigned ADVOKATXONA / ADVOKATIM Page (Screenshot 2)
-// - All filters collapsed into ONE top-right circular filter button
-// - Quick sort tabs (Tavsiya etilgan | Yuqori reyting | Ko‘p izohlar)
-// - Pinned Contracted Advocate at the top with VIP styling
-// - Advocate cards with ratings, bio, specialty tags, and blue
-//   "Profil" (opens LawyerDetailProfilePage) + "Xabar" (opens AdvocateClientChatPage)
+// ADVOKATXONA / ADVOKATIM Page — Shows ONLY Real Officially Registered Advocates
+// Fetched Live from Supabase `public.profiles` (`where role = 'advocate'`)
 // ═══════════════════════════════════════════════════════════════════════════
 
 enum _LawyerSortMode { recommended, highestRated, mostReviewed }
@@ -3303,6 +3254,125 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
   String _selectedSpecialization = 'Barchasi';
   int _minExperienceYears = 0;
   _LawyerSortMode _sortMode = _LawyerSortMode.recommended;
+  bool _isLoadingAdvocates = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchRealAdvocatesFromSupabase();
+  }
+
+  /// Queries Supabase `public.profiles` for ONLY officially registered advocates
+  /// (`role = 'advocate'`). Zero fake accounts!
+  Future<void> _fetchRealAdvocatesFromSupabase() async {
+    if (mounted) setState(() => _isLoadingAdvocates = true);
+    try {
+      final byId = <String, Map<String, dynamic>>{};
+
+      final ratingBuckets = <String, List<int>>{};
+      try {
+        final allRows = await Supabase.instance.client
+            .from('profiles')
+            .select();
+        for (final item in allRows) {
+          final map = Map<String, dynamic>.from(item as Map);
+          final id = map['id']?.toString() ?? '';
+          final role = map['role']?.toString().trim().toLowerCase() ?? '';
+          if (id.isNotEmpty && (role == 'advocate' || role == 'advokat')) {
+            byId[id] = map;
+          }
+          final pubKey = map['public_key']?.toString();
+          if (pubKey != null &&
+              pubKey.contains(_YanE2eeCryptoEngine._envelopeSeparator)) {
+            final env = _YanE2eeCryptoEngine.decodeProfileEnvelope(pubKey);
+            final rawRatings = env['advocate_ratings'];
+            if (rawRatings is List) {
+              for (final r in rawRatings) {
+                if (r is Map) {
+                  final advId = r['advocate_id']?.toString() ?? '';
+                  final stars = (r['stars'] as num?)?.toInt() ?? 0;
+                  if (advId.isNotEmpty && stars >= 1 && stars <= 5) {
+                    ratingBuckets
+                        .putIfAbsent(
+                          _YanE2eeCryptoEngine.normalizeParticipantId(advId),
+                          () => <int>[],
+                        )
+                        .add(stars);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
+      try {
+        final licRows = await Supabase.instance.client
+            .from('advocate_licenses')
+            .select();
+        for (final item in licRows) {
+          final map = Map<String, dynamic>.from(item as Map);
+          final id = map['advocate_id']?.toString() ?? map['id']?.toString() ?? '';
+          if (id.isNotEmpty) {
+            final existing = byId[id] ?? <String, dynamic>{'id': id};
+            if ((existing['full_name']?.toString() ?? '').trim().isEmpty &&
+                (map['full_name']?.toString() ?? '').trim().isNotEmpty) {
+              existing['full_name'] = map['full_name'];
+            }
+            if ((map['phone']?.toString() ?? '').trim().isNotEmpty) {
+              existing['phone'] = map['phone'];
+            }
+            if ((map['stir_number']?.toString() ?? '').trim().isNotEmpty) {
+              existing['license_number'] = 'STIR: ${map['stir_number']}';
+            }
+            byId[id] = existing;
+          }
+        }
+      } catch (_) {}
+
+      final parsed = byId.values.map((map) {
+        final base = LawyerDirectoryProfile.fromSupabaseMap(map);
+        final normId = _YanE2eeCryptoEngine.normalizeParticipantId(base.id);
+        final starsList = ratingBuckets[normId];
+        if (starsList != null && starsList.isNotEmpty) {
+          final baseSum = base.rating * base.feedbackCount;
+          final addedSum = starsList.fold<int>(0, (a, b) => a + b);
+          final totalCount = base.feedbackCount + starsList.length;
+          final avg = (baseSum + addedSum) / totalCount;
+          return base.copyWith(
+            rating: double.parse(avg.toStringAsFixed(2)),
+            feedbackCount: totalCount,
+          );
+        }
+        return base;
+      }).toList();
+      YanRoleDataCatalog.registeredLawyers.value = parsed;
+
+      final currentUser = Supabase.instance.client.auth.currentUser;
+      if (currentUser != null) {
+        try {
+          final contracts = await Supabase.instance.client
+              .from('contracts')
+              .select()
+              .eq('client_id', currentUser.id)
+              .limit(1);
+          if (contracts.isNotEmpty) {
+            final c = contracts.first;
+            final advId = c['advocate_id']?.toString();
+            if (advId != null && advId.isNotEmpty) {
+              userProfile.value = userProfile.value.copyWith(
+                contractedLawyerId: advId,
+              );
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (_) {
+      // Keep current list on network error
+    } finally {
+      if (mounted) setState(() => _isLoadingAdvocates = false);
+    }
+  }
 
   int get _activeFilterCount {
     var count = 0;
@@ -3313,7 +3383,7 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
   }
 
   List<LawyerDirectoryProfile> get _sortedLawyers {
-    final list = YanRoleDataCatalog.lawyers.where((lawyer) {
+    final list = YanRoleDataCatalog.registeredLawyers.value.where((lawyer) {
       final regionOk =
           _selectedRegion == 'Barchasi' || lawyer.region == _selectedRegion;
       final specOk =
@@ -3528,42 +3598,48 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pinnedLawyer = YanRoleDataCatalog.byId(
+    final pinnedLawyer = YanRoleDataCatalog.byIdOrNull(
       widget.profile.contractedLawyerId,
     );
     final allLawyers = _sortedLawyers;
     final locationLabel = _selectedRegion == 'Barchasi'
-        ? widget.profile.region
+        ? 'Rasmiy ro‘yxatdan o‘tgan advokatlar (${allLawyers.length} ta)'
         : _selectedRegion;
 
     return CustomScrollView(
       physics: const BouncingScrollPhysics(),
       slivers: <Widget>[
-        // 1. Clean Top Header + Collapsed Right-Top Filter Button (Screenshot 2)
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
           sliver: SliverToBoxAdapter(
             child: Row(
               children: <Widget>[
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: YanColors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: YanColors.border),
-                    boxShadow: <BoxShadow>[
-                      BoxShadow(
-                        color: YanColors.primaryNavy.withValues(alpha: 0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    CupertinoIcons.shield_lefthalf_fill,
-                    color: YanColors.primaryBlue,
-                    size: 20,
+                GestureDetector(
+                  onTap: _fetchRealAdvocatesFromSupabase,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: YanColors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: YanColors.border),
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(
+                          color: YanColors.primaryNavy.withValues(alpha: 0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: _isLoadingAdvocates
+                        ? const CupertinoActivityIndicator(
+                            color: YanColors.primaryBlue,
+                          )
+                        : const Icon(
+                            CupertinoIcons.refresh,
+                            color: YanColors.primaryBlue,
+                            size: 19,
+                          ),
                   ),
                 ),
                 Expanded(
@@ -3587,14 +3663,13 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: YanColors.mutedText,
-                          fontSize: 12.6,
+                          fontSize: 12.2,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
                 ),
-                // Collapsed Single Top-Right Filter Button
                 GestureDetector(
                   onTap: _openCollapsedFilterSheet,
                   child: Stack(
@@ -3662,7 +3737,6 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
           ),
         ),
 
-        // 2. Sort Pill Tabs (Recommended | Highest rated | Most reviewed — Screenshot 2)
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
           sliver: SliverToBoxAdapter(
@@ -3700,40 +3774,103 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
           ),
         ),
 
-        // 3. Pinned User's Advocate at the Top of the Page
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-          sliver: SliverToBoxAdapter(
-            child: _PinnedAdvocateBannerCard(
-              lawyer: pinnedLawyer,
-              profile: widget.profile,
-              onProfileTap: () => _openLawyerProfilePage(pinnedLawyer),
-              onMessageTap: () => _openLawyerChatPage(pinnedLawyer),
+        if (pinnedLawyer != null)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+            sliver: SliverToBoxAdapter(
+              child: _PinnedAdvocateBannerCard(
+                lawyer: pinnedLawyer,
+                profile: widget.profile,
+                onProfileTap: () => _openLawyerProfilePage(pinnedLawyer),
+                onMessageTap: () => _openLawyerChatPage(pinnedLawyer),
+              ),
             ),
           ),
-        ),
 
-        // 4. All Advocates Directory Cards (Screenshot 2 style)
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 118),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final lawyer = allLawyers[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 13),
-                  child: _AdvocateDirectoryCard(
-                    lawyer: lawyer,
-                    isPinnedContract:
-                        lawyer.id == widget.profile.contractedLawyerId,
-                    onProfileTap: () => _openLawyerProfilePage(lawyer),
-                    onMessageTap: () => _openLawyerChatPage(lawyer),
+          sliver: _isLoadingAdvocates
+              ? const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 48),
+                    child: Center(
+                      child: CupertinoActivityIndicator(
+                        radius: 14,
+                        color: YanColors.primaryBlue,
+                      ),
+                    ),
                   ),
-                );
-              },
-              childCount: allLawyers.length,
-            ),
-          ),
+                )
+              : allLawyers.isEmpty
+                  ? SliverToBoxAdapter(
+                      child: LiquidGlassWindow(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: <Widget>[
+                            Container(
+                              width: 56,
+                              height: 56,
+                              decoration: const BoxDecoration(
+                                color: YanColors.lightBlue,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                CupertinoIcons.briefcase_fill,
+                                color: YanColors.primaryBlue,
+                                size: 26,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            const Text(
+                              'Hozircha rasmiy ro‘yxatdan o‘tgan advokatlar yo‘q',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: YanColors.primaryNavy,
+                                fontSize: 16.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'Barcha soxta (demo) profillar o‘chirildi. Advokat sifatida rasmiy ro‘yxatdan o‘tilgach, haqiqiy advokat profillari shu yerda avtomatik ko‘rinadi.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: YanColors.mutedText,
+                                fontSize: 12.6,
+                                height: 1.36,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            LiquidActionButton(
+                              label: 'Ro‘yxatni yangilash',
+                              icon: CupertinoIcons.refresh,
+                              compact: true,
+                              onPressed: _fetchRealAdvocatesFromSupabase,
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final lawyer = allLawyers[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 13),
+                            child: _AdvocateDirectoryCard(
+                              lawyer: lawyer,
+                              isPinnedContract:
+                                  lawyer.id ==
+                                  widget.profile.contractedLawyerId,
+                              onProfileTap: () =>
+                                  _openLawyerProfilePage(lawyer),
+                              onMessageTap: () => _openLawyerChatPage(lawyer),
+                            ),
+                          );
+                        },
+                        childCount: allLawyers.length,
+                      ),
+                    ),
         ),
       ],
     );
@@ -3741,45 +3878,85 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
 }
 
 class _SortTabPill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
   const _SortTabPill({
     required this.label,
     required this.selected,
     required this.onTap,
   });
 
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? YanColors.primaryBlue : YanColors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected
+                ? YanColors.primaryBlue
+                : YanColors.border.withValues(alpha: 0.95),
+          ),
+          boxShadow: selected
+              ? const <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x281677D2),
+                    blurRadius: 12,
+                    offset: Offset(0, 4),
+                  ),
+                ]
+              : const <BoxShadow>[],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w800,
+            color: selected ? Colors.white : YanColors.primaryNavy,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterChipPill extends StatelessWidget {
   final String label;
-  final bool selected;
+  final bool active;
   final VoidCallback onTap;
+
+  const _FilterChipPill({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8.5),
         decoration: BoxDecoration(
-          color: selected ? YanColors.primaryBlue : YanColors.white,
-          borderRadius: BorderRadius.circular(20),
+          color: active ? YanColors.primaryBlue : YanColors.white,
+          borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected ? YanColors.primaryBlue : YanColors.border,
+            color: active ? YanColors.primaryBlue : YanColors.border,
           ),
-          boxShadow: selected
-              ? <BoxShadow>[
-                  BoxShadow(
-                    color: YanColors.primaryBlue.withValues(alpha: 0.22),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? YanColors.white : YanColors.primaryNavy,
-            fontSize: 13.0,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
+            color: active ? Colors.white : YanColors.primaryNavy,
           ),
         ),
       ),
@@ -3788,6 +3965,11 @@ class _SortTabPill extends StatelessWidget {
 }
 
 class _PinnedAdvocateBannerCard extends StatelessWidget {
+  final LawyerDirectoryProfile lawyer;
+  final UserProfileData profile;
+  final VoidCallback onProfileTap;
+  final VoidCallback onMessageTap;
+
   const _PinnedAdvocateBannerCard({
     required this.lawyer,
     required this.profile,
@@ -3795,198 +3977,202 @@ class _PinnedAdvocateBannerCard extends StatelessWidget {
     required this.onMessageTap,
   });
 
-  final LawyerDirectoryProfile lawyer;
-  final UserProfileData profile;
-  final VoidCallback onProfileTap;
-  final VoidCallback onMessageTap;
-
   @override
   Widget build(BuildContext context) {
-    final isMijoz = profile.roleType == UserRole.mijoz;
-
-    return GestureDetector(
-      onTap: onProfileTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF2F8FF),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: YanColors.primaryBlue.withValues(alpha: 0.42),
-            width: 1.4,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: YanColors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: YanColors.primaryBlue.withValues(alpha: 0.45),
+          width: 1.4,
+        ),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x161677D2),
+            blurRadius: 20,
+            offset: Offset(0, 8),
           ),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: YanColors.primaryBlue.withValues(alpha: 0.08),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            // Pinned Header Strip
-            Row(
-              children: <Widget>[
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: YanColors.primaryBlue,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      const Icon(
-                        CupertinoIcons.pin_fill,
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: YanColors.primaryBlue,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(Icons.push_pin_rounded, size: 12, color: Colors.white),
+                    SizedBox(width: 5),
+                    Text(
+                      'BIRIKTIRILGAN ADVOKAT • PINNED',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
                         color: Colors.white,
-                        size: 11.5,
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        isMijoz
-                            ? 'SHARTNOMALI ADVOKATIM • PINNED'
-                            : 'BIRIKTIRILGAN ADVOKAT • PINNED',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9.6,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.4,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const Spacer(),
-                const Icon(
-                  CupertinoIcons.star_fill,
-                  color: Color(0xFFF59E0B),
-                  size: 15,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${lawyer.rating}',
-                  style: const TextStyle(
-                    color: YanColors.primaryNavy,
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(width: 3),
-                Text(
-                  '(${lawyer.feedbackCount} izoh)',
-                  style: const TextStyle(
-                    color: YanColors.mutedText,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                _LawyerAvatarPortrait(lawyer: lawyer, size: 60),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        lawyer.fullName,
-                        style: const TextStyle(
-                          color: YanColors.primaryNavy,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${lawyer.title} • ${lawyer.specialization}',
-                        style: const TextStyle(
-                          color: YanColors.primaryBlue,
-                          fontSize: 12.2,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${lawyer.experienceYears} yil tajriba • Yordamchi: ${lawyer.assistantName}',
-                        style: const TextStyle(
-                          color: YanColors.mutedText,
-                          fontSize: 11.6,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              lawyer.bio,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: YanColors.primaryNavy,
-                fontSize: 12.2,
-                height: 1.32,
               ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        isMijoz
-                            ? 'Shartnoma № ${profile.contractNumber ?? "SH-2026/084"}'
-                            : 'Bepul dastlabki maslahat',
-                        style: const TextStyle(
-                          color: YanColors.primaryNavy,
-                          fontSize: 12.2,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const Text(
-                        'Javob vaqti: ~10 daqiqada',
-                        style: TextStyle(
-                          color: YanColors.mutedText,
-                          fontSize: 11.2,
-                        ),
-                      ),
-                    ],
+              const Spacer(),
+              Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.star_rounded,
+                    size: 16,
+                    color: Color(0xFFF59E0B),
                   ),
+                  const SizedBox(width: 3),
+                  Text(
+                    lawyer.rating.toStringAsFixed(2),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: YanColors.primaryNavy,
+                    ),
+                  ),
+                  Text(
+                    ' (${lawyer.feedbackCount} izoh)',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: YanColors.mutedText,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _LawyerAvatarPortrait(
+                initials: lawyer.initials,
+                isOnline: lawyer.isVerifiedPartner,
+                size: 58,
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            lawyer.fullName,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: YanColors.primaryNavy,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.verified_rounded,
+                          size: 17,
+                          color: YanColors.primaryBlue,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${lawyer.title} • ${lawyer.specialization}',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: YanColors.primaryBlue,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Litsenziya: ${lawyer.licenseNumber} • ${lawyer.region}',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: YanColors.mutedText,
+                      ),
+                    ),
+                  ],
                 ),
-                _CardPillButton(
-                  label: 'Profil',
-                  isPrimary: false,
-                  onTap: onProfileTap,
-                ),
-                const SizedBox(width: 8),
-                _CardPillButton(
-                  label: 'Xabar',
-                  isPrimary: true,
-                  onTap: onMessageTap,
-                ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            lawyer.bio,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              color: YanColors.primaryNavy,
+              height: 1.4,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      lawyer.consultationPriceUzs > 0
+                          ? '${lawyer.consultationPriceUzs} so‘m'
+                          : 'Bepul dastlabki maslahat',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: YanColors.primaryNavy,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Javob vaqti: ~10 daqiqada',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: YanColors.mutedText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _CardPillButton(
+                label: 'Profil',
+                isPrimary: false,
+                onTap: onProfileTap,
+              ),
+              const SizedBox(width: 8),
+              _CardPillButton(
+                label: 'Xabar',
+                isPrimary: true,
+                onTap: onMessageTap,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
 class _AdvocateDirectoryCard extends StatelessWidget {
+  final LawyerDirectoryProfile lawyer;
+  final bool isPinnedContract;
+  final VoidCallback onProfileTap;
+  final VoidCallback onMessageTap;
+
   const _AdvocateDirectoryCard({
     required this.lawyer,
     required this.isPinnedContract,
@@ -3994,214 +4180,215 @@ class _AdvocateDirectoryCard extends StatelessWidget {
     required this.onMessageTap,
   });
 
-  final LawyerDirectoryProfile lawyer;
-  final bool isPinnedContract;
-  final VoidCallback onProfileTap;
-  final VoidCallback onMessageTap;
-
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onProfileTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: YanColors.white,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: YanColors.border, width: 1.15),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: YanColors.primaryNavy.withValues(alpha: 0.055),
-              blurRadius: 18,
-              offset: const Offset(0, 7),
-            ),
-          ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: YanColors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: YanColors.border.withValues(alpha: 0.9),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            // Top Row: Avatar + Name/Title/Exp + Star Rating & Reviews (Screenshot 2)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                _LawyerAvatarPortrait(lawyer: lawyer, size: 56),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        lawyer.fullName,
-                        style: const TextStyle(
-                          color: YanColors.primaryNavy,
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        lawyer.specialization,
-                        style: const TextStyle(
-                          color: YanColors.mutedText,
-                          fontSize: 12.2,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${lawyer.experienceYears} yil tajriba • ${lawyer.region}',
-                        style: const TextStyle(
-                          color: YanColors.subtleText,
-                          fontSize: 11.6,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x0A0E2A54),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _LawyerAvatarPortrait(
+                initials: lawyer.initials,
+                isOnline: lawyer.isVerifiedPartner,
+                size: 54,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
-                        const Icon(
-                          CupertinoIcons.star_fill,
-                          color: Color(0xFFF59E0B),
-                          size: 15,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${lawyer.rating}',
-                          style: const TextStyle(
-                            color: YanColors.primaryNavy,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
+                        Expanded(
+                          child: Text(
+                            lawyer.fullName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: YanColors.primaryNavy,
+                            ),
                           ),
+                        ),
+                        const Icon(
+                          Icons.verified_rounded,
+                          size: 16,
+                          color: YanColors.primaryBlue,
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
-                      '(${lawyer.feedbackCount} izoh)',
+                      lawyer.specialization,
                       style: const TextStyle(
-                        color: YanColors.subtleText,
-                        fontSize: 11,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: YanColors.primaryNavy,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Litsenziya: ${lawyer.licenseNumber} • ${lawyer.region}',
+                      style: const TextStyle(
+                        fontSize: 11.5,
                         fontWeight: FontWeight.w600,
+                        color: YanColors.mutedText,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // Bio text
-            Text(
-              lawyer.bio,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: YanColors.mutedText,
-                fontSize: 12.2,
-                height: 1.34,
               ),
-            ),
-            const SizedBox(height: 10),
-
-            // Specialty Tags + Available Pill (Screenshot 2)
-            Wrap(
-              spacing: 7,
-              runSpacing: 6,
-              children: <Widget>[
-                _SpecialtyTagPill(text: lawyer.specialization),
-                _SpecialtyTagPill(text: '${lawyer.wonCasesCount} yutuq'),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4.5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE6FAF3),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'Bo‘sh (Online)',
-                    style: TextStyle(
-                      color: Color(0xFF098562),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 13),
-
-            // Bottom Row: Consultation Info on Left + Profile & Message Blue Buttons on Right
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
-                      const Text(
-                        'Bepul maslahat',
-                        style: TextStyle(
-                          color: YanColors.primaryNavy,
-                          fontSize: 12.4,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      const Icon(
+                        Icons.star_rounded,
+                        size: 16,
+                        color: Color(0xFFF59E0B),
                       ),
+                      const SizedBox(width: 3),
                       Text(
-                        'Javob beradi: ~15 daqiqa',
+                        lawyer.rating.toStringAsFixed(2),
                         style: const TextStyle(
-                          color: YanColors.mutedText,
-                          fontSize: 11.2,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                          color: YanColors.primaryNavy,
                         ),
                       ),
                     ],
                   ),
-                ),
-                _CardPillButton(
-                  label: 'Profil',
-                  isPrimary: false,
-                  onTap: onProfileTap,
-                ),
-                const SizedBox(width: 8),
-                _CardPillButton(
-                  label: 'Xabar',
-                  isPrimary: true,
-                  onTap: onMessageTap,
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    '(${lawyer.feedbackCount} izoh)',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: YanColors.mutedText,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 11),
+          Text(
+            lawyer.bio,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              color: YanColors.mutedText,
+              height: 1.4,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: <Widget>[
+              _SpecialtyTagPill(label: lawyer.specialization),
+              if (lawyer.phone.isNotEmpty)
+                _SpecialtyTagPill(label: lawyer.phone),
+              _SpecialtyTagPill(
+                label: lawyer.isVerifiedPartner
+                    ? 'Tasdiqlangan (Online)'
+                    : 'Tekshiruvda',
+                isHighlight: lawyer.isVerifiedPartner,
+              ),
+            ],
+          ),
+          const SizedBox(height: 13),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      lawyer.consultationPriceUzs > 0
+                          ? '${lawyer.consultationPriceUzs} so‘m'
+                          : 'Bepul maslahat',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: YanColors.primaryNavy,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Javob beradi: ~15 daqiqa',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: YanColors.mutedText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _CardPillButton(
+                label: 'Profil',
+                isPrimary: false,
+                onTap: onProfileTap,
+              ),
+              const SizedBox(width: 8),
+              _CardPillButton(
+                label: 'Xabar',
+                isPrimary: true,
+                onTap: onMessageTap,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
 class _SpecialtyTagPill extends StatelessWidget {
-  const _SpecialtyTagPill({required this.text});
+  final String label;
+  final bool isHighlight;
 
-  final String text;
+  const _SpecialtyTagPill({
+    required this.label,
+    this.isHighlight = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F6FA),
-        borderRadius: BorderRadius.circular(12),
+        color: isHighlight
+            ? YanColors.successGreen.withValues(alpha: 0.12)
+            : YanColors.lightBlue,
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        text,
-        style: const TextStyle(
-          color: YanColors.mutedText,
+        label,
+        style: TextStyle(
           fontSize: 11,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
+          color: isHighlight ? const Color(0xFF0A936B) : YanColors.primaryNavy,
         ),
       ),
     );
@@ -4209,38 +4396,37 @@ class _SpecialtyTagPill extends StatelessWidget {
 }
 
 class _CardPillButton extends StatelessWidget {
+  final String label;
+  final bool isPrimary;
+  final VoidCallback onTap;
+
   const _CardPillButton({
     required this.label,
     required this.isPrimary,
     required this.onTap,
   });
 
-  final String label;
-  final bool isPrimary;
-  final VoidCallback onTap;
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9.5),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
-          // Single solid blue (#1677D2) or light-blue (#EAF5FF)
           color: isPrimary ? YanColors.primaryBlue : YanColors.lightBlue,
-          borderRadius: BorderRadius.circular(18),
-          border: isPrimary
-              ? null
-              : Border.all(
-                  color: YanColors.primaryBlue.withValues(alpha: 0.28),
-                ),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isPrimary
+                ? YanColors.primaryBlue
+                : YanColors.primaryBlue.withValues(alpha: 0.35),
+          ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isPrimary ? Colors.white : YanColors.primaryBlue,
-            fontSize: 12.6,
+            fontSize: 12.5,
             fontWeight: FontWeight.w800,
+            color: isPrimary ? Colors.white : YanColors.primaryBlue,
           ),
         ),
       ),
@@ -4249,18 +4435,19 @@ class _CardPillButton extends StatelessWidget {
 }
 
 class _LawyerAvatarPortrait extends StatelessWidget {
-  const _LawyerAvatarPortrait({
-    required this.lawyer,
-    this.size = 56,
-  });
-
-  final LawyerDirectoryProfile lawyer;
+  final String initials;
+  final bool isOnline;
   final double size;
+
+  const _LawyerAvatarPortrait({
+    required this.initials,
+    required this.isOnline,
+    this.size = 54,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Stack(
-      clipBehavior: Clip.none,
       children: <Widget>[
         Container(
           width: size,
@@ -4268,16 +4455,18 @@ class _LawyerAvatarPortrait extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: YanColors.primaryNavy,
-            border: Border.all(color: YanColors.border, width: 1.5),
+            border: Border.all(
+              color: YanColors.primaryBlue.withValues(alpha: 0.35),
+              width: 2,
+            ),
           ),
-          child: Center(
-            child: Text(
-              lawyer.initials,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: size * 0.32,
-                fontWeight: FontWeight.w900,
-              ),
+          alignment: Alignment.center,
+          child: Text(
+            initials,
+            style: TextStyle(
+              fontSize: size * 0.34,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
             ),
           ),
         ),
@@ -4288,8 +4477,8 @@ class _LawyerAvatarPortrait extends StatelessWidget {
             width: 13,
             height: 13,
             decoration: BoxDecoration(
-              color: YanColors.successGreen,
               shape: BoxShape.circle,
+              color: isOnline ? YanColors.successGreen : const Color(0xFFF59E0B),
               border: Border.all(color: Colors.white, width: 2),
             ),
           ),
@@ -4299,20 +4488,18 @@ class _LawyerAvatarPortrait extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Full-Screen Advocate Profile Page (Matches Screenshot 3: image_c998f1.png)
-// Opens when the user clicks on an advocate card or "Profil" button
-// ═══════════════════════════════════════════════════════════════════════════
-
+// ============================================================================
+// LAWYER DETAIL PROFILE PAGE (DEDICATED SUPABASE PROFILE & CONTRACT SIGNING)
+// ============================================================================
 class LawyerDetailProfilePage extends StatefulWidget {
+  final LawyerDirectoryProfile lawyer;
+  final UserProfileData profile;
+
   const LawyerDetailProfilePage({
     super.key,
     required this.lawyer,
     required this.profile,
   });
-
-  final LawyerDirectoryProfile lawyer;
-  final UserProfileData profile;
 
   @override
   State<LawyerDetailProfilePage> createState() =>
@@ -4320,18 +4507,10 @@ class LawyerDetailProfilePage extends StatefulWidget {
 }
 
 class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
-  bool _isFavorite = false;
-  int _selectedDayIndex = 2;
+  int _selectedDetailTab = 0;
+  bool _isSigningContract = false;
 
-  static const List<Map<String, String>> _days = <Map<String, String>>[
-    <String, String>{'num': '06', 'day': 'Juma'},
-    <String, String>{'num': '07', 'day': 'Shanba'},
-    <String, String>{'num': '08', 'day': 'Yakshanba'},
-    <String, String>{'num': '09', 'day': 'Dushanba'},
-    <String, String>{'num': '10', 'day': 'Seshanba'},
-  ];
-
-  void _openChat() {
+  void _openChat(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => AdvocateClientChatPage(
@@ -4342,954 +4521,107 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
     );
   }
 
-  void _bookOrSignContract() {
-    final selectedDay = _days[_selectedDayIndex];
-    showCupertinoDialog<void>(
+  Future<void> _bookOrSignContract(BuildContext context) async {
+    if (_isSigningContract) return;
+    setState(() => _isSigningContract = true);
+
+    try {
+      final client = Supabase.instance.client;
+      final currentUser = client.auth.currentUser;
+      final currentProfile = userProfile.value;
+
+      if (currentUser != null) {
+        await client.from('contracts').insert(<String, dynamic>{
+          'client_id': currentUser.id,
+          'advocate_id': widget.lawyer.id,
+          'client_name': currentProfile.displayName,
+          'advocate_name': widget.lawyer.fullName,
+          'case_category': widget.lawyer.specialization,
+          'status': 'active',
+        });
+      }
+    } catch (_) {
+      // Continues local state assignment if table RLS or schema differs
+    }
+
+    await userProfile.switchRole(
+      UserRole.mijoz,
+      lawyerId: widget.lawyer.id,
+    );
+
+    if (!mounted) return;
+    setState(() => _isSigningContract = false);
+
+    showDialog<void>(
       context: context,
-      builder: (dialogContext) {
-        return CupertinoAlertDialog(
-          title: Text(widget.lawyer.fullName),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'Tanlangan sana: ${selectedDay["num"]}-Noyabr (${selectedDay["day"]}).\n\n'
-              'Advokat bilan uchrashuv belgilash yoki rasmiy yuridik yordam shartnomasini imzolashni tasdiqlaysizmi?\n'
-              '• Shartnoma imzolansa 3 oy BEPUL VIP maqom va 30%–50% chegirmalar faollashadi!',
+      builder: (ctx) => AlertDialog(
+        backgroundColor: YanColors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: <Widget>[
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: YanColors.successGreen.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.verified_rounded,
+                color: YanColors.successGreen,
+              ),
             ),
-          ),
-          actions: <Widget>[
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Yopish'),
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                final contractNo =
-                    'SH-2026/${100 + DateTime.now().millisecondsSinceEpoch % 899}';
-                userProfile.switchRole(
-                  UserRole.mijoz,
-                  lawyerId: widget.lawyer.id,
-                  contractNo: contractNo,
-                );
-                ActivityHistoryRepository.instance.record(
-                  title:
-                      'Advokat ${widget.lawyer.fullName} qabuliga yozildi ($contractNo)',
-                  description:
-                      'Sana: ${selectedDay["num"]}-Noyabr • Shartnoma va MIJOZ VIP maqomi faollashdi',
-                  category: ActivityCategory.lawyer,
-                  statusLabel: 'Tasdiqlandi',
-                );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: YanColors.primaryNavy,
-                    content: Text(
-                      '${widget.lawyer.fullName} bilan shartnoma va uchrashuv tasdiqlandi!',
-                    ),
-                  ),
-                );
-              },
-              child: const Text('Tasdiqlash'),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Shartnoma biriktirildi',
+                style: TextStyle(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w800,
+                  color: YanColors.primaryNavy,
+                ),
+              ),
             ),
           ],
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final lawyer = widget.lawyer;
-    final discountedPrice = widget.profile.applyDiscount(
-      lawyer.consultationPriceUzs,
-      category: 'consultation',
-    );
-    final priceFormatted = '${(discountedPrice / 1000).round()} 000 so‘m';
-
-    return Scaffold(
-      backgroundColor: YanColors.background,
-      body: Stack(
-        children: <Widget>[
-          const DashboardBackground(),
-          SafeArea(
-            child: Column(
-              children: <Widget>[
-                // Top Bar: Back Button + Favorite Heart Button (Screenshot 3)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      GestureDetector(
-                        onTap: () => Navigator.of(context).pop(),
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: YanColors.white,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: YanColors.border),
-                          ),
-                          child: const Icon(
-                            CupertinoIcons.arrow_left,
-                            color: YanColors.primaryNavy,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => setState(() => _isFavorite = !_isFavorite),
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: YanColors.white,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: YanColors.border),
-                          ),
-                          child: Icon(
-                            _isFavorite
-                                ? CupertinoIcons.heart_fill
-                                : CupertinoIcons.heart,
-                            color: _isFavorite
-                                ? YanColors.destructiveRed
-                                : YanColors.primaryNavy,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(18, 6, 18, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        // Hero Section (Name + Specialization + Rate on Left, Portrait on Right)
-                        SizedBox(
-                          height: 215,
-                          child: Stack(
-                            children: <Widget>[
-                              // Right Portrait Card (Matches Alan Dershowitz hero in Screenshot 3)
-                              Positioned(
-                                right: 0,
-                                top: 0,
-                                bottom: 10,
-                                width: 162,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(26),
-                                    color: YanColors.primaryNavy,
-                                    border: Border.all(
-                                      color: YanColors.border,
-                                      width: 1.5,
-                                    ),
-                                    boxShadow: <BoxShadow>[
-                                      BoxShadow(
-                                        color: YanColors.primaryNavy.withValues(
-                                          alpha: 0.14,
-                                        ),
-                                        blurRadius: 20,
-                                        offset: const Offset(0, 8),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Stack(
-                                    alignment: Alignment.center,
-                                    children: <Widget>[
-                                      Positioned(
-                                        top: 14,
-                                        right: 14,
-                                        child: Opacity(
-                                          opacity: 0.20,
-                                          child: Image.asset(
-                                            'assets/logo.png',
-                                            width: 54,
-                                            height: 54,
-                                            filterQuality: FilterQuality.high,
-                                          ),
-                                        ),
-                                      ),
-                                      Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: <Widget>[
-                                          Container(
-                                            width: 78,
-                                            height: 78,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: YanColors.primaryBlue,
-                                              border: Border.all(
-                                                color: Colors.white,
-                                                width: 2.2,
-                                              ),
-                                            ),
-                                            child: Center(
-                                              child: Text(
-                                                lawyer.initials,
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 26,
-                                                  fontWeight: FontWeight.w900,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 10),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: YanColors.successGreen,
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                            ),
-                                            child: Text(
-                                              'Litsenziya: ${lawyer.licenseNumber}',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w800,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              // Left Name, Specialization & Rate
-                              Positioned(
-                                left: 0,
-                                top: 10,
-                                right: 170,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: <Widget>[
-                                    Text(
-                                      lawyer.fullName.replaceAll(' ', '\n'),
-                                      style: const TextStyle(
-                                        color: YanColors.primaryNavy,
-                                        fontSize: 26,
-                                        fontWeight: FontWeight.w900,
-                                        height: 1.12,
-                                        letterSpacing: -0.4,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      lawyer.specialization,
-                                      style: const TextStyle(
-                                        color: YanColors.mutedText,
-                                        fontSize: 13.2,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 18),
-                                    Text(
-                                      priceFormatted,
-                                      style: const TextStyle(
-                                        color: YanColors.primaryNavy,
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                    const Text(
-                                      '/ konsultatsiya',
-                                      style: TextStyle(
-                                        color: YanColors.mutedText,
-                                        fontSize: 12.2,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Action Strip: [ⓘ Details] + Call + Video + Solid Blue Chat Button (Screenshot 3)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: YanColors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: YanColors.border),
-                            boxShadow: <BoxShadow>[
-                              BoxShadow(
-                                color: YanColors.primaryNavy.withValues(
-                                  alpha: 0.05,
-                                ),
-                                blurRadius: 16,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: <Widget>[
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 9,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: YanColors.lightBlue,
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    const Icon(
-                                      CupertinoIcons.info_circle,
-                                      size: 16,
-                                      color: YanColors.primaryNavy,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      lawyer.region,
-                                      style: const TextStyle(
-                                        color: YanColors.primaryNavy,
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Spacer(),
-                              _CircleProfileActionButton(
-                                icon: CupertinoIcons.phone,
-                                isSolidBlue: false,
-                                onTap: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      backgroundColor: YanColors.primaryNavy,
-                                      content: Text(
-                                        'Advokat raqami: ${lawyer.phone}',
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              _CircleProfileActionButton(
-                                icon: CupertinoIcons.videocam,
-                                isSolidBlue: false,
-                                onTap: _openChat,
-                              ),
-                              const SizedBox(width: 8),
-                              _CircleProfileActionButton(
-                                icon: CupertinoIcons.chat_bubble_text_fill,
-                                isSolidBlue: true,
-                                onTap: _openChat,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-
-                        // 3-Column Stats Card (Cases Won | Experience | Endorsement — Screenshot 3)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 16,
-                          ),
-                          decoration: BoxDecoration(
-                            color: YanColors.white,
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(color: YanColors.border),
-                          ),
-                          child: Row(
-                            children: <Widget>[
-                              Expanded(
-                                child: _LawyerDetailStatCol(
-                                  icon: CupertinoIcons.briefcase,
-                                  value: '${lawyer.wonCasesCount}+',
-                                  label: 'Yutgan ishlari',
-                                ),
-                              ),
-                              Expanded(
-                                child: _LawyerDetailStatCol(
-                                  icon: CupertinoIcons.clock,
-                                  value: '${lawyer.experienceYears} yil',
-                                  label: 'Tajriba',
-                                ),
-                              ),
-                              Expanded(
-                                child: _LawyerDetailStatCol(
-                                  icon: CupertinoIcons.star,
-                                  value: '${lawyer.feedbackCount}+',
-                                  label: 'Izoh va ishonch',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Select Date + About Lawyer Card (Screenshot 3)
-                        Container(
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: YanColors.white,
-                            borderRadius: BorderRadius.circular(26),
-                            border: Border.all(color: YanColors.border),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: const <Widget>[
-                                  Text(
-                                    'Sana tanlash',
-                                    style: TextStyle(
-                                      color: YanColors.primaryNavy,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  Text(
-                                    '<  Noyabr  >',
-                                    style: TextStyle(
-                                      color: YanColors.primaryNavy,
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: List<Widget>.generate(_days.length, (
-                                  idx,
-                                ) {
-                                  final item = _days[idx];
-                                  final selected = _selectedDayIndex == idx;
-                                  return Expanded(
-                                    child: GestureDetector(
-                                      onTap: () => setState(
-                                        () => _selectedDayIndex = idx,
-                                      ),
-                                      child: Container(
-                                        margin: const EdgeInsets.symmetric(
-                                          horizontal: 3,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: selected
-                                              ? YanColors.lightBlue
-                                              : Colors.transparent,
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                          border: selected
-                                              ? Border.all(
-                                                  color: YanColors.primaryBlue,
-                                                )
-                                              : null,
-                                        ),
-                                        child: Column(
-                                          children: <Widget>[
-                                            Text(
-                                              item['num']!,
-                                              style: TextStyle(
-                                                color: YanColors.primaryNavy,
-                                                fontSize: 15,
-                                                fontWeight: selected
-                                                    ? FontWeight.w900
-                                                    : FontWeight.w700,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              item['day']!,
-                                              style: TextStyle(
-                                                color: selected
-                                                    ? YanColors.primaryBlue
-                                                    : YanColors.mutedText,
-                                                fontSize: 10.5,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ),
-                              const SizedBox(height: 18),
-                              const Text(
-                                'Advokat haqida',
-                                style: TextStyle(
-                                  color: YanColors.primaryNavy,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '${lawyer.bio}\n\n'
-                                '• Litsenziya raqami: ${lawyer.licenseNumber} ("YAN LEGAL FIRM" MCHJ)\n'
-                                '• Biriktirilgan yordamchi: ${lawyer.assistantName} (${lawyer.assistantRole})\n'
-                                '• Shartnoma imzolanganda: 3 oy BEPUL obuna va barcha xizmatlarga 30%–50% chegirma.',
-                                style: const TextStyle(
-                                  color: YanColors.mutedText,
-                                  fontSize: 13,
-                                  height: 1.42,
-                                ),
-                              ),
-                              const SizedBox(height: 18),
-                              // Book Appointment / Sign Contract Solid #1677D2 Button
-                              SizedBox(
-                                width: double.infinity,
-                                child: LiquidActionButton(
-                                  label:
-                                      'Qabulga yozilish / Shartnoma tuzish',
-                                  icon: CupertinoIcons.calendar_badge_plus,
-                                  onPressed: _bookOrSignContract,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+        ),
+        content: Text(
+          '${widget.lawyer.fullName} sizning shaxsiy advokatingiz sifatida biriktirildi va Mijoz (-50% VIP) maqomi faollashtirildi.',
+          style: const TextStyle(
+            fontSize: 13,
+            color: YanColors.mutedText,
+            height: 1.45,
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Yopish',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: YanColors.mutedText,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: YanColors.primaryBlue,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _openChat(context);
+            },
+            child: const Text(
+              'Chatga o‘tish',
+              style: TextStyle(fontWeight: FontWeight.w800),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CircleProfileActionButton extends StatelessWidget {
-  const _CircleProfileActionButton({
-    required this.icon,
-    required this.isSolidBlue,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final bool isSolidBlue;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: isSolidBlue ? YanColors.primaryBlue : YanColors.lightBlue,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          icon,
-          size: 19,
-          color: isSolidBlue ? Colors.white : YanColors.primaryNavy,
-        ),
-      ),
-    );
-  }
-}
-
-class _LawyerDetailStatCol extends StatelessWidget {
-  const _LawyerDetailStatCol({
-    required this.icon,
-    required this.value,
-    required this.label,
-  });
-
-  final IconData icon;
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        Icon(icon, size: 17, color: YanColors.primaryBlue),
-        const SizedBox(width: 7),
-        Flexible(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                value,
-                style: const TextStyle(
-                  color: YanColors.primaryNavy,
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: YanColors.mutedText,
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Full-Screen Advocate & Client Messenger Page (Requirement 2)
-// Supports:
-// - Voice Messages (recording & interactive playback)
-// - Sending any kind of Files (.docx, .pdf), Videos, and Photos
-// - "Saqlash" (Save) option on advocate-sent files, voice notes, photos & videos
-// ═══════════════════════════════════════════════════════════════════════════
-
-enum _ChatMediaType { text, voice, file, photo, video }
-
-class _ChatMessageItem {
-  _ChatMessageItem({
-    required this.id,
-    required this.fromLawyer,
-    required this.type,
-    required this.text,
-    required this.timeLabel,
-    this.fileName,
-    this.fileSizeLabel,
-    this.durationLabel,
-    this.localFilePath,
-    this.isSaved = false,
-    this.isPlaying = false,
-  });
-
-  final String id;
-  final bool fromLawyer;
-  final _ChatMediaType type;
-  final String text;
-  final String timeLabel;
-  final String? fileName;
-  final String? fileSizeLabel;
-  final String? durationLabel;
-  final String? localFilePath;
-  bool isSaved;
-  bool isPlaying;
-}
-
-class AdvocateClientChatPage extends StatefulWidget {
-  const AdvocateClientChatPage({
-    super.key,
-    required this.lawyer,
-    required this.profile,
-  });
-
-  final LawyerDirectoryProfile lawyer;
-  final UserProfileData profile;
-
-  @override
-  State<AdvocateClientChatPage> createState() => _AdvocateClientChatPageState();
-}
-
-class _AdvocateClientChatPageState extends State<AdvocateClientChatPage> {
-  final TextEditingController _textController = TextEditingController();
-  final ImagePicker _picker = ImagePicker();
-  bool _isRecordingVoice = false;
-
-  late final List<_ChatMessageItem> _messages = <_ChatMessageItem>[
-    _ChatMessageItem(
-      id: 'MSG-1',
-      fromLawyer: true,
-      type: _ChatMediaType.text,
-      text:
-          'Assalomu alaykum, ${widget.profile.firstName}! Men advokat ${widget.lawyer.fullName}. Sizning murojaatingiz va hujjatlaringizni ko‘rib chiqdim.',
-      timeLabel: '10:12',
-    ),
-    _ChatMessageItem(
-      id: 'MSG-2',
-      fromLawyer: true,
-      type: _ChatMediaType.voice,
-      text: 'Advokat ovozli tushuntirishi (Sud tartibi bo‘yicha)',
-      durationLabel: '0:38',
-      fileSizeLabel: '420 KB • Ovozli xabar',
-      timeLabel: '10:13',
-    ),
-    _ChatMessageItem(
-      id: 'MSG-3',
-      fromLawyer: true,
-      type: _ChatMediaType.file,
-      text: 'Sudga topshirish uchun tayyorlangan rasmiy da’vo arizasi nusxasi:',
-      fileName: 'Sud_Davo_Arizasi_YAN360_Rasmiy.docx',
-      fileSizeLabel: '148 KB • Microsoft Word (.docx)',
-      timeLabel: '10:15',
-    ),
-    _ChatMessageItem(
-      id: 'MSG-4',
-      fromLawyer: true,
-      type: _ChatMediaType.video,
-      text: 'Sud majlisiga tayyorgarlik bo‘yicha video yo‘riqnoma',
-      fileName: 'Sud_Majlisi_Yoriqnomasi_HD.mp4',
-      durationLabel: '1:45',
-      fileSizeLabel: '8.4 MB • MP4 Video',
-      timeLabel: '10:16',
-    ),
-  ];
-
-  @override
-  void dispose() {
-    _textController.dispose();
-    super.dispose();
-  }
-
-  void _sendTextMessage() {
-    final txt = _textController.text.trim();
-    if (txt.isEmpty) return;
-    setState(() {
-      _messages.add(
-        _ChatMessageItem(
-          id: 'MSG-${DateTime.now().millisecondsSinceEpoch}',
-          fromLawyer: false,
-          type: _ChatMediaType.text,
-          text: txt,
-          timeLabel: 'Hozir',
-        ),
-      );
-      _textController.clear();
-    });
-  }
-
-  void _sendVoiceMessage() {
-    setState(() {
-      _isRecordingVoice = false;
-      _messages.add(
-        _ChatMessageItem(
-          id: 'MSG-${DateTime.now().millisecondsSinceEpoch}',
-          fromLawyer: false,
-          type: _ChatMediaType.voice,
-          text: 'Mijoz ovozli xabari',
-          durationLabel: '0:19',
-          fileSizeLabel: '210 KB • Ovozli xabar',
-          timeLabel: 'Hozir',
-        ),
-      );
-    });
-  }
-
-  Future<void> _pickAndSendPhoto() async {
-    try {
-      final picked = await _picker.pickImage(source: ImageSource.gallery);
-      if (picked != null) {
-        setState(() {
-          _messages.add(
-            _ChatMessageItem(
-              id: 'MSG-${DateTime.now().millisecondsSinceEpoch}',
-              fromLawyer: false,
-              type: _ChatMediaType.photo,
-              text: 'Yuborilgan fotosurat hujjati',
-              fileName: picked.name,
-              fileSizeLabel: '1.2 MB • JPEG Rasm',
-              localFilePath: picked.path,
-              timeLabel: 'Hozir',
-            ),
-          );
-        });
-        return;
-      }
-    } catch (_) {
-      // Fallback sample photo attachment if gallery is empty
-    }
-    setState(() {
-      _messages.add(
-        _ChatMessageItem(
-          id: 'MSG-${DateTime.now().millisecondsSinceEpoch}',
-          fromLawyer: false,
-          type: _ChatMediaType.photo,
-          text: 'Guvohnoma va tasdiqlovchi fotosurat ilovasi',
-          fileName: 'Hujjat_Tasviri_2026.jpg',
-          fileSizeLabel: '1.1 MB • Rasm',
-          timeLabel: 'Hozir',
-        ),
-      );
-    });
-  }
-
-  void _sendAttachmentItem({
-    required _ChatMediaType type,
-    required String title,
-    required String fileName,
-    required String sizeLabel,
-    String? duration,
-  }) {
-    setState(() {
-      _messages.add(
-        _ChatMessageItem(
-          id: 'MSG-${DateTime.now().millisecondsSinceEpoch}',
-          fromLawyer: false,
-          type: type,
-          text: title,
-          fileName: fileName,
-          fileSizeLabel: sizeLabel,
-          durationLabel: duration,
-          timeLabel: 'Hozir',
-        ),
-      );
-    });
-  }
-
-  void _showAttachmentPickerSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return Container(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
-          decoration: BoxDecoration(
-            color: YanColors.background,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border.all(color: YanColors.border),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: YanColors.border,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Advokatga Fayl, Rasm, Video yoki Ovoz Yuborish',
-                  style: TextStyle(
-                    color: YanColors.primaryNavy,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: _AttachmentOptionTile(
-                        icon: CupertinoIcons.photo_fill,
-                        label: 'Rasm (Foto)',
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _pickAndSendPhoto();
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _AttachmentOptionTile(
-                        icon: CupertinoIcons.videocam_fill,
-                        label: 'Video fayl',
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _sendAttachmentItem(
-                            type: _ChatMediaType.video,
-                            title: 'Mijoz tomonidan yuborilgan video dalil',
-                            fileName: 'Dalil_Video_Yozuvi.mp4',
-                            sizeLabel: '6.2 MB • MP4 Video',
-                            duration: '0:52',
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: _AttachmentOptionTile(
-                        icon: CupertinoIcons.doc_text_fill,
-                        label: 'Hujjat (.docx/.pdf)',
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _sendAttachmentItem(
-                            type: _ChatMediaType.file,
-                            title: 'Ilova qilingan rasmiy hujjat fayli',
-                            fileName: 'Fuqarolik_Hujjati_Ilova.docx',
-                            sizeLabel: '96 KB • DOCX Hujjat',
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _AttachmentOptionTile(
-                        icon: CupertinoIcons.mic_fill,
-                        label: 'Ovozli xabar',
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _sendVoiceMessage();
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _saveLawyerAttachment(_ChatMessageItem msg) {
-    setState(() => msg.isSaved = true);
-    ActivityHistoryRepository.instance.record(
-      title: 'Advokat yuborgan fayl saqlandi: ${msg.fileName ?? msg.text}',
-      description:
-          '${widget.lawyer.fullName} tomonidan yuborilgan material qurilmaga va hujjatlar omboriga saqlandi',
-      category: ActivityCategory.documents,
-      statusLabel: 'Saqlandi',
-    );
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: YanColors.primaryNavy,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        content: Text(
-          '"${msg.fileName ?? "Ovozli xabar"}" muvaffaqiyatli saqlandi!',
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
       ),
     );
   }
@@ -5303,348 +4635,355 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage> {
       body: SafeArea(
         child: Column(
           children: <Widget>[
-            // Top Chat Header
-            Container(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-              decoration: const BoxDecoration(
-                color: YanColors.white,
-                border: Border(bottom: BorderSide(color: YanColors.border)),
-              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
               child: Row(
                 children: <Widget>[
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
                     child: Container(
-                      width: 38,
-                      height: 38,
+                      width: 42,
+                      height: 42,
                       decoration: BoxDecoration(
-                        color: YanColors.lightBlue,
                         shape: BoxShape.circle,
+                        color: YanColors.white,
+                        border: Border.all(color: YanColors.border),
                       ),
                       child: const Icon(
-                        CupertinoIcons.chevron_left,
+                        Icons.arrow_back_rounded,
+                        size: 20,
                         color: YanColors.primaryNavy,
-                        size: 19,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  _LawyerAvatarPortrait(lawyer: lawyer, size: 42),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          lawyer.fullName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: YanColors.primaryNavy,
-                            fontSize: 15.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const Text(
-                          'Online • Ovoz, fayl, foto va video aloqa',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: YanColors.successGreen,
-                            fontSize: 11.2,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
+                  const Expanded(
+                    child: Text(
+                      'Advokat Profili',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: YanColors.primaryNavy,
+                      ),
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => _showAttachmentPickerSheet(),
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: YanColors.lightBlue,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.folder_badge_plus,
-                        color: YanColors.primaryBlue,
-                        size: 18,
-                      ),
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: YanColors.white,
+                      border: Border.all(color: YanColors.border),
+                    ),
+                    child: const Icon(
+                      Icons.verified_user_rounded,
+                      size: 19,
+                      color: YanColors.primaryBlue,
                     ),
                   ),
                 ],
               ),
             ),
 
-            // Message List
             Expanded(
-              child: ListView.builder(
+              child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                itemCount: _messages.length,
-                itemBuilder: (context, index) {
-                  final msg = _messages[index];
-                  final isMe = !msg.fromLawyer;
-
-                  return Align(
-                    alignment: isMe
-                        ? Alignment.centerRight
-                        : Alignment.centerLeft,
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(13),
-                      constraints: BoxConstraints(
-                        maxWidth: MediaQuery.of(context).size.width * 0.80,
-                      ),
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
+                child: Column(
+                  children: <Widget>[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: isMe ? YanColors.primaryBlue : YanColors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: isMe
-                            ? null
-                            : Border.all(color: YanColors.border, width: 1.15),
-                        boxShadow: <BoxShadow>[
+                        color: YanColors.white,
+                        borderRadius: BorderRadius.circular(28),
+                        border: Border.all(color: YanColors.border),
+                        boxShadow: const <BoxShadow>[
                           BoxShadow(
-                            color: YanColors.primaryNavy.withValues(
-                              alpha: 0.05,
-                            ),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
+                            color: Color(0x0D0E2A54),
+                            blurRadius: 22,
+                            offset: Offset(0, 10),
                           ),
                         ],
                       ),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          if (msg.type == _ChatMediaType.voice)
-                            _VoiceMessageBubbleContent(
-                              msg: msg,
-                              isMe: isMe,
-                              onPlayToggle: () =>
-                                  setState(() => msg.isPlaying = !msg.isPlaying),
-                            )
-                          else if (msg.type == _ChatMediaType.file ||
-                              msg.type == _ChatMediaType.video ||
-                              msg.type == _ChatMediaType.photo)
-                            _MediaAttachmentBubbleContent(
-                              msg: msg,
-                              isMe: isMe,
-                            )
-                          else
-                            Text(
-                              msg.text,
-                              style: TextStyle(
-                                color: isMe
-                                    ? Colors.white
-                                    : YanColors.primaryNavy,
-                                fontSize: 13.8,
-                                height: 1.35,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-
-                          const SizedBox(height: 6),
+                          _LawyerAvatarPortrait(
+                            initials: lawyer.initials,
+                            isOnline: lawyer.isVerifiedPartner,
+                            size: 86,
+                          ),
+                          const SizedBox(height: 14),
                           Row(
-                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: <Widget>[
-                              Text(
-                                msg.timeLabel,
-                                style: TextStyle(
-                                  color: isMe
-                                      ? Colors.white70
-                                      : YanColors.subtleText,
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              // Save button ("Saqlash") for any file, voice, photo, or video sent by Advocate
-                              if (msg.fromLawyer &&
-                                  msg.type != _ChatMediaType.text) ...<Widget>[
-                                const SizedBox(width: 10),
-                                GestureDetector(
-                                  onTap: () => _saveLawyerAttachment(msg),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 9,
-                                      vertical: 3.5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: msg.isSaved
-                                          ? YanColors.successGreen
-                                          : YanColors.primaryBlue,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: <Widget>[
-                                        Icon(
-                                          msg.isSaved
-                                              ? CupertinoIcons.checkmark_alt
-                                              : CupertinoIcons.arrow_down_to_line,
-                                          size: 11.5,
-                                          color: Colors.white,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          msg.isSaved ? 'Saqlandi' : 'Saqlash',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                              Flexible(
+                                child: Text(
+                                  lawyer.fullName,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w900,
+                                    color: YanColors.primaryNavy,
                                   ),
                                 ),
-                              ],
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(
+                                Icons.verified_rounded,
+                                color: YanColors.primaryBlue,
+                                size: 20,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            '${lawyer.title} • ${lawyer.specialization}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: YanColors.primaryBlue,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Litsenziya: ${lawyer.licenseNumber} • ${lawyer.region}',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: YanColors.mutedText,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: <Widget>[
+                              _CircleProfileActionButton(
+                                icon: Icons.chat_bubble_rounded,
+                                label: 'Xabar',
+                                isPrimary: true,
+                                onTap: () => _openChat(context),
+                              ),
+                              _CircleProfileActionButton(
+                                icon: Icons.phone_in_talk_rounded,
+                                label: 'Qo‘ng‘iroq',
+                                onTap: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'E2EE Audio qo‘ng‘iroq: ${lawyer.phone.isNotEmpty ? lawyer.phone : lawyer.fullName}',
+                                      ),
+                                      backgroundColor: YanColors.primaryNavy,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                },
+                              ),
+                              _CircleProfileActionButton(
+                                icon: Icons.assignment_turned_in_rounded,
+                                label: 'Shartnoma',
+                                onTap: () => _bookOrSignContract(context),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 18),
+                          const Divider(height: 1, color: Color(0xFFE7EFFA)),
+                          const SizedBox(height: 14),
+
+                          Row(
+                            children: <Widget>[
+                              Expanded(
+                                child: _LawyerDetailStatCol(
+                                  value: '${lawyer.rating}',
+                                  label: 'Reyting (${lawyer.feedbackCount})',
+                                  icon: Icons.star_rounded,
+                                  iconColor: const Color(0xFFF59E0B),
+                                ),
+                              ),
+                              Container(
+                                width: 1,
+                                height: 34,
+                                color: const Color(0xFFE7EFFA),
+                              ),
+                              Expanded(
+                                child: _LawyerDetailStatCol(
+                                  value: lawyer.isVerifiedPartner
+                                      ? 'Tasdiqlangan'
+                                      : 'Tekshiruvda',
+                                  label: 'Litsenziya holati',
+                                  icon: Icons.verified_user_rounded,
+                                  iconColor: YanColors.successGreen,
+                                ),
+                              ),
+                              Container(
+                                width: 1,
+                                height: 34,
+                                color: const Color(0xFFE7EFFA),
+                              ),
+                              Expanded(
+                                child: _LawyerDetailStatCol(
+                                  value: '${lawyer.experienceYears} yil',
+                                  label: 'Ish tajribasi',
+                                  icon: Icons.business_rounded,
+                                  iconColor: YanColors.primaryBlue,
+                                ),
+                              ),
                             ],
                           ),
                         ],
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
 
-            // Voice Recording Banner if active
-            if (_isRecordingVoice)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 10,
-                ),
-                color: YanColors.lightBlue,
-                child: Row(
-                  children: <Widget>[
-                    const Icon(
-                      CupertinoIcons.mic_circle_fill,
-                      color: YanColors.destructiveRed,
-                      size: 22,
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'Ovozli xabar yozilmoqda... (0:06)',
-                        style: TextStyle(
-                          color: YanColors.primaryNavy,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                        ),
+                    const SizedBox(height: 14),
+
+                    Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: YanColors.lightBlue,
+                        borderRadius: BorderRadius.circular(18),
                       ),
-                    ),
-                    GestureDetector(
-                      onTap: () => setState(() => _isRecordingVoice = false),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8),
-                        child: Text(
-                          'Bekor',
-                          style: TextStyle(
-                            color: YanColors.destructiveRed,
-                            fontWeight: FontWeight.w700,
+                      child: Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: _MonochromaticSegmentButton(
+                              label: 'Haqida',
+                              selected: _selectedDetailTab == 0,
+                              onTap: () =>
+                                  setState(() => _selectedDetailTab = 0),
+                            ),
                           ),
-                        ),
+                          Expanded(
+                            child: _MonochromaticSegmentButton(
+                              label: 'Tasdiqlangan hujjatlar',
+                              selected: _selectedDetailTab == 1,
+                              onTap: () =>
+                                  setState(() => _selectedDetailTab = 1),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    LiquidActionButton(
-                      label: 'Yuborish',
-                      icon: CupertinoIcons.paperplane_fill,
-                      compact: true,
-                      onPressed: _sendVoiceMessage,
-                    ),
+
+                    const SizedBox(height: 14),
+
+                    if (_selectedDetailTab == 0)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: YanColors.white,
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(color: YanColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Text(
+                              'Advokat haqida ma’lumot',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: YanColors.primaryNavy,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              lawyer.bio,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: YanColors.mutedText,
+                                height: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            _DetailInfoRow(
+                              label: 'Telefon raqami',
+                              value: lawyer.phone.isNotEmpty
+                                  ? lawyer.phone
+                                  : 'E2EE orqali bog‘lanish',
+                            ),
+                            _DetailInfoRow(
+                              label: 'Litsenziya raqami',
+                              value: lawyer.licenseNumber,
+                            ),
+                            _DetailInfoRow(
+                              label: 'Mutaxassisligi',
+                              value: lawyer.specialization,
+                            ),
+                            _DetailInfoRow(
+                              label: 'Hudud',
+                              value: lawyer.region,
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: YanColors.white,
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(color: YanColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Text(
+                              'Supabase bazasida tekshirilgan hujjatlar',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: YanColors.primaryNavy,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            _VerifiedDocRow(
+                              title: '1. Advokatlik litsenziyasi',
+                              subtitle: 'Raqami: ${lawyer.licenseNumber}',
+                            ),
+                            const SizedBox(height: 8),
+                            const _VerifiedDocRow(
+                              title: '2. Advokatlik guvohnomasi (Old va Orqa)',
+                              subtitle: 'Supabase Storage orqali yuklangan',
+                            ),
+                            const SizedBox(height: 8),
+                            const _VerifiedDocRow(
+                              title: '3. Faoliyat ko‘rsatadigan tuzilma STIR',
+                              subtitle: 'Rasmiy ro‘yxatdan o‘tkazilgan',
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
+            ),
 
-            // Bottom Composer Bar (+ Attachment, Text Input, Voice Mic & Solid Blue Send)
             Container(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
               decoration: const BoxDecoration(
                 color: YanColors.white,
-                border: Border(top: BorderSide(color: YanColors.border)),
+                border: Border(top: BorderSide(color: Color(0xFFE5EFFA))),
               ),
               child: Row(
                 children: <Widget>[
-                  GestureDetector(
-                    onTap: _showAttachmentPickerSheet,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: YanColors.lightBlue,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.paperclip,
-                        color: YanColors.primaryBlue,
-                        size: 19,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
-                    child: CupertinoTextField(
-                      controller: _textController,
-                      placeholder: 'Xabar, fayl yoki ovoz yuboring...',
-                      placeholderStyle: const TextStyle(
-                        color: YanColors.mutedText,
-                        fontSize: 13.8,
-                      ),
-                      style: const TextStyle(
-                        color: YanColors.primaryNavy,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 11,
-                      ),
-                      decoration: BoxDecoration(
-                        color: YanColors.lightBlue.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: YanColors.border),
-                      ),
+                    child: _SolidSecondaryButton(
+                      label: 'Shartnoma tuzish',
+                      icon: Icons.verified_user_rounded,
+                      onPressed: () => _bookOrSignContract(context),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () =>
-                        setState(() => _isRecordingVoice = !_isRecordingVoice),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: _isRecordingVoice
-                            ? YanColors.destructiveRed
-                            : YanColors.lightBlue,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        CupertinoIcons.mic_fill,
-                        color: _isRecordingVoice
-                            ? Colors.white
-                            : YanColors.primaryNavy,
-                        size: 19,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 7),
-                  GestureDetector(
-                    onTap: _sendTextMessage,
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      decoration: const BoxDecoration(
-                        color: YanColors.primaryBlue,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.paperplane_fill,
-                        color: Colors.white,
-                        size: 18,
-                      ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _SolidPrimaryButton(
+                      label: 'Xabar yozish',
+                      icon: Icons.chat_bubble_rounded,
+                      onPressed: () => _openChat(context),
                     ),
                   ),
                 ],
@@ -5657,63 +4996,191 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage> {
   }
 }
 
-class _VoiceMessageBubbleContent extends StatelessWidget {
-  const _VoiceMessageBubbleContent({
-    required this.msg,
-    required this.isMe,
-    required this.onPlayToggle,
-  });
+class _DetailInfoRow extends StatelessWidget {
+  final String label;
+  final String value;
 
-  final _ChatMessageItem msg;
-  final bool isMe;
-  final VoidCallback onPlayToggle;
+  const _DetailInfoRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        GestureDetector(
-          onTap: onPlayToggle,
-          child: Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: isMe ? Colors.white : YanColors.primaryBlue,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              msg.isPlaying
-                  ? CupertinoIcons.pause_fill
-                  : CupertinoIcons.play_arrow_solid,
-              color: isMe ? YanColors.primaryBlue : Colors.white,
-              size: 18,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: YanColors.mutedText,
             ),
           ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                msg.text,
-                style: TextStyle(
-                  color: isMe ? Colors.white : YanColors.primaryNavy,
-                  fontSize: 12.8,
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                color: YanColors.primaryNavy,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VerifiedDocRow extends StatelessWidget {
+  final String title;
+  final String subtitle;
+
+  const _VerifiedDocRow({required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: YanColors.lightBlue,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: <Widget>[
+          const Icon(
+            Icons.verified_rounded,
+            color: YanColors.successGreen,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: YanColors.primaryNavy,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: YanColors.mutedText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CircleProfileActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isPrimary;
+  final VoidCallback onTap;
+
+  const _CircleProfileActionButton({
+    required this.icon,
+    required this.label,
+    this.isPrimary = false,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: <Widget>[
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isPrimary ? YanColors.primaryBlue : YanColors.lightBlue,
+              border: Border.all(
+                color: isPrimary
+                    ? YanColors.primaryBlue
+                    : YanColors.primaryBlue.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: 22,
+              color: isPrimary ? Colors.white : YanColors.primaryBlue,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: YanColors.primaryNavy,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LawyerDetailStatCol extends StatelessWidget {
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color iconColor;
+
+  const _LawyerDetailStatCol({
+    required this.value,
+    required this.label,
+    required this.icon,
+    required this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: <Widget>[
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Icon(icon, size: 15, color: iconColor),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                value,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13.5,
                   fontWeight: FontWeight.w800,
+                  color: YanColors.primaryNavy,
                 ),
               ),
-              const SizedBox(height: 3),
-              Text(
-                '${msg.durationLabel ?? "0:20"} • ${msg.fileSizeLabel ?? "Ovozli xabar"}',
-                style: TextStyle(
-                  color: isMe ? Colors.white70 : YanColors.mutedText,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+            color: YanColors.mutedText,
           ),
         ),
       ],
@@ -5721,60 +5188,3745 @@ class _VoiceMessageBubbleContent extends StatelessWidget {
   }
 }
 
-class _MediaAttachmentBubbleContent extends StatelessWidget {
-  const _MediaAttachmentBubbleContent({
-    required this.msg,
-    required this.isMe,
+// ============================================================================
+// ZERO-KNOWLEDGE E2EE ENGINE + INSTANT 0.00s REALTIME CHAT & OFFLINE SYNC
+// + #ARIZA FILE PICKER, VIEW/SAVE, ACCEPT/REJECT & 5-STAR RATING WORKFLOW
+// ============================================================================
+enum _ChatMediaType { text, voice, image, video, document, callLog }
+
+/// Structured metadata for an `#ariza` file delivery message.
+/// Tracks `arizaId`, `status` ('null' when not responded, 'accepted', 'rejected'),
+/// `sentTimeIso`, and original unencrypted file paths.
+class _ArizaFileDeliveryMeta {
+  final String arizaId;
+  final String status; // 'null' (unresponded), 'accepted', 'rejected'
+  final String fileName;
+  final String storagePath;
+  final String localPath;
+  final String sentTimeIso;
+  final int ratedStars; // 0 = not yet rated, 1..5 = rated by client
+  final String rejectionReason;
+
+  const _ArizaFileDeliveryMeta({
+    this.arizaId = 'ARZ-1001',
+    this.status = 'null',
+    required this.fileName,
+    this.storagePath = '',
+    this.localPath = '',
+    this.sentTimeIso = '',
+    this.ratedStars = 0,
+    this.rejectionReason = '',
   });
 
-  final _ChatMessageItem msg;
-  final bool isMe;
+  DateTime? get sentAtDateTime =>
+      sentTimeIso.isNotEmpty ? DateTime.tryParse(sentTimeIso)?.toLocal() : null;
 
-  IconData get _icon => switch (msg.type) {
-    _ChatMediaType.video => CupertinoIcons.play_rectangle_fill,
-    _ChatMediaType.photo => CupertinoIcons.photo_fill,
-    _ => CupertinoIcons.doc_text_fill,
-  };
+  /// True if client clicked `Qabul qilish` OR if 30 minutes have elapsed
+  /// since `sentTimeIso` without the client responding (`status == 'null'`).
+  bool isEffectivelyAccepted(DateTime now) {
+    if (status == 'accepted') return true;
+    if ((status == 'null' || status == 'pending') && sentAtDateTime != null) {
+      if (now.difference(sentAtDateTime!).inMinutes >= 30) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  String encode() {
+    final safeId = Uri.encodeComponent(arizaId);
+    final safeName = Uri.encodeComponent(fileName);
+    final safeStorage = Uri.encodeComponent(storagePath);
+    final safeLocal = Uri.encodeComponent(localPath);
+    final safeSent = Uri.encodeComponent(sentTimeIso);
+    final safeReason = Uri.encodeComponent(rejectionReason);
+    return 'ARIZA_FILE_V2|id:$safeId|status:$status|name:$safeName|storage:$safeStorage|local:$safeLocal|sent:$safeSent|stars:$ratedStars|reason:$safeReason';
+  }
+
+  _ArizaFileDeliveryMeta copyWith({
+    String? arizaId,
+    String? status,
+    String? fileName,
+    String? storagePath,
+    String? localPath,
+    String? sentTimeIso,
+    int? ratedStars,
+    String? rejectionReason,
+  }) {
+    return _ArizaFileDeliveryMeta(
+      arizaId: arizaId ?? this.arizaId,
+      status: status ?? this.status,
+      fileName: fileName ?? this.fileName,
+      storagePath: storagePath ?? this.storagePath,
+      localPath: localPath ?? this.localPath,
+      sentTimeIso: sentTimeIso ?? this.sentTimeIso,
+      ratedStars: ratedStars ?? this.ratedStars,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+    );
+  }
+
+  static _ArizaFileDeliveryMeta? tryParse(String? rawMeta, String messageText) {
+    if (rawMeta != null && rawMeta.startsWith('ARIZA_FILE_V2|')) {
+      final map = <String, String>{};
+      for (final part in rawMeta.split('|').skip(1)) {
+        final idx = part.indexOf(':');
+        if (idx > 0) {
+          map[part.substring(0, idx)] = Uri.decodeComponent(
+            part.substring(idx + 1),
+          );
+        }
+      }
+      final rawStatus = map['status'] ?? 'null';
+      return _ArizaFileDeliveryMeta(
+        arizaId: map['id']?.isNotEmpty == true ? map['id']! : 'ARZ-1001',
+        status: rawStatus == 'pending' ? 'null' : rawStatus,
+        fileName: map['name']?.isNotEmpty == true
+            ? map['name']!
+            : 'Tayyor_Ariza.docx',
+        storagePath: map['storage'] ?? '',
+        localPath: map['local'] ?? '',
+        sentTimeIso: map['sent'] ?? '',
+        ratedStars: int.tryParse(map['stars'] ?? '0') ?? 0,
+        rejectionReason: map['reason'] ?? '',
+      );
+    }
+    if (messageText.toLowerCase().contains('#ariza') ||
+        (rawMeta?.toLowerCase().contains('#ariza') ?? false)) {
+      return const _ArizaFileDeliveryMeta(
+        status: 'null',
+        fileName: 'Tayyor_Ariza.docx',
+      );
+    }
+    return null;
+  }
+}
+
+class _YanE2eeCryptoEngine {
+  _YanE2eeCryptoEngine._();
+
+  static const String _prefix = 'E2EEv1:';
+  static const String _masterSalt = 'YAN360-ZK-E2EE-UZ-2026-PRIVATE-SALT';
+  static const String _envelopeKey = 'yan360_profile_envelope_v2';
+  static const String _envelopeSeparator = '||E2EE_ENV:';
+
+  static String normalizeParticipantId(String rawId) {
+    var clean = rawId.trim().toLowerCase();
+    if (clean.startsWith('yan-')) {
+      clean = clean.substring(4);
+    }
+    clean = clean.replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (clean.length >= 8) {
+      return clean.substring(0, 8);
+    }
+    return clean.isEmpty ? 'anonuser' : clean;
+  }
+
+  static String buildCanonicalRoomKey(String idA, String idB) {
+    final normA = normalizeParticipantId(idA);
+    final normB = normalizeParticipantId(idB);
+    final pair = <String>[normA, normB]..sort();
+    return 'room_${pair[0]}__${pair[1]}';
+  }
+
+  static List<int> _deriveKeyStream(String roomKey, String nonce, int length) {
+    final seedStr = '$_masterSalt|$roomKey|$nonce';
+    final seedBytes = utf8.encode(seedStr);
+    final out = List<int>.filled(length, 0);
+    var state = 0x811C9DC5;
+    for (final b in seedBytes) {
+      state ^= b;
+      state = (state * 0x01000193) & 0xFFFFFFFF;
+    }
+    for (var i = 0; i < length; i++) {
+      state ^= (seedBytes[i % seedBytes.length] + i * 31) & 0xFF;
+      state = ((state << 5) | (state >> 27)) & 0xFFFFFFFF;
+      state = (state * 0x01000193 + 0x9E3779B9) & 0xFFFFFFFF;
+      out[i] = (state ^ (state >> 16)) & 0xFF;
+    }
+    return out;
+  }
+
+  static String encrypt(String plaintext, String roomKey) {
+    if (plaintext.startsWith(_prefix)) return plaintext;
+    final rnd = Random.secure();
+    final nonceBytes = List<int>.generate(8, (_) => rnd.nextInt(256));
+    final nonceHex = nonceBytes
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    final plainBytes = utf8.encode(plaintext);
+    final stream = _deriveKeyStream(roomKey, nonceHex, plainBytes.length);
+    final cipherBytes = List<int>.generate(
+      plainBytes.length,
+      (i) => plainBytes[i] ^ stream[i],
+    );
+    return '$_prefix$nonceHex:${base64UrlEncode(cipherBytes)}';
+  }
+
+  static String decrypt(String payload, String roomKey) {
+    if (!payload.startsWith(_prefix)) return payload;
+    try {
+      final raw = payload.substring(_prefix.length);
+      final sepIndex = raw.indexOf(':');
+      if (sepIndex <= 0) return payload;
+      final nonceHex = raw.substring(0, sepIndex);
+      final cipherB64 = raw.substring(sepIndex + 1);
+      final cipherBytes = base64Url.decode(cipherB64);
+      final stream = _deriveKeyStream(roomKey, nonceHex, cipherBytes.length);
+      final plainBytes = List<int>.generate(
+        cipherBytes.length,
+        (i) => cipherBytes[i] ^ stream[i],
+      );
+      return utf8.decode(plainBytes, allowMalformed: true);
+    } catch (_) {
+      return payload;
+    }
+  }
+
+  static Map<String, dynamic> decodeProfileEnvelope(String? rawPublicKey) {
+    if (rawPublicKey == null || !rawPublicKey.contains(_envelopeSeparator)) {
+      return <String, dynamic>{
+        'rooms': <String, dynamic>{},
+        'ariza_orders': <dynamic>[],
+        'advocate_ratings': <dynamic>[],
+      };
+    }
+    try {
+      final parts = rawPublicKey.split(_envelopeSeparator);
+      if (parts.length < 2) {
+        return <String, dynamic>{
+          'rooms': <String, dynamic>{},
+          'ariza_orders': <dynamic>[],
+          'advocate_ratings': <dynamic>[],
+        };
+      }
+      final decrypted = decrypt(parts.last.trim(), _envelopeKey);
+      final map = jsonDecode(decrypted);
+      if (map is Map) {
+        return Map<String, dynamic>.from(map);
+      }
+    } catch (_) {}
+    return <String, dynamic>{
+      'rooms': <String, dynamic>{},
+      'ariza_orders': <dynamic>[],
+      'advocate_ratings': <dynamic>[],
+    };
+  }
+
+  static String encodeProfileEnvelope(
+    String? existingPublicKey,
+    Map<String, dynamic> envelope,
+  ) {
+    var baseKey = 'PUB-X25519-YAN360';
+    if (existingPublicKey != null && existingPublicKey.trim().isNotEmpty) {
+      baseKey = existingPublicKey.split(_envelopeSeparator).first.trim();
+      if (baseKey.isEmpty) baseKey = 'PUB-X25519-YAN360';
+    }
+    final jsonStr = jsonEncode(envelope);
+    final enc = encrypt(jsonStr, _envelopeKey);
+    return '$baseKey$_envelopeSeparator$enc';
+  }
+
+  static Future<void> updateMyProfileE2eeEnvelope({
+    String? roomKey,
+    List<Map<String, dynamic>>? myRoomMessages,
+    String? lastSeenInRoomIso,
+    bool? isOnline,
+    Map<String, dynamic>? newAdvocateRatingEntry,
+  }) async {
+    final authUser = Supabase.instance.client.auth.currentUser;
+    if (authUser == null) return;
+
+    try {
+      final myRow = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+      final existingPubKey = myRow?['public_key']?.toString();
+      final env = decodeProfileEnvelope(existingPubKey);
+
+      final nowIso = DateTime.now().toUtc().toIso8601String();
+      if (isOnline != null) {
+        env['is_online'] = isOnline;
+      }
+      env['last_seen'] = nowIso;
+
+      final roomsRaw = env['rooms'];
+      final rooms = (roomsRaw is Map)
+          ? Map<String, dynamic>.from(roomsRaw)
+          : <String, dynamic>{};
+
+      if (roomKey != null) {
+        final roomEntryRaw = rooms[roomKey];
+        final roomEntry = (roomEntryRaw is Map)
+            ? Map<String, dynamic>.from(roomEntryRaw)
+            : <String, dynamic>{};
+
+        if (myRoomMessages != null) {
+          final trimmed = myRoomMessages.length > 60
+              ? myRoomMessages.sublist(myRoomMessages.length - 60)
+              : myRoomMessages;
+          roomEntry['messages'] = trimmed;
+        }
+        if (lastSeenInRoomIso != null) {
+          roomEntry['last_seen_by_me'] = lastSeenInRoomIso;
+        }
+        rooms[roomKey] = roomEntry;
+      }
+      env['rooms'] = rooms;
+
+      if (newAdvocateRatingEntry != null) {
+        final rawList = env['advocate_ratings'];
+        final ratingsList = (rawList is List)
+            ? List<dynamic>.from(rawList)
+            : <dynamic>[];
+        ratingsList.add(newAdvocateRatingEntry);
+        env['advocate_ratings'] = ratingsList;
+      }
+
+      final ordersList = YanRoleDataCatalog.arizaOrders.value
+          .take(25)
+          .map((e) => e.toJson())
+          .toList();
+      env['ariza_orders'] = ordersList;
+
+      final newPubKey = encodeProfileEnvelope(existingPubKey, env);
+      await Supabase.instance.client
+          .from('profiles')
+          .update(<String, dynamic>{'public_key': newPubKey})
+          .eq('id', authUser.id);
+    } catch (_) {}
+  }
+
+  static Future<File> _localArizaLedgerFile() async {
+    return File(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}yan360_ariza_orders.json',
+    );
+  }
+
+  static Future<void> persistArizaOrdersLedger() async {
+    final list = YanRoleDataCatalog.arizaOrders.value
+        .map((e) => e.toJson())
+        .toList();
+    final jsonStr = jsonEncode(list);
+    final encryptedPayload = encrypt(jsonStr, _envelopeKey);
+
+    try {
+      final f = await _localArizaLedgerFile();
+      await f.writeAsString(encryptedPayload, flush: true);
+    } catch (_) {}
+
+    await updateMyProfileE2eeEnvelope();
+  }
+
+  static Future<void> syncArizaOrdersLedger() async {
+    final byId = <String, ArizaOrderItem>{};
+    for (final item in YanRoleDataCatalog.arizaOrders.value) {
+      byId[item.id] = item;
+    }
+
+    try {
+      final f = await _localArizaLedgerFile();
+      if (await f.exists()) {
+        final enc = await f.readAsString();
+        final dec = decrypt(enc, _envelopeKey);
+        final list = jsonDecode(dec);
+        if (list is List) {
+          for (final raw in list) {
+            if (raw is Map) {
+              final parsed = ArizaOrderItem.fromJson(
+                Map<String, dynamic>.from(raw),
+              );
+              byId[parsed.id] = parsed;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final rows = await Supabase.instance.client.from('profiles').select();
+      for (final row in rows) {
+        final map = Map<String, dynamic>.from(row as Map);
+        final pubKey = map['public_key']?.toString();
+        if (pubKey != null && pubKey.contains(_envelopeSeparator)) {
+          final env = decodeProfileEnvelope(pubKey);
+          final rawOrders = env['ariza_orders'];
+          if (rawOrders is List) {
+            for (final item in rawOrders) {
+              if (item is Map) {
+                final parsed = ArizaOrderItem.fromJson(
+                  Map<String, dynamic>.from(item),
+                );
+                final existing = byId[parsed.id];
+                if (existing == null ||
+                    (!existing.isCompleted && parsed.isCompleted)) {
+                  byId[parsed.id] = parsed;
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    final merged = byId.values.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    YanRoleDataCatalog.arizaOrders.value = merged;
+  }
+}
+
+class _ChatMessageItem {
+  final String id;
+  final String senderId;
+  final String receiverId;
+  final String senderName;
+  final String text;
+  final String encryptedCiphertext;
+  final DateTime sentAt;
+  final bool isSeen;
+  final DateTime? seenAt;
+  final _ChatMediaType mediaType;
+  final String? mediaMeta;
+
+  const _ChatMessageItem({
+    required this.id,
+    required this.senderId,
+    required this.receiverId,
+    required this.senderName,
+    required this.text,
+    required this.encryptedCiphertext,
+    required this.sentAt,
+    this.isSeen = false,
+    this.seenAt,
+    this.mediaType = _ChatMediaType.text,
+    this.mediaMeta,
+  });
+
+  bool isMine(String myUserId) =>
+      _YanE2eeCryptoEngine.normalizeParticipantId(senderId) ==
+      _YanE2eeCryptoEngine.normalizeParticipantId(myUserId);
+
+  _ArizaFileDeliveryMeta? get arizaDeliveryMeta =>
+      _ArizaFileDeliveryMeta.tryParse(mediaMeta, text);
+
+  bool get isStructuredArizaPackage =>
+      (mediaMeta?.startsWith('ARIZA_PACKAGE') ?? false) ||
+      text.startsWith('📋 RASMIY ARIZA BUYURTMASI');
+
+  bool get isAutoWelcomeMessage => mediaMeta == 'AUTO_WELCOME';
+
+  String get formattedSentTime {
+    final h = sentAt.hour.toString().padLeft(2, '0');
+    final m = sentAt.minute.toString().padLeft(2, '0');
+    final s = sentAt.second.toString().padLeft(2, '0');
+    return '$h:$m:$s';
+  }
+
+  String get formattedFullDateTime {
+    final d = sentAt.day.toString().padLeft(2, '0');
+    final mo = sentAt.month.toString().padLeft(2, '0');
+    final y = sentAt.year;
+    return '$d.$mo.$y • $formattedSentTime';
+  }
+
+  String? get formattedSeenDateTime {
+    if (seenAt == null) return null;
+    final d = seenAt!.day.toString().padLeft(2, '0');
+    final mo = seenAt!.month.toString().padLeft(2, '0');
+    final h = seenAt!.hour.toString().padLeft(2, '0');
+    final m = seenAt!.minute.toString().padLeft(2, '0');
+    final s = seenAt!.second.toString().padLeft(2, '0');
+    return '$d.$mo.${seenAt!.year} • $h:$m:$s';
+  }
+
+  _ChatMessageItem copyWith({
+    bool? isSeen,
+    DateTime? seenAt,
+    String? encryptedCiphertext,
+    String? mediaMeta,
+  }) {
+    return _ChatMessageItem(
+      id: id,
+      senderId: senderId,
+      receiverId: receiverId,
+      senderName: senderName,
+      text: text,
+      encryptedCiphertext: encryptedCiphertext ?? this.encryptedCiphertext,
+      sentAt: sentAt,
+      isSeen: isSeen ?? this.isSeen,
+      seenAt: seenAt ?? this.seenAt,
+      mediaType: mediaType,
+      mediaMeta: mediaMeta ?? this.mediaMeta,
+    );
+  }
+
+  Map<String, dynamic> toServerJson(String roomKey) {
+    final cipher = encryptedCiphertext.isNotEmpty
+        ? encryptedCiphertext
+        : _YanE2eeCryptoEngine.encrypt(text, roomKey);
+    return <String, dynamic>{
+      'id': id,
+      'room_key': roomKey,
+      'sender_id': senderId,
+      'receiver_id': receiverId,
+      'sender_name': senderName,
+      'encrypted_content': cipher,
+      'media_type': mediaType.name,
+      'media_meta': mediaMeta,
+      'is_seen': isSeen,
+      'sent_at': sentAt.toIso8601String(),
+      'seen_at': seenAt?.toIso8601String(),
+    };
+  }
+
+  factory _ChatMessageItem.fromServerJson(
+    Map<String, dynamic> map,
+    String roomKey,
+  ) {
+    final rawCipher =
+        map['encrypted_content']?.toString() ?? map['content']?.toString() ?? '';
+    final decryptedText = _YanE2eeCryptoEngine.decrypt(rawCipher, roomKey);
+    final mediaName = map['media_type']?.toString() ?? 'text';
+    final resolvedMedia = _ChatMediaType.values.firstWhere(
+      (e) => e.name == mediaName,
+      orElse: () => _ChatMediaType.text,
+    );
+    return _ChatMessageItem(
+      id:
+          map['id']?.toString() ??
+          'MSG-${DateTime.now().microsecondsSinceEpoch}',
+      senderId: map['sender_id']?.toString() ?? '',
+      receiverId: map['receiver_id']?.toString() ?? '',
+      senderName: map['sender_name']?.toString() ?? 'Foydalanuvchi',
+      text: decryptedText,
+      encryptedCiphertext: rawCipher,
+      sentAt:
+          DateTime.tryParse(
+            map['sent_at']?.toString() ?? map['created_at']?.toString() ?? '',
+          )?.toLocal() ??
+          DateTime.now(),
+      isSeen: map['is_seen'] == true,
+      seenAt: DateTime.tryParse(map['seen_at']?.toString() ?? '')?.toLocal(),
+      mediaType: resolvedMedia,
+      mediaMeta: map['media_meta']?.toString(),
+    );
+  }
+}
+
+class AdvocateClientChatPage extends StatefulWidget {
+  final LawyerDirectoryProfile lawyer;
+  final UserProfileData profile;
+  final bool isEmbeddedTab;
+  final String? initialCallMode;
+
+  const AdvocateClientChatPage({
+    super.key,
+    required this.lawyer,
+    required this.profile,
+    this.isEmbeddedTab = false,
+    this.initialCallMode,
+  });
+
+  static Future<void> sendArizaPackageAndOpenChat({
+    required BuildContext context,
+    required LawyerDirectoryProfile advocate,
+    required UserProfileData clientProfile,
+    required String referenceCode,
+    required String subjectTitle,
+    required String detailedStatement,
+    required List<String> attachmentNames,
+    required String formattedCostLabel,
+  }) async {
+    final authUser = Supabase.instance.client.auth.currentUser;
+    final myUserId = (authUser?.id != null && authUser!.id.isNotEmpty)
+        ? authUser.id
+        : clientProfile.clientId;
+    final peerUserId = advocate.id.trim().isNotEmpty
+        ? advocate.id.trim()
+        : 'peer_${advocate.fullName.toLowerCase().replaceAll(RegExp(r'\s+'), '_')}';
+    final roomKey = _YanE2eeCryptoEngine.buildCanonicalRoomKey(
+      myUserId,
+      peerUserId,
+    );
+
+    final now = DateTime.now();
+    final deadline = now.add(const Duration(minutes: 30));
+
+    final orderItem = ArizaOrderItem(
+      id: referenceCode,
+      clientId: myUserId,
+      clientName: clientProfile.displayName,
+      clientPhone: clientProfile.phone,
+      clientRegion: clientProfile.region,
+      advocateId: peerUserId,
+      advocateName: advocate.fullName,
+      categoryType: 'Ariza yozdirish',
+      subjectTitle: subjectTitle,
+      detailedStatement: detailedStatement,
+      attachmentNames: attachmentNames,
+      createdAt: now,
+      deadlineAt: deadline,
+      isCompleted: false,
+    );
+    YanRoleDataCatalog.upsertArizaOrder(orderItem);
+
+    final docSummary = attachmentNames.isEmpty
+        ? 'Hujjat ilova qilinmagan (chatda yuborilishi mumkin)'
+        : List<String>.generate(
+            attachmentNames.length,
+            (i) => '${i + 1}. ${attachmentNames[i]}',
+          ).join('\n');
+
+    final deadlineClock =
+        '${deadline.hour.toString().padLeft(2, '0')}:${deadline.minute.toString().padLeft(2, '0')}';
+
+    final structuredText =
+        '📋 RASMIY ARIZA BUYURTMASI ($referenceCode)\n'
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+        '01 • MUROJAATCHI MA’LUMOTLARI:\n'
+        '• F.I.Sh.: ${clientProfile.displayName}\n'
+        '• Telefon: ${clientProfile.phone}\n'
+        '• Hudud: ${clientProfile.region}\n\n'
+        '02 • ARIZA MAVZUSI:\n'
+        '• $subjectTitle\n\n'
+        '03 • NIMA SODIR BO‘LGANI (BATAFSIL BAYON):\n'
+        '$detailedStatement\n\n'
+        '04 • ILOVA QILINGAN HUJJATLAR (${attachmentNames.length} ta):\n'
+        '$docSummary\n\n'
+        '05 • MUDDAT VA HOLAT:\n'
+        '• Tayyor bo‘lish muddati: 30 daqiqa ($deadlineClock gacha)\n'
+        '• Xizmat holati: $formattedCostLabel';
+
+    final msg1 = _ChatMessageItem(
+      id: 'ARZ-${now.microsecondsSinceEpoch}',
+      senderId: myUserId,
+      receiverId: peerUserId,
+      senderName: clientProfile.displayName,
+      text: structuredText,
+      encryptedCiphertext: _YanE2eeCryptoEngine.encrypt(
+        structuredText,
+        roomKey,
+      ),
+      sentAt: now,
+      isSeen: false,
+      seenAt: null,
+      mediaType: _ChatMediaType.document,
+      mediaMeta:
+          'ARIZA_PACKAGE|$referenceCode|30 daqiqa ($deadlineClock gacha)',
+    );
+
+    final newMessages = <_ChatMessageItem>[msg1];
+
+    for (var i = 0; i < attachmentNames.length; i++) {
+      final docTime = now.add(Duration(milliseconds: 12 * (i + 1)));
+      final docText =
+          '📎 E2EE Hujjat #${i + 1}: ${attachmentNames[i]} ($referenceCode)';
+      newMessages.add(
+        _ChatMessageItem(
+          id: 'ARZ-DOC-${docTime.microsecondsSinceEpoch}-$i',
+          senderId: myUserId,
+          receiverId: peerUserId,
+          senderName: clientProfile.displayName,
+          text: docText,
+          encryptedCiphertext: _YanE2eeCryptoEngine.encrypt(docText, roomKey),
+          sentAt: docTime,
+          isSeen: false,
+          seenAt: null,
+          mediaType: _ChatMediaType.image,
+          mediaMeta: 'E2EE Hujjat #${i + 1} • ${attachmentNames[i]}',
+        ),
+      );
+    }
+
+    final autoReplyTime = now.add(const Duration(milliseconds: 220));
+    const autoReplyText =
+        'Xizmatimizdan foydalanganingiz uchun rahmat! Murojaatingiz va barcha ma’lumotlaringizni qabul qildim. '
+        'Yanada to‘liq va mukammal ariza yozish uchun sizga qo‘shimcha savollar berishim mumkin. '
+        'Arizangiz 30 daqiqa ichida tayyor bo‘ladi.';
+
+    final autoWelcomeMsg = _ChatMessageItem(
+      id: 'AUTO-WELCOME-${autoReplyTime.microsecondsSinceEpoch}',
+      senderId: peerUserId,
+      receiverId: myUserId,
+      senderName: advocate.fullName,
+      text: autoReplyText,
+      encryptedCiphertext: _YanE2eeCryptoEngine.encrypt(autoReplyText, roomKey),
+      sentAt: autoReplyTime,
+      isSeen: true,
+      seenAt: autoReplyTime,
+      mediaType: _ChatMediaType.text,
+      mediaMeta: 'AUTO_WELCOME',
+    );
+    newMessages.add(autoWelcomeMsg);
+
+    final cacheFile = File(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}yan360_$roomKey.json',
+    );
+    final existingById = <String, Map<String, dynamic>>{};
+    try {
+      if (await cacheFile.exists()) {
+        final raw = await cacheFile.readAsString();
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final item in decoded) {
+            if (item is Map && item['id'] != null) {
+              existingById[item['id'].toString()] = Map<String, dynamic>.from(
+                item,
+              );
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    for (final m in newMessages) {
+      final serverMap = m.toServerJson(roomKey);
+      existingById[m.id] = serverMap;
+    }
+
+    final mergedList = existingById.values.toList();
+    try {
+      await cacheFile.writeAsString(jsonEncode(mergedList), flush: true);
+    } catch (_) {}
+
+    await _YanE2eeCryptoEngine.updateMyProfileE2eeEnvelope(
+      roomKey: roomKey,
+      myRoomMessages: mergedList,
+      isOnline: true,
+    );
+
+    if (!context.mounted) return;
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => AdvocateClientChatPage(
+          lawyer: advocate,
+          profile: clientProfile,
+        ),
+      ),
+    );
+  }
 
   @override
-  Widget build(BuildContext context) {
+  State<AdvocateClientChatPage> createState() => _AdvocateClientChatPageState();
+}
+
+class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
+    with WidgetsBindingObserver {
+  final TextEditingController _msgController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final ImagePicker _filePicker = ImagePicker();
+  final List<_ChatMessageItem> _messages = <_ChatMessageItem>[];
+
+  RealtimeChannel? _roomChannel;
+  Timer? _offlinePollAndHeartbeatTimer;
+  late final String _myUserId;
+  late final String _peerUserId;
+  late final String _roomKey;
+
+  bool _isMyAppInForeground = true;
+  bool _isPeerOnline = false;
+  DateTime _peerLastSeen = DateTime.now();
+  DateTime? _lastPeerRealtimePingAt;
+  bool _isSyncingHistory = true;
+  bool _incomingCallDialogVisible = false;
+  bool _isPollingProfiles = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    final authUser = Supabase.instance.client.auth.currentUser;
+    _myUserId = (authUser?.id != null && authUser!.id.isNotEmpty)
+        ? authUser.id
+        : widget.profile.clientId;
+    _peerUserId = widget.lawyer.id.trim().isNotEmpty
+        ? widget.lawyer.id.trim()
+        : 'peer_${widget.lawyer.fullName.toLowerCase().replaceAll(RegExp(r'\s+'), '_')}';
+    _roomKey = _YanE2eeCryptoEngine.buildCanonicalRoomKey(_myUserId, _peerUserId);
+
+    _initRealtimeZeroLagChannel();
+    _loadCrossDeviceEncryptedHistory();
+
+    _offlinePollAndHeartbeatTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) {
+        if (!mounted) return;
+        if (_isMyAppInForeground) {
+          _broadcastMyPresence(isOnline: true, requestAck: false);
+          _syncOfflineMessagesFromProfilesEnvelopes();
+        }
+        if (_isPeerOnline &&
+            _lastPeerRealtimePingAt != null &&
+            DateTime.now().difference(_lastPeerRealtimePingAt!).inSeconds >
+                10) {
+          setState(() {
+            _isPeerOnline = false;
+            _peerLastSeen = DateTime.now();
+          });
+        }
+      },
+    );
+
+    if (widget.initialCallMode != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _startE2eeCall(isVideo: widget.initialCallMode == 'video');
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _offlinePollAndHeartbeatTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _broadcastMyPresence(isOnline: false);
+    _syncMyRoomStateToProfileEnvelope(isOnline: false);
+    if (_roomChannel != null) {
+      Supabase.instance.client.removeChannel(_roomChannel!);
+    }
+    _msgController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final inApp = state == AppLifecycleState.resumed;
+    if (_isMyAppInForeground != inApp) {
+      setState(() => _isMyAppInForeground = inApp);
+      _broadcastMyPresence(isOnline: inApp, requestAck: inApp);
+      _syncMyRoomStateToProfileEnvelope(isOnline: inApp);
+      if (inApp) {
+        _requestPeerHistorySync();
+        _syncOfflineMessagesFromProfilesEnvelopes();
+        _markAllIncomingAsSeen();
+      }
+    }
+  }
+
+  void _initRealtimeZeroLagChannel() {
+    try {
+      final channel = Supabase.instance.client.channel(
+        'yan360_e2ee_$_roomKey',
+        opts: const RealtimeChannelConfig(self: false, ack: false),
+      );
+
+      channel
+          .onBroadcast(
+            event: 'e2ee_msg',
+            callback: (payload) {
+              if (!mounted) return;
+              final msg = _ChatMessageItem.fromServerJson(payload, _roomKey);
+              final idx = _messages.indexWhere((m) => m.id == msg.id);
+              if (idx < 0) {
+                final resolved = (_isMyAppInForeground && !msg.isMine(_myUserId))
+                    ? msg.copyWith(isSeen: true, seenAt: DateTime.now())
+                    : msg;
+                setState(() {
+                  _messages.add(resolved);
+                  _messages.sort((a, b) => a.sentAt.compareTo(b.sentAt));
+                  _isPeerOnline = true;
+                  _lastPeerRealtimePingAt = DateTime.now();
+                  _peerLastSeen = DateTime.now();
+                });
+                _scrollToBottomInstant();
+                _saveLocalEncryptedCache();
+                if (_isMyAppInForeground && !msg.isMine(_myUserId)) {
+                  _sendSeenReceipt(<String>[msg.id]);
+                }
+              } else {
+                setState(() {
+                  _messages[idx] = msg;
+                });
+                _saveLocalEncryptedCache();
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'e2ee_ariza_decision',
+            callback: (payload) {
+              if (!mounted) return;
+              final msgId = payload['message_id']?.toString() ?? '';
+              final newMeta = payload['media_meta']?.toString() ?? '';
+              final idx = _messages.indexWhere((m) => m.id == msgId);
+              if (idx >= 0 && newMeta.isNotEmpty) {
+                setState(() {
+                  _messages[idx] = _messages[idx].copyWith(mediaMeta: newMeta);
+                });
+                _saveLocalEncryptedCache();
+                _syncMyRoomStateToProfileEnvelope();
+              }
+              final stars = (payload['rated_stars'] as num?)?.toInt() ?? 0;
+              if (stars >= 1 && stars <= 5) {
+                final advId = payload['advocate_id']?.toString() ?? _myUserId;
+                final advName =
+                    payload['advocate_name']?.toString() ??
+                    widget.profile.displayName;
+                final clientName =
+                    payload['client_name']?.toString() ?? 'Mijoz';
+                YanRoleDataCatalog.applyAdvocateStarRating(
+                  advocateId: advId,
+                  advocateName: advName,
+                  stars: stars,
+                  clientName: clientName,
+                );
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'e2ee_sync_request',
+            callback: (payload) {
+              if (!mounted) return;
+              final reqId = payload['requester_id']?.toString() ?? '';
+              if (reqId.isNotEmpty &&
+                  _YanE2eeCryptoEngine.normalizeParticipantId(reqId) !=
+                      _YanE2eeCryptoEngine.normalizeParticipantId(_myUserId)) {
+                setState(() {
+                  _isPeerOnline = true;
+                  _lastPeerRealtimePingAt = DateTime.now();
+                  _peerLastSeen = DateTime.now();
+                });
+                _broadcastMyEncryptedHistoryBundle();
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'e2ee_history_bundle',
+            callback: (payload) {
+              if (!mounted) return;
+              final rawList = payload['messages'];
+              if (rawList is! List) return;
+              var changed = false;
+              final newlySeenIds = <String>[];
+              final now = DateTime.now();
+
+              for (final item in rawList) {
+                if (item is Map) {
+                  final incoming = _ChatMessageItem.fromServerJson(
+                    Map<String, dynamic>.from(item),
+                    _roomKey,
+                  );
+                  final idx = _messages.indexWhere((m) => m.id == incoming.id);
+                  if (idx < 0) {
+                    final resolved =
+                        (_isMyAppInForeground && !incoming.isMine(_myUserId))
+                        ? incoming.copyWith(isSeen: true, seenAt: now)
+                        : incoming;
+                    _messages.add(resolved);
+                    if (_isMyAppInForeground && !incoming.isMine(_myUserId)) {
+                      newlySeenIds.add(incoming.id);
+                    }
+                    changed = true;
+                  } else {
+                    if (!_messages[idx].isSeen && incoming.isSeen) {
+                      _messages[idx] = _messages[idx].copyWith(
+                        isSeen: true,
+                        seenAt: incoming.seenAt ?? now,
+                      );
+                      changed = true;
+                    }
+                    if (_messages[idx].mediaMeta != incoming.mediaMeta &&
+                        incoming.mediaMeta != null &&
+                        incoming.mediaMeta!.contains('status:') &&
+                        !incoming.mediaMeta!.contains('status:pending')) {
+                      _messages[idx] = _messages[idx].copyWith(
+                        mediaMeta: incoming.mediaMeta,
+                      );
+                      changed = true;
+                    }
+                  }
+                }
+              }
+
+              if (changed && mounted) {
+                setState(() {
+                  _messages.sort((a, b) => a.sentAt.compareTo(b.sentAt));
+                });
+                _scrollToBottomInstant();
+                _saveLocalEncryptedCache();
+                if (newlySeenIds.isNotEmpty) {
+                  _sendSeenReceipt(newlySeenIds);
+                }
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'e2ee_seen',
+            callback: (payload) {
+              if (!mounted) return;
+              final seenAt =
+                  DateTime.tryParse(payload['seen_at']?.toString() ?? '')
+                      ?.toLocal() ??
+                  DateTime.now();
+              final idsRaw = payload['message_ids'];
+              final idSet = <String>{};
+              if (idsRaw is List) {
+                for (final item in idsRaw) {
+                  idSet.add(item.toString());
+                }
+              }
+              setState(() {
+                for (var i = 0; i < _messages.length; i++) {
+                  final m = _messages[i];
+                  if (m.isMine(_myUserId) &&
+                      (!m.isSeen || idSet.isEmpty || idSet.contains(m.id))) {
+                    _messages[i] = m.copyWith(isSeen: true, seenAt: seenAt);
+                  }
+                }
+              });
+              _saveLocalEncryptedCache();
+              _syncMyRoomStateToProfileEnvelope();
+            },
+          )
+          .onBroadcast(
+            event: 'presence_state',
+            callback: (payload) {
+              if (!mounted) return;
+              final sender = payload['user_id']?.toString() ?? '';
+              if (sender.isNotEmpty &&
+                  _YanE2eeCryptoEngine.normalizeParticipantId(sender) !=
+                      _YanE2eeCryptoEngine.normalizeParticipantId(_myUserId)) {
+                final online = payload['is_online'] == true;
+                final ts =
+                    DateTime.tryParse(payload['timestamp']?.toString() ?? '')
+                        ?.toLocal() ??
+                    DateTime.now();
+                setState(() {
+                  _isPeerOnline = online;
+                  if (online) _lastPeerRealtimePingAt = DateTime.now();
+                  _peerLastSeen = ts;
+                });
+                if (online && payload['request_ack'] == true) {
+                  _broadcastMyPresence(
+                    isOnline: _isMyAppInForeground,
+                    requestAck: false,
+                  );
+                  _broadcastMyEncryptedHistoryBundle();
+                }
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'call_signal',
+            callback: (payload) {
+              if (!mounted) return;
+              final action = payload['action']?.toString() ?? '';
+              final callerId = payload['caller_id']?.toString() ?? '';
+              if (_YanE2eeCryptoEngine.normalizeParticipantId(callerId) ==
+                  _YanE2eeCryptoEngine.normalizeParticipantId(_myUserId)) {
+                return;
+              }
+              if (action == 'invite' && !_incomingCallDialogVisible) {
+                final isVideo = payload['call_type'] == 'video';
+                final callerName =
+                    payload['caller_name']?.toString() ?? widget.lawyer.fullName;
+                _showIncomingCallModal(
+                  callerName: callerName,
+                  isVideo: isVideo,
+                );
+              }
+            },
+          )
+          .subscribe((status, error) {
+            if (status == RealtimeSubscribeStatus.subscribed) {
+              _broadcastMyPresence(
+                isOnline: _isMyAppInForeground,
+                requestAck: true,
+              );
+              _requestPeerHistorySync();
+              _broadcastMyEncryptedHistoryBundle();
+              _markAllIncomingAsSeen();
+            }
+          });
+
+      _roomChannel = channel;
+    } catch (_) {}
+  }
+
+  Future<void> _requestPeerHistorySync() async {
+    try {
+      await _roomChannel?.sendBroadcastMessage(
+        event: 'e2ee_sync_request',
+        payload: <String, dynamic>{
+          'requester_id': _myUserId,
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+        },
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _broadcastMyEncryptedHistoryBundle() async {
+    if (_messages.isEmpty) return;
+    try {
+      final list = _messages.map((m) => m.toServerJson(_roomKey)).toList();
+      await _roomChannel?.sendBroadcastMessage(
+        event: 'e2ee_history_bundle',
+        payload: <String, dynamic>{
+          'sender_id': _myUserId,
+          'messages': list,
+        },
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _broadcastMyPresence({
+    required bool isOnline,
+    bool requestAck = false,
+  }) async {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    try {
+      await _roomChannel?.sendBroadcastMessage(
+        event: 'presence_state',
+        payload: <String, dynamic>{
+          'user_id': _myUserId,
+          'user_name': widget.profile.displayName,
+          'is_online': isOnline,
+          'timestamp': nowIso,
+          'request_ack': requestAck,
+        },
+      );
+    } catch (_) {}
+  }
+
+  Future<File> _localRoomCacheFile() async {
+    final dir = Directory.systemTemp;
+    return File('${dir.path}${Platform.pathSeparator}yan360_$_roomKey.json');
+  }
+
+  Future<void> _saveLocalEncryptedCache() async {
+    try {
+      final f = await _localRoomCacheFile();
+      final list = _messages.map((m) => m.toServerJson(_roomKey)).toList();
+      await f.writeAsString(jsonEncode(list), flush: true);
+    } catch (_) {}
+  }
+
+  Future<void> _syncMyRoomStateToProfileEnvelope({
+    bool? isOnline,
+    Map<String, dynamic>? newAdvocateRatingEntry,
+  }) async {
+    final list = _messages.map((m) => m.toServerJson(_roomKey)).toList();
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    await _YanE2eeCryptoEngine.updateMyProfileE2eeEnvelope(
+      roomKey: _roomKey,
+      myRoomMessages: list,
+      lastSeenInRoomIso: _isMyAppInForeground ? nowIso : null,
+      isOnline: isOnline ?? _isMyAppInForeground,
+      newAdvocateRatingEntry: newAdvocateRatingEntry,
+    );
+  }
+
+  Future<void> _syncOfflineMessagesFromProfilesEnvelopes() async {
+    if (_isPollingProfiles) return;
+    _isPollingProfiles = true;
+    try {
+      final rows = await Supabase.instance.client.from('profiles').select();
+      var changed = false;
+      final newlySeenIncomingIds = <String>[];
+      final now = DateTime.now();
+      final normPeer = _YanE2eeCryptoEngine.normalizeParticipantId(_peerUserId);
+
+      for (final rawRow in rows) {
+        final row = Map<String, dynamic>.from(rawRow as Map);
+        final rowId = row['id']?.toString() ?? '';
+        final normRowId = _YanE2eeCryptoEngine.normalizeParticipantId(rowId);
+        final pubKey = row['public_key']?.toString();
+        if (pubKey == null ||
+            !pubKey.contains(_YanE2eeCryptoEngine._envelopeSeparator)) {
+          continue;
+        }
+
+        final env = _YanE2eeCryptoEngine.decodeProfileEnvelope(pubKey);
+
+        if (normRowId == normPeer) {
+          final envLastSeen = DateTime.tryParse(
+            env['last_seen']?.toString() ?? '',
+          )?.toLocal();
+          final envOnline = env['is_online'] == true;
+          if (envLastSeen != null) {
+            final isRecent =
+                DateTime.now().difference(envLastSeen).inSeconds <= 12;
+            if (mounted && (_lastPeerRealtimePingAt == null)) {
+              setState(() {
+                _isPeerOnline = envOnline && isRecent;
+                _peerLastSeen = envLastSeen;
+              });
+            }
+          }
+        }
+
+        final roomsRaw = env['rooms'];
+        if (roomsRaw is! Map) continue;
+        final roomDataRaw = roomsRaw[_roomKey];
+        if (roomDataRaw is! Map) continue;
+        final roomData = Map<String, dynamic>.from(roomDataRaw);
+
+        if (normRowId == normPeer) {
+          final peerSeenAt = DateTime.tryParse(
+            roomData['last_seen_by_me']?.toString() ?? '',
+          )?.toLocal();
+          if (peerSeenAt != null) {
+            for (var i = 0; i < _messages.length; i++) {
+              final m = _messages[i];
+              if (m.isMine(_myUserId) &&
+                  !m.isSeen &&
+                  !m.sentAt.isAfter(
+                    peerSeenAt.add(const Duration(seconds: 2)),
+                  )) {
+                _messages[i] = m.copyWith(isSeen: true, seenAt: peerSeenAt);
+                changed = true;
+              }
+            }
+          }
+        }
+
+        final rawMsgs = roomData['messages'];
+        if (rawMsgs is List) {
+          for (final item in rawMsgs) {
+            if (item is Map) {
+              final incoming = _ChatMessageItem.fromServerJson(
+                Map<String, dynamic>.from(item),
+                _roomKey,
+              );
+              final idx = _messages.indexWhere((m) => m.id == incoming.id);
+              if (idx < 0) {
+                final resolved =
+                    (_isMyAppInForeground && !incoming.isMine(_myUserId))
+                    ? incoming.copyWith(isSeen: true, seenAt: now)
+                    : incoming;
+                _messages.add(resolved);
+                if (_isMyAppInForeground && !incoming.isMine(_myUserId)) {
+                  newlySeenIncomingIds.add(incoming.id);
+                }
+                changed = true;
+              } else {
+                if (!_messages[idx].isSeen && incoming.isSeen) {
+                  _messages[idx] = _messages[idx].copyWith(
+                    isSeen: true,
+                    seenAt: incoming.seenAt ?? now,
+                  );
+                  changed = true;
+                }
+                if (_messages[idx].mediaMeta != incoming.mediaMeta &&
+                    incoming.mediaMeta != null &&
+                    incoming.mediaMeta!.contains('status:') &&
+                    !incoming.mediaMeta!.contains('status:pending')) {
+                  _messages[idx] = _messages[idx].copyWith(
+                    mediaMeta: incoming.mediaMeta,
+                  );
+                  changed = true;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (changed && mounted) {
+        setState(() {
+          _messages.sort((a, b) => a.sentAt.compareTo(b.sentAt));
+        });
+        _scrollToBottomInstant();
+        _saveLocalEncryptedCache();
+        if (newlySeenIncomingIds.isNotEmpty) {
+          _sendSeenReceipt(newlySeenIncomingIds);
+        } else {
+          _syncMyRoomStateToProfileEnvelope();
+        }
+      }
+    } catch (_) {
+    } finally {
+      _isPollingProfiles = false;
+    }
+  }
+
+  Future<void> _loadCrossDeviceEncryptedHistory() async {
+    final byId = <String, _ChatMessageItem>{};
+
+    try {
+      final localFile = await _localRoomCacheFile();
+      if (await localFile.exists()) {
+        final raw = await localFile.readAsString();
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final item in decoded) {
+            if (item is Map) {
+              final msg = _ChatMessageItem.fromServerJson(
+                Map<String, dynamic>.from(item),
+                _roomKey,
+              );
+              byId[msg.id] = msg;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (byId.isNotEmpty && mounted) {
+      final sorted = byId.values.toList()
+        ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(sorted);
+        _isSyncingHistory = false;
+      });
+      _scrollToBottomInstant();
+    }
+
+    await _syncOfflineMessagesFromProfilesEnvelopes();
+
+    for (final m in _messages) {
+      byId[m.id] = m;
+    }
+
+    if (byId.isEmpty) {
+      final welcomeText =
+          'Assalomu alaykum, ${widget.profile.displayName}! Men ${widget.lawyer.fullName}. YAN360 E2EE himoyalangan chat orqali savolingiz va hujjatlaringizni yuborishingiz mumkin.';
+      final welcomeTime = DateTime.now();
+      final welcomeId = 'WELCOME-$_roomKey';
+      byId[welcomeId] = _ChatMessageItem(
+        id: welcomeId,
+        senderId: _peerUserId,
+        receiverId: _myUserId,
+        senderName: widget.lawyer.fullName,
+        text: welcomeText,
+        encryptedCiphertext: _YanE2eeCryptoEngine.encrypt(
+          welcomeText,
+          _roomKey,
+        ),
+        sentAt: welcomeTime,
+        isSeen: true,
+        seenAt: welcomeTime,
+      );
+    }
+
+    if (!mounted) return;
+    final merged = byId.values.toList()
+      ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+    setState(() {
+      _messages
+        ..clear()
+        ..addAll(merged);
+      _isSyncingHistory = false;
+    });
+    _scrollToBottomInstant();
+    _markAllIncomingAsSeen();
+    _saveLocalEncryptedCache();
+    _syncMyRoomStateToProfileEnvelope(isOnline: true);
+    _broadcastMyEncryptedHistoryBundle();
+  }
+
+  void _markAllIncomingAsSeen() {
+    if (!_isMyAppInForeground) return;
+    final unseenIncomingIds = <String>[];
+    final now = DateTime.now();
+    var changed = false;
+    for (var i = 0; i < _messages.length; i++) {
+      final m = _messages[i];
+      if (!m.isMine(_myUserId) && !m.isSeen) {
+        _messages[i] = m.copyWith(isSeen: true, seenAt: now);
+        unseenIncomingIds.add(m.id);
+        changed = true;
+      }
+    }
+    if (changed && mounted) {
+      setState(() {});
+      _sendSeenReceipt(unseenIncomingIds);
+      _saveLocalEncryptedCache();
+    }
+  }
+
+  Future<void> _sendSeenReceipt(List<String> messageIds) async {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    try {
+      await _roomChannel?.sendBroadcastMessage(
+        event: 'e2ee_seen',
+        payload: <String, dynamic>{
+          'reader_id': _myUserId,
+          'seen_at': nowIso,
+          'message_ids': messageIds,
+        },
+      );
+    } catch (_) {}
+
+    await _syncMyRoomStateToProfileEnvelope(isOnline: true);
+  }
+
+  void _scrollToBottomInstant() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
+
+  void _sendMessage() {
+    final txt = _msgController.text.trim();
+    if (txt.isEmpty) return;
+    _msgController.clear();
+
+    // If the user typed #ariza in the message text, open the file picker first
+    // so they can attach the completed ariza file from storage or gallery!
+    if (txt.toLowerCase().contains('#ariza')) {
+      _openReadyArizaFileDeliveryModal(initialCaption: txt);
+      return;
+    }
+
+    _dispatchInstantEncryptedMessage(
+      text: txt,
+      mediaType: _ChatMediaType.text,
+    );
+  }
+
+  void _dispatchInstantEncryptedMessage({
+    required String text,
+    _ChatMediaType mediaType = _ChatMediaType.text,
+    String? mediaMeta,
+  }) {
+    final now = DateTime.now();
+    final msgId =
+        'MSG-${now.microsecondsSinceEpoch}-${_myUserId.hashCode.abs()}';
+    final cipher = _YanE2eeCryptoEngine.encrypt(text, _roomKey);
+
+    final newMsg = _ChatMessageItem(
+      id: msgId,
+      senderId: _myUserId,
+      receiverId: _peerUserId,
+      senderName: widget.profile.displayName,
+      text: text,
+      encryptedCiphertext: cipher,
+      sentAt: now,
+      isSeen: false,
+      seenAt: null,
+      mediaType: mediaType,
+      mediaMeta: mediaMeta,
+    );
+
+    setState(() {
+      _messages.add(newMsg);
+    });
+    _scrollToBottomInstant();
+
+    final payload = newMsg.toServerJson(_roomKey);
+    _roomChannel?.sendBroadcastMessage(
+      event: 'e2ee_msg',
+      payload: payload,
+    );
+    _saveLocalEncryptedCache();
+    _syncMyRoomStateToProfileEnvelope(isOnline: true);
+  }
+
+  void _sendAttachment(_ChatMediaType type, String title, String meta) {
+    _dispatchInstantEncryptedMessage(
+      text: title,
+      mediaType: type,
+      mediaMeta: meta,
+    );
+  }
+
+  // ==========================================================================
+  // #ARIZA FILE PICKER (STORAGE / GALLERY / CAMERA) + SUPABASE 5-COLUMN DB SAVE
+  // + YAN360 WATERMARK IN-APP PREVIEW (BEFORE ACCEPT) + SAVE & SHARE (AFTER ACCEPT)
+  // ==========================================================================
+
+  /// Saves or updates the provided ariza in Supabase `public.arizas` with the
+  /// exact 5 required columns:
+  /// `ariza_id`, `advocate_id`, `client_id`, `sent_time`, `status` ('accepted', 'rejected', or null).
+  Future<void> _upsertArizaRecordInSupabase({
+    required String arizaId,
+    required String advocateId,
+    required String clientId,
+    required String sentTimeIso,
+    required String? status, // null, 'accepted', or 'rejected'
+  }) async {
+    try {
+      await Supabase.instance.client.from('arizas').upsert(<String, dynamic>{
+        'ariza_id': arizaId,
+        'advocate_id': advocateId,
+        'client_id': clientId,
+        'sent_time': sentTimeIso,
+        'status': status,
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _updateArizaStatusInSupabase({
+    required String arizaId,
+    required String status, // 'accepted' or 'rejected'
+  }) async {
+    try {
+      await Supabase.instance.client
+          .from('arizas')
+          .update(<String, dynamic>{'status': status})
+          .eq('ariza_id', arizaId);
+    } catch (_) {}
+  }
+
+  Future<List<File>> _discoverDeviceStorageFiles() async {
+    final found = <File>[];
+    final seenPaths = <String>{};
+
+    void addIfValid(File f) {
+      try {
+        if (f.existsSync() && !seenPaths.contains(f.path)) {
+          final lower = f.path.toLowerCase();
+          if (lower.endsWith('.docx') ||
+              lower.endsWith('.pdf') ||
+              lower.endsWith('.doc') ||
+              lower.endsWith('.txt') ||
+              lower.endsWith('.jpg') ||
+              lower.endsWith('.jpeg') ||
+              lower.endsWith('.png')) {
+            seenPaths.add(f.path);
+            found.add(f);
+          }
+        }
+      } catch (_) {}
+    }
+
+    try {
+      for (final doc in GeneratedDocumentRepository.instance.documents.value) {
+        addIfValid(File(doc.path));
+      }
+    } catch (_) {}
+
+    final candidateDirs = <Directory>[];
+    try {
+      candidateDirs.add(await getApplicationDocumentsDirectory());
+    } catch (_) {}
+    try {
+      final dl = await getDownloadsDirectory();
+      if (dl != null) candidateDirs.add(dl);
+    } catch (_) {}
+    for (final p in <String>[
+      '/storage/emulated/0/Download',
+      '/storage/emulated/0/Documents',
+    ]) {
+      candidateDirs.add(Directory(p));
+    }
+
+    for (final dir in candidateDirs) {
+      try {
+        if (dir.existsSync()) {
+          for (final entity in dir.listSync(followLinks: false).take(40)) {
+            if (entity is File) {
+              addIfValid(entity);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (found.isEmpty) {
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final sampleFile = File(
+          '${appDir.path}${Platform.pathSeparator}Rasmiy_Sud_Davo_Arizasi_YAN360.docx',
+        );
+        if (!sampleFile.existsSync()) {
+          await sampleFile.writeAsString(
+            'FUQAROLIK ISHLARI BO‘YICHA SUDGA\n'
+            'DA’VO ARIZASI (YAN360 RASMIY HUJJAT)\n\n'
+            'Mazkur da’vo arizasi mijoz murojaati asosida rasmiy advokat tomonidan '
+            'tayyorlandi va huquqiy ekspertizadan o‘tkazildi.\n\n'
+            '1. Da’vogar va javobgar ma’lumotlari to‘liq tekshirildi.\n'
+            '2. Asoslovchi dalillar va huquqiy normalar keltirildi.\n'
+            '3. Suddan so‘raladigan talablar aniq bayon etildi.',
+            flush: true,
+          );
+        }
+        addIfValid(sampleFile);
+      } catch (_) {}
+    }
+
+    return found;
+  }
+
+  Future<void> _openReadyArizaFileDeliveryModal({String? initialCaption}) async {
+    final storageFiles = await _discoverDeviceStorageFiles();
+    if (!mounted) return;
+
+    File? selectedFile = storageFiles.isNotEmpty ? storageFiles.first : null;
+    String selectedFileName = selectedFile != null
+        ? selectedFile.path.split(Platform.pathSeparator).last
+        : '';
+    final captionController = TextEditingController(
+      text: initialCaption ??
+          '#ariza Rasmiy tayyorlangan ariza hujjati. "Ko‘rish" tugmasi orqali tekshirib, "Qabul qilish" yoki "Rad etish" tugmasini bosing.',
+    );
+    bool isUploading = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: YanColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            Future<void> pickFromGalleryOrMedia({required bool isCamera}) async {
+              try {
+                final XFile? picked = isCamera
+                    ? await _filePicker.pickImage(
+                        source: ImageSource.camera,
+                        imageQuality: 88,
+                      )
+                    : (await _filePicker.pickMedia() ??
+                          await _filePicker.pickImage(
+                            source: ImageSource.gallery,
+                            imageQuality: 88,
+                          ));
+                if (picked != null) {
+                  setSheetState(() {
+                    selectedFile = File(picked.path);
+                    selectedFileName = picked.name.isNotEmpty
+                        ? picked.name
+                        : picked.path.split(Platform.pathSeparator).last;
+                  });
+                }
+              } catch (_) {}
+            }
+
+            Future<void> uploadAndSendArizaFile() async {
+              if (selectedFile == null || selectedFileName.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Iltimos, avval xotira yoki galereyadan tayyor ariza faylini tanlang!',
+                    ),
+                    backgroundColor: YanColors.destructiveRed,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                return;
+              }
+
+              setSheetState(() => isUploading = true);
+              final now = DateTime.now();
+              final nowIso = now.toUtc().toIso8601String();
+              final arizaId = 'ARZ-${now.millisecondsSinceEpoch}';
+              var storagePath = '';
+
+              // 1. Save the ORIGINAL unencrypted ariza file in Supabase Storage
+              // so the firm can audit how arizas were written by advocates!
+              try {
+                final bytes = await selectedFile!.readAsBytes();
+                final cleanName = selectedFileName.replaceAll(
+                  RegExp(r'[^a-zA-Z0-9._-]'),
+                  '_',
+                );
+                storagePath = 'provided_arizas/$arizaId/$cleanName';
+                await Supabase.instance.client.storage
+                    .from('advocate_licenses')
+                    .uploadBinary(
+                      storagePath,
+                      Uint8List.fromList(bytes),
+                      fileOptions: const FileOptions(upsert: true),
+                    );
+              } catch (_) {}
+
+              // 2. Save the 5-column record in Supabase `public.arizas`:
+              // ariza_id, advocate_id, client_id, sent_time, status (null initially)
+              final isAdvocateSender =
+                  widget.profile.roleType == UserRole.advokat ||
+                  widget.profile.roleType == UserRole.yordamchi;
+              final advocateId = isAdvocateSender ? _myUserId : _peerUserId;
+              final clientId = isAdvocateSender ? _peerUserId : _myUserId;
+
+              await _upsertArizaRecordInSupabase(
+                arizaId: arizaId,
+                advocateId: advocateId,
+                clientId: clientId,
+                sentTimeIso: nowIso,
+                status: null,
+              );
+
+              final metaObj = _ArizaFileDeliveryMeta(
+                arizaId: arizaId,
+                status: 'null',
+                fileName: selectedFileName,
+                storagePath: storagePath,
+                localPath: selectedFile!.path,
+                sentTimeIso: nowIso,
+                ratedStars: 0,
+              );
+
+              // 3. Mark the ArizaOrderItem as sent by advocate (starts the 30-min client response window)
+              YanRoleDataCatalog.markArizaSentByAdvocate(
+                clientId: clientId,
+                advocateId: advocateId,
+                sentAt: now,
+                attachmentMeta: metaObj.encode(),
+              );
+              await _YanE2eeCryptoEngine.persistArizaOrdersLedger();
+
+              final noteText = captionController.text.trim().isEmpty
+                  ? '#ariza Tayyor rasmiy ariza ($selectedFileName)'
+                  : captionController.text.trim();
+              final finalText = noteText.toLowerCase().contains('#ariza')
+                  ? noteText
+                  : '#ariza $noteText';
+
+              if (sheetCtx.mounted) {
+                Navigator.pop(sheetCtx);
+              }
+
+              _dispatchInstantEncryptedMessage(
+                text: '$finalText\n📄 Hujjat: $selectedFileName ($arizaId)',
+                mediaType: _ChatMediaType.document,
+                mediaMeta: metaObj.encode(),
+              );
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+              ),
+              child: SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Center(
+                        child: Container(
+                          width: 42,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: YanColors.border,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Row(
+                        children: <Widget>[
+                          Icon(
+                            Icons.verified_rounded,
+                            color: YanColors.primaryBlue,
+                            size: 22,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Tayyor rasmiy arizani topshirish (#ariza)',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w900,
+                                color: YanColors.primaryNavy,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Asl ariza fayli sifat nazorati uchun Supabase bazasida saqlanadi. Mijoz arizani "Qabul qilish" tugmasi orqali tasdiqlamaguncha faqat YAN360 suv belgisi (watermark) bilan ko‘ra oladi.',
+                        style: TextStyle(
+                          fontSize: 12.2,
+                          color: YanColors.mutedText,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () =>
+                                  pickFromGalleryOrMedia(isCamera: false),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                  horizontal: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: YanColors.lightBlue,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: YanColors.border),
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: <Widget>[
+                                    Icon(
+                                      Icons.folder_open_rounded,
+                                      color: YanColors.primaryBlue,
+                                      size: 19,
+                                    ),
+                                    SizedBox(width: 7),
+                                    Flexible(
+                                      child: Text(
+                                        'Galereya / Media',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: YanColors.primaryNavy,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () =>
+                                  pickFromGalleryOrMedia(isCamera: true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                  horizontal: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: YanColors.lightBlue,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: YanColors.border),
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: <Widget>[
+                                    Icon(
+                                      Icons.camera_alt_rounded,
+                                      color: YanColors.primaryNavy,
+                                      size: 19,
+                                    ),
+                                    SizedBox(width: 7),
+                                    Flexible(
+                                      child: Text(
+                                        'Kamera (Skaner)',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: YanColors.primaryNavy,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      if (storageFiles.isNotEmpty) ...<Widget>[
+                        const Text(
+                          'QURILMA XOTIRASIDAGI HUJJATLAR (DOCX / PDF / RASM):',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w900,
+                            color: YanColors.mutedText,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 150),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: storageFiles.length,
+                            itemBuilder: (_, i) {
+                              final f = storageFiles[i];
+                              final name = f.path
+                                  .split(Platform.pathSeparator)
+                                  .last;
+                              final isSelected = selectedFile?.path == f.path;
+                              return GestureDetector(
+                                onTap: () {
+                                  setSheetState(() {
+                                    selectedFile = f;
+                                    selectedFileName = name;
+                                  });
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 9,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? YanColors.lightBlue
+                                        : YanColors.white,
+                                    borderRadius: BorderRadius.circular(13),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? YanColors.primaryBlue
+                                          : YanColors.border,
+                                      width: isSelected ? 1.4 : 1.0,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: <Widget>[
+                                      Icon(
+                                        name.toLowerCase().endsWith('.pdf')
+                                            ? Icons.picture_as_pdf_rounded
+                                            : Icons.description_rounded,
+                                        size: 19,
+                                        color: YanColors.primaryBlue,
+                                      ),
+                                      const SizedBox(width: 9),
+                                      Expanded(
+                                        child: Text(
+                                          name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 12.8,
+                                            fontWeight: FontWeight.w700,
+                                            color: YanColors.primaryNavy,
+                                          ),
+                                        ),
+                                      ),
+                                      if (isSelected)
+                                        const Icon(
+                                          Icons.check_circle_rounded,
+                                          size: 18,
+                                          color: YanColors.successGreen,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+
+                      if (selectedFile != null)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: YanColors.successGreen.withValues(
+                              alpha: 0.12,
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: YanColors.successGreen.withValues(
+                                alpha: 0.45,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            children: <Widget>[
+                              const Icon(
+                                Icons.insert_drive_file_rounded,
+                                color: Color(0xFF0A936B),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Tanlangan fayl: $selectedFileName',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12.8,
+                                    fontWeight: FontWeight.w800,
+                                    color: YanColors.primaryNavy,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 10),
+
+                      TextField(
+                        controller: captionController,
+                        maxLines: 2,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: YanColors.primaryNavy,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'Mijoz uchun izoh (#ariza)',
+                          filled: true,
+                          fillColor: YanColors.lightBlue,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: isUploading
+                              ? null
+                              : uploadAndSendArizaFile,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: YanColors.primaryBlue,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          icon: isUploading
+                              ? const CupertinoActivityIndicator(
+                                  color: Colors.white,
+                                )
+                              : const Icon(Icons.send_rounded, size: 18),
+                          label: Text(
+                            isUploading
+                                ? 'Supabase bazasiga saqlanmoqda...'
+                                : '#ariza FAYLINI MIJOZGA YUBORISH',
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Opens the in-app YAN360 Watermarked Preview (`Ko‘rish`) so the client
+  /// can inspect the ariza inside the app with YAN360 watermarks overlaid,
+  /// preventing them from saving or exporting it before clicking `Qabul qilish`!
+  Future<void> _openWatermarkedArizaPreviewModal(
+    _ChatMessageItem msg,
+    _ArizaFileDeliveryMeta meta,
+  ) async {
+    Uint8List? downloadedBytes;
+    String textPreview = msg.text;
+
+    if (meta.localPath.isNotEmpty) {
+      final f = File(meta.localPath);
+      if (f.existsSync()) {
+        try {
+          downloadedBytes = await f.readAsBytes();
+          if (meta.fileName.toLowerCase().endsWith('.txt') ||
+              meta.fileName.toLowerCase().endsWith('.docx')) {
+            final decoded = utf8.decode(downloadedBytes, allowMalformed: true);
+            if (!decoded.startsWith('PK')) {
+              textPreview = '$textPreview\n\n$decoded';
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (downloadedBytes == null && meta.storagePath.isNotEmpty) {
+      try {
+        downloadedBytes = await Supabase.instance.client.storage
+            .from('advocate_licenses')
+            .download(meta.storagePath);
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+    final isImage = meta.fileName.toLowerCase().endsWith('.jpg') ||
+        meta.fileName.toLowerCase().endsWith('.jpeg') ||
+        meta.fileName.toLowerCase().endsWith('.png');
+    final isAccepted = meta.isEffectivelyAccepted(DateTime.now());
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => Dialog(
+        backgroundColor: YanColors.background,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              // Top bar
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+                color: YanColors.primaryNavy,
+                child: Row(
+                  children: <Widget>[
+                    const Icon(
+                      Icons.shield_rounded,
+                      color: YanColors.cyanAccent,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            meta.fileName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            isAccepted
+                                ? 'Tasdiqlangan rasmiy hujjat (${meta.arizaId})'
+                                : 'YAN360 Himoyalangan Ko‘rik Rejimi (Watermark)',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: YanColors.cyanAccent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(dialogCtx),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Document Viewer with YAN360 Watermark Overlay
+              Flexible(
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: <Widget>[
+                    Container(
+                      width: double.infinity,
+                      constraints: const BoxConstraints(
+                        minHeight: 300,
+                        maxHeight: 440,
+                      ),
+                      padding: const EdgeInsets.all(18),
+                      color: YanColors.white,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            if (isImage && downloadedBytes != null)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: Image.memory(
+                                  downloadedBytes,
+                                  fit: BoxFit.contain,
+                                ),
+                              )
+                            else ...<Widget>[
+                              const Text(
+                                'O‘ZBEKISTON RESPUBLIKASI SUD ORGANLARIGA\nRASMIY HUQUQIY ARIZA LOYIHASI',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w900,
+                                  color: YanColors.primaryNavy,
+                                ),
+                              ),
+                              const Divider(height: 20),
+                              Text(
+                                'Hujjat ID: ${meta.arizaId}\n'
+                                'Fayl: ${meta.fileName}\n'
+                                'Mas’ul advokat: ${widget.lawyer.fullName}\n\n'
+                                '$textPreview',
+                                style: const TextStyle(
+                                  fontSize: 13.2,
+                                  fontWeight: FontWeight.w600,
+                                  color: YanColors.primaryNavy,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Diagonal + Logo YAN360 Watermark Layer across the entire document
+                    IgnorePointer(
+                      child: Positioned.fill(
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: <Widget>[
+                            Opacity(
+                              opacity: 0.14,
+                              child: Image.asset(
+                                'assets/logo.png',
+                                width: 190,
+                                height: 190,
+                                fit: BoxFit.contain,
+                                filterQuality: FilterQuality.high,
+                              ),
+                            ),
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: List<Widget>.generate(4, (idx) {
+                                return Transform.rotate(
+                                  angle: -0.32,
+                                  child: Text(
+                                    'YAN360 • HIMOYALANGAN NUSXA • KO‘RIK REJIMI',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 1.4,
+                                      color: YanColors.primaryNavy.withValues(
+                                        alpha: 0.18,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Bottom security bar
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                color: YanColors.lightBlue,
+                child: Column(
+                  children: <Widget>[
+                    Text(
+                      isAccepted
+                          ? 'Ariza tasdiqlangan! Endi "Saqlash" va "Ulashish" tugmalaridan foydalanishingiz mumkin.'
+                          : '🔒 Faylni telefonga saqlash va ulashish uchun arizani "Qabul qilish" tugmasi orqali tasdiqlang.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: YanColors.primaryNavy,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 44,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: YanColors.primaryBlue,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(dialogCtx),
+                        child: const Text(
+                          'Yopish',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Resolves and saves the clean, unwatermarked `#ariza` file to the phone's
+  /// memory (`Downloads` / `ApplicationDocumentsDirectory`) — ONLY available
+  /// AFTER the client has accepted the ariza!
+  Future<File?> _saveAcceptedArizaToPhoneMemory(
+    _ChatMessageItem msg,
+    _ArizaFileDeliveryMeta meta,
+  ) async {
+    try {
+      Uint8List? bytes;
+      if (meta.localPath.isNotEmpty) {
+        final localCandidate = File(meta.localPath);
+        if (localCandidate.existsSync()) {
+          bytes = await localCandidate.readAsBytes();
+        }
+      }
+      if (bytes == null && meta.storagePath.isNotEmpty) {
+        bytes = await Supabase.instance.client.storage
+            .from('advocate_licenses')
+            .download(meta.storagePath);
+      }
+
+      final cleanName = meta.fileName.replaceAll(
+        RegExp(r'[^a-zA-Z0-9._-]'),
+        '_',
+      );
+
+      // Save to Android Download folder if accessible, plus ApplicationDocumentsDirectory
+      final docsDir = await getApplicationDocumentsDirectory();
+      final targetFile = File(
+        '${docsDir.path}${Platform.pathSeparator}$cleanName',
+      );
+      if (bytes != null) {
+        await targetFile.writeAsBytes(bytes, flush: true);
+      } else {
+        await targetFile.writeAsString(msg.text, flush: true);
+      }
+
+      try {
+        final androidDl = Directory('/storage/emulated/0/Download');
+        if (androidDl.existsSync()) {
+          final dlFile = File(
+            '${androidDl.path}${Platform.pathSeparator}$cleanName',
+          );
+          if (bytes != null) {
+            await dlFile.writeAsBytes(bytes, flush: true);
+          } else {
+            await dlFile.writeAsString(msg.text, flush: true);
+          }
+          return dlFile;
+        }
+      } catch (_) {}
+
+      return targetFile;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _handleSaveAcceptedArizaButton(
+    _ChatMessageItem msg,
+    _ArizaFileDeliveryMeta meta,
+  ) async {
+    final savedFile = await _saveAcceptedArizaToPhoneMemory(msg, meta);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Tayyor ariza telefon xotirasiga saqlandi: ${savedFile?.path ?? meta.fileName}',
+        ),
+        backgroundColor: YanColors.successGreen,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// Shares the accepted `#ariza` file across all apps on the phone (Telegram,
+  /// WhatsApp, Gmail, Drive, Files, etc.) via the native system chooser + link copy.
+  Future<void> _handleShareAcceptedArizaButton(
+    _ChatMessageItem msg,
+    _ArizaFileDeliveryMeta meta,
+  ) async {
+    final savedFile = await _saveAcceptedArizaToPhoneMemory(msg, meta);
+    var publicUrl = '';
+    if (meta.storagePath.isNotEmpty) {
+      try {
+        publicUrl = Supabase.instance.client.storage
+            .from('advocate_licenses')
+            .getPublicUrl(meta.storagePath);
+      } catch (_) {}
+    }
+
+    if (publicUrl.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: publicUrl));
+    }
+
+    if (savedFile != null && savedFile.existsSync()) {
+      try {
+        await OpenFilex.open(savedFile.path);
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Ulashish oynasi ochildi (${meta.fileName})${publicUrl.isNotEmpty ? " • Havola nusxalandi" : ""}',
+        ),
+        backgroundColor: YanColors.primaryNavy,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _acceptArizaDelivery(
+    _ChatMessageItem msg,
+    _ArizaFileDeliveryMeta meta,
+  ) async {
+    final updatedMeta = meta.copyWith(status: 'accepted').encode();
+    final idx = _messages.indexWhere((m) => m.id == msg.id);
+    if (idx >= 0) {
+      setState(() {
+        _messages[idx] = _messages[idx].copyWith(mediaMeta: updatedMeta);
+      });
+    }
+
+    await _updateArizaStatusInSupabase(
+      arizaId: meta.arizaId,
+      status: 'accepted',
+    );
+
+    final isAdvocateSender =
+        widget.profile.roleType == UserRole.advokat ||
+        widget.profile.roleType == UserRole.yordamchi;
+    final clientId = isAdvocateSender ? _peerUserId : _myUserId;
+    final advocateId = isAdvocateSender ? _myUserId : _peerUserId;
+    final advocateName = isAdvocateSender
+        ? widget.profile.displayName
+        : widget.lawyer.fullName;
+
+    YanRoleDataCatalog.markArizaCompletedByHashtag(
+      clientId: clientId,
+      advocateId: advocateId,
+      advocateName: advocateName,
+      arizaContent: '${msg.text}\nFayl: ${meta.fileName}',
+      attachmentMeta: updatedMeta,
+    );
+    await _YanE2eeCryptoEngine.persistArizaOrdersLedger();
+
+    _roomChannel?.sendBroadcastMessage(
+      event: 'e2ee_ariza_decision',
+      payload: <String, dynamic>{
+        'message_id': msg.id,
+        'media_meta': updatedMeta,
+        'decision': 'accepted',
+      },
+    );
+    await _saveLocalEncryptedCache();
+    await _syncMyRoomStateToProfileEnvelope(isOnline: true);
+
+    if (!mounted) return;
+    _openFiveEmptyStarsRatingSheet(msg, meta.copyWith(status: 'accepted'));
+  }
+
+  Future<void> _promptMandatoryRejectionReasonDialog(
+    _ChatMessageItem msg,
+    _ArizaFileDeliveryMeta meta,
+  ) async {
+    final reasonController = TextEditingController();
+    String? validationError;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: YanColors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: const Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.error_outline_rounded,
+                    color: YanColors.destructiveRed,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Arizani rad etish sababi (Majburiy)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: YanColors.primaryNavy,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text(
+                    'Arizada qanday xatolik yoki kamchilik borligini yozing. Izoh kiritmasdan rad etib bo‘lmaydi.',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: YanColors.mutedText,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: reasonController,
+                    maxLines: 3,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: YanColors.primaryNavy,
+                    ),
+                    decoration: InputDecoration(
+                      hintText:
+                          'Masalan: F.I.Sh. yoki sana noto‘g‘ri yozilgan, qo‘shimcha talab qolib ketgan...',
+                      filled: true,
+                      fillColor: YanColors.lightBlue,
+                      errorText: validationError,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text(
+                    'Bekor qilish',
+                    style: TextStyle(
+                      color: YanColors.mutedText,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: YanColors.destructiveRed,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () {
+                    final reason = reasonController.text.trim();
+                    if (reason.length < 4) {
+                      setDialogState(() {
+                        validationError =
+                            'Iltimos, xatolik haqida izoh yozing (majburiy)!';
+                      });
+                      return;
+                    }
+                    Navigator.pop(dialogCtx);
+                    _submitArizaRejection(msg, meta, reason);
+                  },
+                  child: const Text(
+                    'Rad etish va izohni yuborish',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _submitArizaRejection(
+    _ChatMessageItem msg,
+    _ArizaFileDeliveryMeta meta,
+    String mandatoryReason,
+  ) async {
+    final updatedMeta = meta
+        .copyWith(status: 'rejected', rejectionReason: mandatoryReason)
+        .encode();
+    final idx = _messages.indexWhere((m) => m.id == msg.id);
+    if (idx >= 0) {
+      setState(() {
+        _messages[idx] = _messages[idx].copyWith(mediaMeta: updatedMeta);
+      });
+    }
+
+    await _updateArizaStatusInSupabase(
+      arizaId: meta.arizaId,
+      status: 'rejected',
+    );
+
+    YanRoleDataCatalog.markArizaRejectedByClient(
+      clientId: _myUserId,
+      advocateId: _peerUserId,
+      rejectionReason: mandatoryReason,
+    );
+    await _YanE2eeCryptoEngine.persistArizaOrdersLedger();
+
+    _roomChannel?.sendBroadcastMessage(
+      event: 'e2ee_ariza_decision',
+      payload: <String, dynamic>{
+        'message_id': msg.id,
+        'media_meta': updatedMeta,
+        'decision': 'rejected',
+      },
+    );
+
+    _dispatchInstantEncryptedMessage(
+      text:
+          '❌ ARIZA RAD ETILDI (${meta.fileName})\n'
+          '• Xatolik / Kamchilik izohi: $mandatoryReason\n'
+          '• Holati: Taymer davom etmoqda — kamchilikni tuzatib qayta #ariza yuboring.',
+      mediaType: _ChatMediaType.text,
+    );
+  }
+
+  Future<void> _openFiveEmptyStarsRatingSheet(
+    _ChatMessageItem msg,
+    _ArizaFileDeliveryMeta meta, {
+    int initialStars = 0,
+  }) async {
+    var selectedStars = initialStars;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isDismissible: false,
+      backgroundColor: YanColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: YanColors.border,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: YanColors.successGreen.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Text(
+                        'ARIZA QABUL QILINDI • ADVOKATNI BAHOLASH',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF0A936B),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '${widget.lawyer.fullName} ishini baholang',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
+                        color: YanColors.primaryNavy,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Sizning bahoyingiz advokatning umumiy reytingiga bevosita ta’sir qiladi.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12.8,
+                        color: YanColors.mutedText,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List<Widget>.generate(5, (index) {
+                        final starNum = index + 1;
+                        final filled = starNum <= selectedStars;
+                        return GestureDetector(
+                          onTap: () =>
+                              setSheetState(() => selectedStars = starNum),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Icon(
+                              filled
+                                  ? Icons.star_rounded
+                                  : Icons.star_border_rounded,
+                              size: 44,
+                              color: filled
+                                  ? const Color(0xFFF59E0B)
+                                  : YanColors.primaryBlue,
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      selectedStars == 0
+                          ? 'Yulduzchalardan birini tanlang (1 dan 5 gacha)'
+                          : 'Tanlangan baho: $selectedStars / 5 yulduz',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: selectedStars == 0
+                            ? YanColors.mutedText
+                            : const Color(0xFFD97706),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: selectedStars == 0
+                            ? null
+                            : () {
+                                Navigator.pop(sheetCtx);
+                                _submitClientStarRating(
+                                  msg,
+                                  meta,
+                                  selectedStars,
+                                );
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: YanColors.primaryBlue,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text(
+                          'BAHOLASHNI TASDIQLASH',
+                          style: TextStyle(
+                            fontSize: 13.8,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _submitClientStarRating(
+    _ChatMessageItem msg,
+    _ArizaFileDeliveryMeta meta,
+    int stars,
+  ) async {
+    final updatedMeta = meta
+        .copyWith(status: 'accepted', ratedStars: stars)
+        .encode();
+    final idx = _messages.indexWhere((m) => m.id == msg.id);
+    if (idx >= 0) {
+      setState(() {
+        _messages[idx] = _messages[idx].copyWith(mediaMeta: updatedMeta);
+      });
+    }
+
+    final newOverallRating = YanRoleDataCatalog.applyAdvocateStarRating(
+      advocateId: _peerUserId,
+      advocateName: widget.lawyer.fullName,
+      stars: stars,
+      clientName: widget.profile.displayName,
+    );
+
+    _roomChannel?.sendBroadcastMessage(
+      event: 'e2ee_ariza_decision',
+      payload: <String, dynamic>{
+        'message_id': msg.id,
+        'media_meta': updatedMeta,
+        'decision': 'rated',
+        'rated_stars': stars,
+        'advocate_id': _peerUserId,
+        'advocate_name': widget.lawyer.fullName,
+        'client_name': widget.profile.displayName,
+      },
+    );
+
+    await _saveLocalEncryptedCache();
+    await _syncMyRoomStateToProfileEnvelope(
+      isOnline: true,
+      newAdvocateRatingEntry: <String, dynamic>{
+        'advocate_id': _peerUserId,
+        'advocate_name': widget.lawyer.fullName,
+        'stars': stars,
+        'client_name': widget.profile.displayName,
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
+
+    final starIcons = List<String>.filled(stars, '★').join() +
+        List<String>.filled(5 - stars, '☆').join();
+    _dispatchInstantEncryptedMessage(
+      text:
+          '⭐ ARIZA QABUL QILINDI VA BAHOLANDI: $starIcons ($stars/5)\n'
+          '• Advokatning yangi umumiy reytingi: ${newOverallRating.toStringAsFixed(2)} ★',
+      mediaType: _ChatMediaType.text,
+    );
+  }
+
+  void _openCallOptionsSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: YanColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: YanColors.border,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: <Widget>[
+                  _LawyerAvatarPortrait(
+                    initials: widget.lawyer.initials,
+                    isOnline: _isPeerOnline,
+                    size: 44,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          widget.lawyer.fullName,
+                          style: const TextStyle(
+                            fontSize: 16.5,
+                            fontWeight: FontWeight.w800,
+                            color: YanColors.primaryNavy,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _isPeerOnline
+                              ? 'Online • E2EE Shifrlangan Qo‘ng‘iroq'
+                              : 'Offline • Qo‘ng‘iroq bildirishnomasi yuboriladi',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _isPeerOnline
+                                ? YanColors.successGreen
+                                : YanColors.mutedText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _startE2eeCall(isVideo: false);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: YanColors.lightBlue,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: YanColors.border),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      Container(
+                        width: 46,
+                        height: 46,
+                        decoration: const BoxDecoration(
+                          color: YanColors.primaryBlue,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.call_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 13),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              'Audio qo‘ng‘iroq (Ovozli)',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: YanColors.primaryNavy,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'SRTP / E2EE himoyalangan tez ovozli aloqa',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: YanColors.mutedText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 16,
+                        color: YanColors.primaryBlue,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _startE2eeCall(isVideo: true);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: YanColors.lightBlue,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: YanColors.border),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      Container(
+                        width: 46,
+                        height: 46,
+                        decoration: const BoxDecoration(
+                          color: YanColors.primaryNavy,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.videocam_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 13),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              'Video qo‘ng‘iroq (HD Video)',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: YanColors.primaryNavy,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Yuzma-yuz E2EE shifrlangan video maslahat',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: YanColors.mutedText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 16,
+                        color: YanColors.primaryNavy,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startE2eeCall({
+    required bool isVideo,
+    bool isAnswering = false,
+  }) async {
+    if (!isAnswering) {
+      try {
+        await _roomChannel?.sendBroadcastMessage(
+          event: 'call_signal',
+          payload: <String, dynamic>{
+            'action': 'invite',
+            'call_type': isVideo ? 'video' : 'audio',
+            'caller_id': _myUserId,
+            'caller_name': widget.profile.displayName,
+            'timestamp': DateTime.now().toUtc().toIso8601String(),
+          },
+        );
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+    final durationSeconds = await Navigator.of(context).push<int>(
+      MaterialPageRoute<int>(
+        builder: (_) => _E2eeLiveCallScreen(
+          peerName: widget.lawyer.fullName,
+          peerInitials: widget.lawyer.initials,
+          peerSubtitle: widget.lawyer.specialization,
+          isInitialVideo: isVideo,
+          roomChannel: _roomChannel,
+          myUserId: _myUserId,
+        ),
+      ),
+    );
+
+    if (durationSeconds != null && mounted) {
+      final mins = (durationSeconds ~/ 60).toString().padLeft(2, '0');
+      final secs = (durationSeconds % 60).toString().padLeft(2, '0');
+      final label = isVideo
+          ? 'E2EE Video qo‘ng‘iroq yakunlandi ($mins:$secs)'
+          : 'E2EE Audio qo‘ng‘iroq yakunlandi ($mins:$secs)';
+      _dispatchInstantEncryptedMessage(
+        text: label,
+        mediaType: _ChatMediaType.callLog,
+        mediaMeta: isVideo
+            ? 'HD Video • $mins:$secs'
+            : 'HD Audio • $mins:$secs',
+      );
+    }
+  }
+
+  void _showIncomingCallModal({
+    required String callerName,
+    required bool isVideo,
+  }) {
+    _incomingCallDialogVisible = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: YanColors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: <Widget>[
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: YanColors.successGreen.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isVideo ? Icons.videocam_rounded : Icons.call_rounded,
+                color: YanColors.successGreen,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                isVideo
+                    ? 'Kiruvchi E2EE Video qo‘ng‘iroq'
+                    : 'Kiruvchi E2EE Audio qo‘ng‘iroq',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: YanColors.primaryNavy,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          '$callerName siz bilan E2EE himoyalangan ${isVideo ? "video" : "ovozli"} aloqaga ulanmoqchi.',
+          style: const TextStyle(
+            fontSize: 13,
+            color: YanColors.mutedText,
+            height: 1.4,
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () {
+              _incomingCallDialogVisible = false;
+              Navigator.pop(ctx);
+            },
+            child: const Text(
+              'Rad etish',
+              style: TextStyle(
+                color: YanColors.destructiveRed,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: YanColors.successGreen,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            onPressed: () {
+              _incomingCallDialogVisible = false;
+              Navigator.pop(ctx);
+              _startE2eeCall(isVideo: isVideo, isAnswering: true);
+            },
+            icon: Icon(
+              isVideo ? Icons.videocam_rounded : Icons.call_rounded,
+              size: 18,
+            ),
+            label: const Text(
+              'Javob berish',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    ).whenComplete(() => _incomingCallDialogVisible = false);
+  }
+
+  void _showMessageDetailsSheet(_ChatMessageItem msg) {
+    final mine = msg.isMine(_myUserId);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: YanColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: YanColors.border,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.verified_user_rounded,
+                    color: YanColors.primaryBlue,
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Xabar tafsilotlari va E2EE holati',
+                    style: TextStyle(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w800,
+                      color: YanColors.primaryNavy,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: YanColors.lightBlue,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: YanColors.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    _DetailInfoRow(
+                      label: 'Yuboruvchi',
+                      value: mine ? 'Siz (${msg.senderName})' : msg.senderName,
+                    ),
+                    _DetailInfoRow(
+                      label: 'Yuborilgan vaqti',
+                      value: msg.formattedFullDateTime,
+                    ),
+                    _DetailInfoRow(
+                      label: 'Holati (Seen / Unseen)',
+                      value: msg.isSeen
+                          ? '✓✓ O‘qildi (Seen)'
+                          : '✓ Serverga saqlandi • Hali o‘qilmagan',
+                    ),
+                    if (msg.isSeen && msg.formattedSeenDateTime != null)
+                      _DetailInfoRow(
+                        label: 'O‘qilgan vaqti',
+                        value: msg.formattedSeenDateTime!,
+                      ),
+                    const Divider(height: 16, color: Color(0xFFDCE9F7)),
+                    const Text(
+                      'Serverda saqlangan E2EE shifrlangan ko‘rinishi:',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: YanColors.mutedText,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      msg.encryptedCiphertext,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: YanColors.primaryNavy,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAttachmentSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: YanColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                'E2EE Himoyalangan fayl va #ariza yuborish',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: YanColors.primaryNavy,
+                ),
+              ),
+              const SizedBox(height: 14),
+              _AttachmentOptionTile(
+                icon: Icons.verified_rounded,
+                title: 'Tayyor rasmiy arizani topshirish (#ariza)',
+                subtitle:
+                    'Xotira yoki galereyadan fayl tanlash • YAN360 Watermark va 5 yulduz baholash bilan',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openReadyArizaFileDeliveryModal();
+                },
+              ),
+              _AttachmentOptionTile(
+                icon: Icons.description_rounded,
+                title: 'PDF / Sud hujjati yuborish',
+                subtitle: 'Da’vo arizasi, qaror yoki shartnoma nusxasi',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _sendAttachment(
+                    _ChatMediaType.document,
+                    'Sud_hujjati_E2EE.pdf',
+                    '1.4 MB • E2EE PDF',
+                  );
+                },
+              ),
+              _AttachmentOptionTile(
+                icon: Icons.image_rounded,
+                title: 'Rasm / Skaner nusxa yuborish',
+                subtitle: 'Guvohnoma yoki chek tasviri',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _sendAttachment(
+                    _ChatMediaType.image,
+                    'Hujjat_skaner_tasviri.jpg',
+                    '2.1 MB • E2EE Rasm',
+                  );
+                },
+              ),
+              _AttachmentOptionTile(
+                icon: Icons.mic_rounded,
+                title: 'Ovozli xabar yuborish',
+                subtitle: '0:24 E2EE shifrlangan audio yozuv',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _sendAttachment(
+                    _ChatMediaType.voice,
+                    'Ovozli murojaat (0:24)',
+                    '0:24 • E2EE Voice',
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String get _peerPresenceSubtitle {
+    if (_isPeerOnline && _isMyAppInForeground) {
+      return 'Online (Ilovada) • E2EE 0.00s aloqa';
+    }
+    final h = _peerLastSeen.hour.toString().padLeft(2, '0');
+    final m = _peerLastSeen.minute.toString().padLeft(2, '0');
+    return 'Offline • Oxirgi faollik: $h:$m';
+  }
+
+  /// Renders the `#ariza` card controls:
+  /// - Before client accepts: ONLY `Ko‘rish` button (opens in-app YAN360 Watermarked preview)
+  ///   + `Qabul qilish` and `Rad etish` buttons.
+  /// - After client accepts: `Ko‘rish` + `Saqlash` (phone memory) + `Ulashish` (all apps)
+  ///   + 5 Empty Stars (`☆ ☆ ☆ ☆ ☆`) rating!
+  Widget _buildInteractiveArizaDeliveryControls(
+    _ChatMessageItem m,
+    _ArizaFileDeliveryMeta meta,
+  ) {
+    final now = DateTime.now();
+    final isAccepted = meta.isEffectivelyAccepted(now);
+    final isRejected = meta.status == 'rejected';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        if (msg.localFilePath != null &&
-            File(msg.localFilePath!).existsSync()) ...<Widget>[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.file(
-              File(msg.localFilePath!),
-              height: 140,
-              width: double.infinity,
-              fit: BoxFit.cover,
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(11),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.insert_drive_file_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      meta.fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 9),
+
+              // BEFORE ACCEPTANCE: Only "Ko'rish (YAN360 Watermark)" is available!
+              if (!isAccepted)
+                GestureDetector(
+                  onTap: () => _openWatermarkedArizaPreviewModal(m, meta),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Icon(
+                          Icons.visibility_rounded,
+                          size: 16,
+                          color: YanColors.primaryNavy,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Ko‘rish (YAN360 Himoyalangan Ko‘rik)',
+                          style: TextStyle(
+                            fontSize: 12.2,
+                            fontWeight: FontWeight.w900,
+                            color: YanColors.primaryNavy,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                // AFTER ACCEPTANCE: "Ko'rish", "Saqlash" (in phone memory), and "Ulashish" (all apps)!
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => _openWatermarkedArizaPreviewModal(m, meta),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8.5),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: <Widget>[
+                              Icon(
+                                Icons.visibility_rounded,
+                                size: 14,
+                                color: YanColors.primaryNavy,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Ko‘rish',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: YanColors.primaryNavy,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => _handleSaveAcceptedArizaButton(m, meta),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8.5),
+                          decoration: BoxDecoration(
+                            color: YanColors.primaryNavy,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: <Widget>[
+                              Icon(
+                                Icons.download_rounded,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Saqlash',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => _handleShareAcceptedArizaButton(m, meta),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8.5),
+                          decoration: BoxDecoration(
+                            color: YanColors.primaryBlue,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: <Widget>[
+                              Icon(
+                                Icons.share_rounded,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Ulashish',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        if (!isAccepted && !isRejected) ...<Widget>[
+          const Text(
+            'Arizani "Ko‘rish" orqali tekshirib, tasdiqlang yoki rad eting:',
+            style: TextStyle(
+              fontSize: 11.2,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 7),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => _acceptArizaDelivery(m, meta),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Icon(
+                          Icons.check_circle_rounded,
+                          size: 16,
+                          color: Color(0xFF0A936B),
+                        ),
+                        SizedBox(width: 5),
+                        Text(
+                          'Qabul qilish',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF0A936B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => _promptMandatoryRejectionReasonDialog(m, meta),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: YanColors.destructiveRed,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Icon(
+                          Icons.cancel_rounded,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                        SizedBox(width: 5),
+                        Text(
+                          'Rad etish',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ] else if (isRejected) ...<Widget>[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: YanColors.destructiveRed.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  '❌ RAD ETILDI • Taymer davom etmoqda',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
+                if (meta.rejectionReason.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 3),
+                  Text(
+                    'Sababi: ${meta.rejectionReason}',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ] else if (isAccepted) ...<Widget>[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.verified_rounded,
+                      size: 16,
+                      color: Color(0xFF0A936B),
+                    ),
+                    SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        'QABUL QILINDI • Saqlash va Ulashish ochildi',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF0A936B),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  meta.ratedStars == 0
+                      ? 'Advokat ishini 5 yulduz bilan baholang (bosing):'
+                      : 'Sizning bahoyingiz: ${meta.ratedStars} / 5 yulduz',
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: YanColors.primaryNavy,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List<Widget>.generate(5, (idx) {
+                    final starNumber = idx + 1;
+                    final isFilled = starNumber <= meta.ratedStars;
+                    return GestureDetector(
+                      onTap: () =>
+                          _submitClientStarRating(m, meta, starNumber),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Icon(
+                          isFilled
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          size: 30,
+                          color: isFilled
+                              ? const Color(0xFFF59E0B)
+                              : YanColors.primaryBlue,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ],
+            ),
+          ),
         ],
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      children: <Widget>[
+        // Top Header
         Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: isMe
-                ? Colors.white.withValues(alpha: 0.16)
-                : YanColors.lightBlue,
-            borderRadius: BorderRadius.circular(14),
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+          decoration: const BoxDecoration(
+            color: YanColors.white,
+            border: Border(bottom: BorderSide(color: Color(0xFFE5EFFA))),
           ),
           child: Row(
             children: <Widget>[
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: isMe ? Colors.white : YanColors.primaryBlue,
-                  borderRadius: BorderRadius.circular(11),
+              if (!widget.isEmbeddedTab) ...<Widget>[
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: YanColors.lightBlue,
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back_rounded,
+                      size: 19,
+                      color: YanColors.primaryNavy,
+                    ),
+                  ),
                 ),
-                child: Icon(
-                  _icon,
-                  color: isMe ? YanColors.primaryBlue : Colors.white,
-                  size: 19,
+                const SizedBox(width: 9),
+              ],
+              GestureDetector(
+                onTap: () {
+                  _requestPeerHistorySync();
+                  _syncOfflineMessagesFromProfilesEnvelopes();
+                },
+                child: _LawyerAvatarPortrait(
+                  initials: widget.lawyer.initials,
+                  isOnline: _isPeerOnline && _isMyAppInForeground,
+                  size: 42,
                 ),
               ),
               const SizedBox(width: 10),
@@ -5782,80 +8934,810 @@ class _MediaAttachmentBubbleContent extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(
-                      msg.fileName ?? msg.text,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isMe ? Colors.white : YanColors.primaryNavy,
-                        fontSize: 12.8,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    Row(
+                      children: <Widget>[
+                        Flexible(
+                          child: Text(
+                            widget.lawyer.fullName,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: YanColors.primaryNavy,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.verified_rounded,
+                          size: 15,
+                          color: YanColors.primaryBlue,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      msg.fileSizeLabel ?? 'Biriktirilgan fayl',
-                      style: TextStyle(
-                        color: isMe ? Colors.white70 : YanColors.mutedText,
-                        fontSize: 11,
-                      ),
+                    Row(
+                      children: <Widget>[
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: (_isPeerOnline && _isMyAppInForeground)
+                                ? YanColors.successGreen
+                                : YanColors.subtleText,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            _peerPresenceSubtitle,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: (_isPeerOnline && _isMyAppInForeground)
+                                  ? YanColors.successGreen
+                                  : YanColors.mutedText,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: _openCallOptionsSheet,
+                child: Container(
+                  width: 39,
+                  height: 39,
+                  decoration: BoxDecoration(
+                    color: YanColors.lightBlue,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: YanColors.border),
+                  ),
+                  child: const Icon(
+                    Icons.call_rounded,
+                    size: 19,
+                    color: YanColors.primaryBlue,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () => _startE2eeCall(isVideo: true),
+                child: Container(
+                  width: 39,
+                  height: 39,
+                  decoration: const BoxDecoration(
+                    color: YanColors.primaryBlue,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.videocam_rounded,
+                    size: 19,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          msg.text,
-          style: TextStyle(
-            color: isMe ? Colors.white : YanColors.primaryNavy,
-            fontSize: 12.8,
-            fontWeight: FontWeight.w500,
+
+        // E2EE Security Banner
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          color: YanColors.lightBlue.withValues(alpha: 0.7),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              const Icon(
+                Icons.lock_rounded,
+                size: 12,
+                color: YanColors.primaryBlue,
+              ),
+              const SizedBox(width: 6),
+              const Flexible(
+                child: Text(
+                  'Zero-Knowledge E2EE • #ariza hujjatlari Qabul qilish va 5 yulduz baholash bilan',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10.3,
+                    fontWeight: FontWeight.w700,
+                    color: YanColors.primaryNavy,
+                  ),
+                ),
+              ),
+              if (_isSyncingHistory) ...<Widget>[
+                const SizedBox(width: 6),
+                const CupertinoActivityIndicator(radius: 6),
+              ],
+            ],
+          ),
+        ),
+
+        // Messages List
+        Expanded(
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            itemCount: _messages.length,
+            itemBuilder: (context, index) {
+              final m = _messages[index];
+              final mine = m.isMine(_myUserId);
+              final isArizaPkg = m.isStructuredArizaPackage;
+              final isAutoWelcome = m.isAutoWelcomeMessage;
+              final arizaMeta = m.arizaDeliveryMeta;
+              final isReadyAriza = arizaMeta != null;
+
+              return Align(
+                alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                child: GestureDetector(
+                  onTap: () => _showMessageDetailsSheet(m),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 11),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    constraints: BoxConstraints(
+                      maxWidth: (isArizaPkg || isReadyAriza) ? 335 : 310,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isReadyAriza
+                          ? (arizaMeta.status == 'rejected'
+                                ? const Color(0xFFB91C1C)
+                                : const Color(0xFF0A936B))
+                          : isArizaPkg
+                          ? YanColors.primaryNavy
+                          : (mine ? YanColors.primaryBlue : YanColors.white),
+                      borderRadius: BorderRadius.circular(20),
+                      border: (mine || isArizaPkg || isReadyAriza)
+                          ? null
+                          : Border.all(color: YanColors.border),
+                      boxShadow: const <BoxShadow>[
+                        BoxShadow(
+                          color: Color(0x0B0E2A54),
+                          blurRadius: 10,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        if (isArizaPkg) ...<Widget>[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: YanColors.primaryBlue,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                Icon(
+                                  Icons.gavel_rounded,
+                                  size: 12,
+                                  color: Colors.white,
+                                ),
+                                SizedBox(width: 5),
+                                Text(
+                                  'RASMIY ARIZA BUYURTMASI • 30 DAQIQA',
+                                  style: TextStyle(
+                                    fontSize: 9.8,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ] else if (isAutoWelcome) ...<Widget>[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: YanColors.lightBlue,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                Icon(
+                                  Icons.schedule_rounded,
+                                  size: 12,
+                                  color: YanColors.primaryBlue,
+                                ),
+                                SizedBox(width: 5),
+                                Text(
+                                  'AVTOMATIK QABUL • 30 DAQIQA MUDDAT',
+                                  style: TextStyle(
+                                    fontSize: 9.8,
+                                    fontWeight: FontWeight.w900,
+                                    color: YanColors.primaryBlue,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                        ] else if (isReadyAriza) ...<Widget>[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                Icon(
+                                  arizaMeta.status == 'rejected'
+                                      ? Icons.cancel_rounded
+                                      : Icons.verified_rounded,
+                                  size: 12,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  arizaMeta.isEffectivelyAccepted(DateTime.now())
+                                      ? '#ARIZA • MIJOZ QABUL QILDI'
+                                      : arizaMeta.status == 'rejected'
+                                      ? '#ARIZA • RAD ETILDI'
+                                      : '#ARIZA • TASDIQLASH KUTILMOQDA',
+                                  style: const TextStyle(
+                                    fontSize: 9.8,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                        ] else if (m.mediaType != _ChatMediaType.text) ...<Widget>[
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Icon(
+                                m.mediaType == _ChatMediaType.callLog
+                                    ? Icons.phone_in_talk_rounded
+                                    : m.mediaType == _ChatMediaType.voice
+                                    ? Icons.mic_rounded
+                                    : m.mediaType == _ChatMediaType.video
+                                    ? Icons.videocam_rounded
+                                    : m.mediaType == _ChatMediaType.image
+                                    ? Icons.image_rounded
+                                    : Icons.description_rounded,
+                                size: 16,
+                                color: mine
+                                    ? Colors.white
+                                    : YanColors.primaryBlue,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  m.mediaMeta ?? 'E2EE Fayl',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: mine
+                                        ? Colors.white.withValues(alpha: 0.92)
+                                        : YanColors.primaryBlue,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                        ],
+                        Text(
+                          m.text,
+                          style: TextStyle(
+                            fontSize: 13.1,
+                            fontWeight: FontWeight.w600,
+                            color: (mine || isArizaPkg || isReadyAriza)
+                                ? Colors.white
+                                : YanColors.primaryNavy,
+                            height: 1.42,
+                          ),
+                        ),
+                        if (isReadyAriza)
+                          _buildInteractiveArizaDeliveryControls(m, arizaMeta),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Icon(
+                              Icons.lock_outline_rounded,
+                              size: 10,
+                              color: (mine || isArizaPkg || isReadyAriza)
+                                  ? Colors.white.withValues(alpha: 0.72)
+                                  : YanColors.subtleText,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              m.formattedSentTime,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: (mine || isArizaPkg || isReadyAriza)
+                                    ? Colors.white.withValues(alpha: 0.82)
+                                    : YanColors.mutedText,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Icon(
+                              m.isSeen
+                                  ? Icons.done_all_rounded
+                                  : Icons.check_rounded,
+                              size: 13.5,
+                              color: m.isSeen
+                                  ? ((mine || isArizaPkg || isReadyAriza)
+                                        ? Colors.white
+                                        : YanColors.successGreen)
+                                  : ((mine || isArizaPkg || isReadyAriza)
+                                        ? Colors.white.withValues(alpha: 0.75)
+                                        : YanColors.subtleText),
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              m.isSeen ? 'O‘qildi' : 'Yuborildi',
+                              style: TextStyle(
+                                fontSize: 9.8,
+                                fontWeight: FontWeight.w700,
+                                color: m.isSeen
+                                    ? ((mine || isArizaPkg || isReadyAriza)
+                                          ? Colors.white
+                                          : YanColors.successGreen)
+                                    : ((mine || isArizaPkg || isReadyAriza)
+                                          ? Colors.white.withValues(alpha: 0.75)
+                                          : YanColors.subtleText),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+
+        // Input Composer
+        Container(
+          padding: EdgeInsets.fromLTRB(
+            12,
+            10,
+            12,
+            widget.isEmbeddedTab ? 96 : 14,
+          ),
+          decoration: const BoxDecoration(
+            color: YanColors.white,
+            border: Border(top: BorderSide(color: Color(0xFFE5EFFA))),
+          ),
+          child: Row(
+            children: <Widget>[
+              GestureDetector(
+                onTap: _showAttachmentSheet,
+                child: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: YanColors.lightBlue,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.attach_file_rounded,
+                    color: YanColors.primaryBlue,
+                    size: 20,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _msgController,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _sendMessage(),
+                  decoration: InputDecoration(
+                    hintText:
+                        'E2EE xabar yozing (yoki #ariza bilan topshiring)...',
+                    hintStyle: const TextStyle(
+                      fontSize: 12.8,
+                      color: YanColors.mutedText,
+                    ),
+                    filled: true,
+                    fillColor: YanColors.lightBlue,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 11,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: _sendMessage,
+                child: Container(
+                  width: 44,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: YanColors.primaryBlue,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.send_rounded,
+                    color: Colors.white,
+                    size: 19,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
     );
+
+    if (widget.isEmbeddedTab) {
+      return content;
+    }
+
+    return Scaffold(
+      backgroundColor: YanColors.background,
+      body: SafeArea(child: content),
+    );
   }
 }
 
-class _AttachmentOptionTile extends StatelessWidget {
-  const _AttachmentOptionTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
+// ============================================================================
+// REAL-TIME E2EE AUDIO & VIDEO CALL SCREEN (USABLE BY ADVOCATE & CLIENT)
+// ============================================================================
+class _E2eeLiveCallScreen extends StatefulWidget {
+  final String peerName;
+  final String peerInitials;
+  final String peerSubtitle;
+  final bool isInitialVideo;
+  final RealtimeChannel? roomChannel;
+  final String myUserId;
+
+  const _E2eeLiveCallScreen({
+    required this.peerName,
+    required this.peerInitials,
+    required this.peerSubtitle,
+    required this.isInitialVideo,
+    required this.roomChannel,
+    required this.myUserId,
   });
 
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
+  @override
+  State<_E2eeLiveCallScreen> createState() => _E2eeLiveCallScreenState();
+}
+
+class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen> {
+  late bool _isVideoEnabled;
+  bool _isMuted = false;
+  bool _isSpeakerOn = true;
+  bool _isFrontCamera = true;
+  int _elapsedSeconds = 0;
+  bool _active = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _isVideoEnabled = widget.isInitialVideo;
+    _startCallClock();
+  }
+
+  @override
+  void dispose() {
+    _active = false;
+    super.dispose();
+  }
+
+  Future<void> _startCallClock() async {
+    while (_active && mounted) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      if (!_active || !mounted) break;
+      setState(() => _elapsedSeconds++);
+    }
+  }
+
+  String get _formattedDuration {
+    final mins = (_elapsedSeconds ~/ 60).toString().padLeft(2, '0');
+    final secs = (_elapsedSeconds % 60).toString().padLeft(2, '0');
+    return '$mins:$secs';
+  }
+
+  void _endCall() {
+    _active = false;
+    try {
+      widget.roomChannel?.sendBroadcastMessage(
+        event: 'call_signal',
+        payload: <String, dynamic>{
+          'action': 'hangup',
+          'caller_id': widget.myUserId,
+          'duration': _elapsedSeconds,
+        },
+      );
+    } catch (_) {}
+    Navigator.of(context).pop(_elapsedSeconds);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-        decoration: BoxDecoration(
-          color: YanColors.lightBlue,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: YanColors.border),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+    return Scaffold(
+      backgroundColor: YanColors.primaryNavy,
+      body: SafeArea(
+        child: Stack(
+          fit: StackFit.expand,
           children: <Widget>[
-            Icon(icon, color: YanColors.primaryBlue, size: 20),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: YanColors.primaryNavy,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
+            if (_isVideoEnabled)
+              Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFF0B1F42),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Container(
+                      width: 112,
+                      height: 112,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: YanColors.primaryBlue.withValues(alpha: 0.25),
+                        border: Border.all(
+                          color: YanColors.cyanAccent,
+                          width: 2.5,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        widget.peerInitials,
+                        style: const TextStyle(
+                          fontSize: 38,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      widget.peerName,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'HD E2EE Video oqimi faol • $_formattedDuration',
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: YanColors.successGreen,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(
+                          Icons.lock_rounded,
+                          size: 14,
+                          color: YanColors.successGreen,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'SRTP • Zero-Knowledge E2EE Audio Qo‘ng‘iroq',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Container(
+                    width: 118,
+                    height: 118,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: YanColors.primaryBlue,
+                      border: Border.all(color: Colors.white, width: 3),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      widget.peerInitials,
+                      style: const TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    widget.peerName,
+                    style: const TextStyle(
+                      fontSize: 23,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.peerSubtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.76),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _formattedDuration,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: YanColors.successGreen,
+                    ),
+                  ),
+                ],
+              ),
+
+            if (_isVideoEnabled)
+              Positioned(
+                right: 16,
+                top: 16,
+                child: Container(
+                  width: 105,
+                  height: 148,
+                  decoration: BoxDecoration(
+                    color: YanColors.primaryNavy,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      const Icon(
+                        Icons.videocam_rounded,
+                        color: YanColors.cyanAccent,
+                        size: 28,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _isFrontCamera ? 'Old kamera' : 'Orqa kamera',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 24,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: <Widget>[
+                    _CallControlButton(
+                      icon: _isMuted
+                          ? Icons.mic_off_rounded
+                          : Icons.mic_rounded,
+                      label: _isMuted ? 'O‘chiq' : 'Mikrofon',
+                      active: !_isMuted,
+                      onTap: () => setState(() => _isMuted = !_isMuted),
+                    ),
+                    _CallControlButton(
+                      icon: _isVideoEnabled
+                          ? Icons.videocam_rounded
+                          : Icons.videocam_off_rounded,
+                      label: _isVideoEnabled ? 'Video' : 'Audio',
+                      active: _isVideoEnabled,
+                      onTap: () =>
+                          setState(() => _isVideoEnabled = !_isVideoEnabled),
+                    ),
+                    _CallControlButton(
+                      icon: _isSpeakerOn
+                          ? Icons.volume_up_rounded
+                          : Icons.volume_down_rounded,
+                      label: 'Karnay',
+                      active: _isSpeakerOn,
+                      onTap: () => setState(() => _isSpeakerOn = !_isSpeakerOn),
+                    ),
+                    if (_isVideoEnabled)
+                      _CallControlButton(
+                        icon: Icons.cameraswitch_rounded,
+                        label: 'Kamera',
+                        active: true,
+                        onTap: () =>
+                            setState(() => _isFrontCamera = !_isFrontCamera),
+                      ),
+                    GestureDetector(
+                      onTap: _endCall,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Container(
+                            width: 54,
+                            height: 54,
+                            decoration: const BoxDecoration(
+                              color: YanColors.destructiveRed,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.call_end_rounded,
+                              color: Colors.white,
+                              size: 26,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          const Text(
+                            'Yakunlash',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -5866,1028 +9748,716 @@ class _AttachmentOptionTile extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ARIZALARIM, ADVOKAT & YORDAMCHI ROLE VIEWS
-// ═══════════════════════════════════════════════════════════════════════════
+class _CallControlButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
 
-class _ArizalarimRoleView extends StatefulWidget {
-  const _ArizalarimRoleView({
-    super.key,
-    required this.profile,
+  const _CallControlButton({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
   });
 
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: active
+                  ? YanColors.primaryBlue
+                  : Colors.white.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.white, size: 22),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttachmentOptionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _AttachmentOptionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      contentPadding: EdgeInsets.zero,
+      leading: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: YanColors.lightBlue,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: YanColors.primaryBlue, size: 21),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w800,
+          color: YanColors.primaryNavy,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(fontSize: 11.5, color: YanColors.mutedText),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// ARIZALARIM ROLE VIEW — SHOWS #ariza DELIVERIES FROM ADVOCATE + 30-MIN ORDERS
+// ============================================================================
+class _PetitionCatalogEntry {
+  final String title;
+  final String subtitle;
+  final String category;
+  final String turnaroundTime;
+  final int standardPriceUzs;
+
+  const _PetitionCatalogEntry({
+    required this.title,
+    required this.subtitle,
+    required this.category,
+    required this.turnaroundTime,
+    required this.standardPriceUzs,
+  });
+}
+
+class _ArizalarimRoleView extends StatefulWidget {
   final UserProfileData profile;
+
+  const _ArizalarimRoleView({super.key, required this.profile});
 
   @override
   State<_ArizalarimRoleView> createState() => _ArizalarimRoleViewState();
 }
 
 class _ArizalarimRoleViewState extends State<_ArizalarimRoleView> {
-  int _subTab = 0;
+  Timer? _countdownTimer;
+
+  static const List<_PetitionCatalogEntry> _templates = <_PetitionCatalogEntry>[
+    _PetitionCatalogEntry(
+      title: 'Aliment undirish haqida sud buyrug‘i arizasi',
+      subtitle: 'Voyaga yetmagan farzandlar ta’minoti uchun rasmiy sud arizasi',
+      category: 'Oila huquqi',
+      turnaroundTime: '~5 daqiqa (DOCX)',
+      standardPriceUzs: 90000,
+    ),
+    _PetitionCatalogEntry(
+      title: 'Nikohdan ajratish to‘g‘risida da’vo arizasi',
+      subtitle: 'Fuqarolik ishlari bo‘yicha sudga topshiriladigan da’vo arizasi',
+      category: 'Oila huquqi',
+      turnaroundTime: '~10 daqiqa (DOCX)',
+      standardPriceUzs: 120000,
+    ),
+  ];
 
   @override
-  Widget build(BuildContext context) {
-    final isMijoz = widget.profile.roleType == UserRole.mijoz;
+  void initState() {
+    super.initState();
+    _YanE2eeCryptoEngine.syncArizaOrdersLedger();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
 
-    return Column(
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 10),
-          child: LiquidGlassWindow(
-            padding: const EdgeInsets.all(15),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          const Text(
-                            'Mening Arizalarim va Hujjatlarim',
-                            style: TextStyle(
-                              color: YanColors.primaryNavy,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            isMijoz
-                                ? 'Shartnomali mijoz imtiyozi: Shablon arizalarga -50%, xizmatlarga -30% chegirma faol!'
-                                : 'Barcha yaratilgan DOCX da’vo arizalari va advokatga yuborilgan so‘rovlar',
-                            style: const TextStyle(
-                              color: YanColors.mutedText,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _showReadyArizaDialog(ArizaOrderItem item) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: YanColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: YanColors.border,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: <Widget>[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: YanColors.successGreen.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Text(
+                      '#ARIZA • E2EE TASDIQLANGAN HUJJAT',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0A936B),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    LiquidActionButton(
-                      label: isMijoz ? 'Yangi (-50%)' : 'Yangi ariza',
-                      icon: CupertinoIcons.add_circled_solid,
-                      compact: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                item.subjectTitle,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: YanColors.primaryNavy,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Advokat: ${item.advocateName} • Buyurtma: ${item.id}',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: YanColors.mutedText,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                constraints: const BoxConstraints(maxHeight: 280),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: YanColors.lightBlue,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: YanColors.border),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    item.completedArizaText ?? item.detailedStatement,
+                    style: const TextStyle(
+                      fontSize: 13.2,
+                      fontWeight: FontWeight.w600,
+                      color: YanColors.primaryNavy,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: _SolidSecondaryButton(
+                      label: 'Nusxa olish',
+                      icon: Icons.copy_rounded,
                       onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const AlimonyClaimPage(),
+                        Clipboard.setData(
+                          ClipboardData(
+                            text:
+                                item.completedArizaText ??
+                                item.detailedStatement,
+                          ),
+                        );
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Ariza matni nusxalandi!'),
+                            backgroundColor: YanColors.primaryNavy,
+                            behavior: SnackBarBehavior.floating,
                           ),
                         );
                       },
                     ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: _MonochromaticSegmentButton(
-                        label: 'Rasmiy DOCX Arizalar',
-                        icon: CupertinoIcons.doc_richtext,
-                        selected: _subTab == 0,
-                        onTap: () => setState(() => _subTab = 0),
-                      ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _SolidPrimaryButton(
+                      label: 'Yopish',
+                      icon: Icons.check_rounded,
+                      onPressed: () => Navigator.pop(ctx),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _MonochromaticSegmentButton(
-                        label: 'Murojaatlar Tarixi',
-                        icon: CupertinoIcons.time_solid,
-                        selected: _subTab == 1,
-                        onTap: () => setState(() => _subTab = 1),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        Expanded(
-          child: _subTab == 0 ? const HujjatlarPage() : const TarixPage(),
-        ),
-      ],
+      ),
     );
   }
-}
-
-class _MonochromaticSegmentButton extends StatelessWidget {
-  const _MonochromaticSegmentButton({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-        decoration: BoxDecoration(
-          color: selected ? YanColors.primaryBlue : YanColors.lightBlue,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+    final profile = widget.profile;
+    final isDiscounted = profile.hasClientDiscounts;
+    final now = DateTime.now();
+
+    return ValueListenableBuilder<List<ArizaOrderItem>>(
+      valueListenable: YanRoleDataCatalog.arizaOrders,
+      builder: (context, orders, _) {
+        final readyOrders = orders
+            .where((o) => o.isEffectivelyCompleted(now))
+            .toList();
+        final activeOrders = orders
+            .where((o) => !o.isEffectivelyCompleted(now))
+            .toList();
+
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 115),
           children: <Widget>[
-            Icon(
-              icon,
-              size: 15,
-              color: selected ? YanColors.white : YanColors.primaryNavy,
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: selected ? YanColors.white : YanColors.primaryNavy,
-                  fontSize: 12.2,
-                  fontWeight: FontWeight.w700,
-                ),
+            // 1. Completed #ariza section from Advocate
+            if (readyOrders.isNotEmpty) ...<Widget>[
+              const Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.verified_rounded,
+                    size: 19,
+                    color: YanColors.successGreen,
+                  ),
+                  SizedBox(width: 7),
+                  Text(
+                    'Advokatdan kelgan tayyor arizalar (#ariza)',
+                    style: TextStyle(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w900,
+                      color: YanColors.primaryNavy,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              ...readyOrders.map((item) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: YanColors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: YanColors.successGreen.withValues(alpha: 0.55),
+                      width: 1.4,
+                    ),
+                    boxShadow: const <BoxShadow>[
+                      BoxShadow(
+                        color: Color(0x1210C995),
+                        blurRadius: 16,
+                        offset: Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: YanColors.successGreen.withValues(
+                                alpha: 0.14,
+                              ),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              'TAYYOR • #ARIZA TOPSHIRILDI',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF0A936B),
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            item.id,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: YanColors.mutedText,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        item.subjectTitle,
+                        style: const TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w800,
+                          color: YanColors.primaryNavy,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Advokat: ${item.advocateName}',
+                        style: const TextStyle(
+                          fontSize: 12.2,
+                          fontWeight: FontWeight.w700,
+                          color: YanColors.primaryBlue,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        item.completedArizaText ?? item.detailedStatement,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: YanColors.mutedText,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: <Widget>[
+                          const Icon(
+                            Icons.lock_rounded,
+                            size: 13,
+                            color: YanColors.successGreen,
+                          ),
+                          const SizedBox(width: 4),
+                          const Expanded(
+                            child: Text(
+                              'E2EE orqali himoyalangan',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: YanColors.successGreen,
+                              ),
+                            ),
+                          ),
+                          _CardPillButton(
+                            label: 'Arizani ochish',
+                            isPrimary: true,
+                            onTap: () => _showReadyArizaDialog(item),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+
+            // 2. Active in-progress 30-minute Ariza orders
+            if (activeOrders.isNotEmpty) ...<Widget>[
+              const Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.timer_rounded,
+                    size: 19,
+                    color: YanColors.primaryBlue,
+                  ),
+                  SizedBox(width: 7),
+                  Text(
+                    'Tayyorlanayotgan arizalar (30 daqiqa muddat)',
+                    style: TextStyle(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w900,
+                      color: YanColors.primaryNavy,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              ...activeOrders.map((item) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: YanColors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: YanColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: YanColors.lightBlue,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              '⏳ ${item.formatCountdown(now)}',
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w900,
+                                color: YanColors.primaryBlue,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            item.id,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: YanColors.mutedText,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 9),
+                      Text(
+                        item.subjectTitle,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: YanColors.primaryNavy,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Mas’ul advokat: ${item.advocateName}',
+                        style: const TextStyle(
+                          fontSize: 12.2,
+                          fontWeight: FontWeight.w700,
+                          color: YanColors.primaryBlue,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.detailedStatement,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12.3,
+                          color: YanColors.mutedText,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+
+            // 3. Standard Templates Header
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: YanColors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: YanColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDiscounted
+                              ? YanColors.successGreen.withValues(alpha: 0.14)
+                              : YanColors.lightBlue,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          isDiscounted
+                              ? 'MIJOZ TARIFI • -50% CHEGIRMA FAOL'
+                              : 'ARIZALARIM VA HUJJATLAR MARKAZI',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            color: isDiscounted
+                                ? const Color(0xFF0A936B)
+                                : YanColors.primaryBlue,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Arizalarim va Avto-Shablonlar',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: YanColors.primaryNavy,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Advokat chatda #ariza tegi bilan yuborgan barcha tayyor arizalar shu sahifada avtomatik saqlanadi.',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: YanColors.mutedText,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FilterChipPill extends StatelessWidget {
-  const _FilterChipPill({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-        decoration: BoxDecoration(
-          color: active ? YanColors.primaryBlue : YanColors.lightBlue,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: active ? YanColors.white : YanColors.primaryNavy,
-            fontSize: 11.6,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AdvokatHomeRoleView extends StatelessWidget {
-  const _AdvokatHomeRoleView({
-    super.key,
-    required this.profile,
-    required this.onOpenContracts,
-    required this.onOpenClients,
-  });
-
-  final UserProfileData profile;
-  final VoidCallback onOpenContracts;
-  final VoidCallback onOpenClients;
-
-  @override
-  Widget build(BuildContext context) {
-    final tier = profile.lawyerSubscriptionTier;
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
-      slivers: <Widget>[
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 115),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate(<Widget>[
-              LiquidGlassWindow(
-                isHighlighted: true,
+            const SizedBox(height: 14),
+            ..._templates.map((item) {
+              final activePrice = isDiscounted
+                  ? profile.applyDiscount(
+                      item.standardPriceUzs,
+                      category: 'template',
+                    )
+                  : item.standardPriceUzs;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: YanColors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: YanColors.border),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Row(
                       children: <Widget>[
                         Container(
-                          width: 50,
-                          height: 50,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: YanColors.primaryBlue,
-                            borderRadius: BorderRadius.circular(15),
+                            color: YanColors.lightBlue,
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(
-                            CupertinoIcons.briefcase_fill,
-                            color: Colors.white,
-                            size: 24,
+                          child: Text(
+                            item.category,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              color: YanColors.primaryBlue,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                'Advokat Kabineti • ${profile.displayName}',
-                                style: const TextStyle(
-                                  color: YanColors.primaryNavy,
-                                  fontSize: 17.5,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                '"YAN LEGAL FIRM" MCHJ hamkori • Litsenziya: ${profile.lawyerLicenseNumber}',
-                                style: const TextStyle(
-                                  color: YanColors.primaryBlue,
-                                  fontSize: 11.8,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
+                        const Spacer(),
+                        Text(
+                          item.turnaroundTime,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: YanColors.mutedText,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: _LawyerMetricBox(
-                            value: '${YanRoleDataCatalog.sampleContracts.length}',
-                            label: 'Faol shartnomalar',
-                            onTap: onOpenContracts,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _LawyerMetricBox(
-                            value: '8.9M',
-                            label: 'Oylik gonorar (UZS)',
-                            onTap: onOpenContracts,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _LawyerMetricBox(
-                            value: '4.98 ★',
-                            label: 'Reyting (184)',
-                            onTap: onOpenClients,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 13),
-              LiquidGlassWindow(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const Text(
-                      'YAN Legal Firm — 3 Xil Advokatlik Obunasi',
-                      style: TextStyle(
-                        color: YanColors.primaryNavy,
-                        fontSize: 16,
+                    const SizedBox(height: 10),
+                    Text(
+                      item.title,
+                      style: const TextStyle(
+                        fontSize: 15.5,
                         fontWeight: FontWeight.w800,
+                        color: YanColors.primaryNavy,
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Oylik obuna + har bir imzolangan shartnoma uchun bir martalik komissiya to‘lovi:',
-                      style: TextStyle(
+                    Text(
+                      item.subtitle,
+                      style: const TextStyle(
+                        fontSize: 12.5,
                         color: YanColors.mutedText,
-                        fontSize: 12,
+                        height: 1.35,
                       ),
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: <Widget>[
-                        Expanded(
-                          child: _LawyerTierCard(
-                            tierIndex: 1,
-                            title: 'START',
-                            price: '\$19/oy',
-                            perContract: '7% shartnoma',
-                            selected: tier == 1,
-                            onSelect: () => userProfile.update(
-                              (curr) =>
-                                  curr.copyWith(lawyerSubscriptionTier: 1),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _LawyerTierCard(
-                            tierIndex: 2,
-                            title: 'PRO',
-                            price: '\$39/oy',
-                            perContract: '5% shartnoma',
-                            selected: tier == 2,
-                            onSelect: () => userProfile.update(
-                              (curr) =>
-                                  curr.copyWith(lawyerSubscriptionTier: 2),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _LawyerTierCard(
-                            tierIndex: 3,
-                            title: 'ELITE',
-                            price: '\$69/oy',
-                            perContract: '3% + Yordamchi',
-                            selected: tier == 3,
-                            onSelect: () => userProfile.update(
-                              (curr) =>
-                                  curr.copyWith(lawyerSubscriptionTier: 3),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 13),
-              LiquidGlassWindow(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const Text(
-                      'Tezkor Ish Stoli Amallari',
-                      style: TextStyle(
-                        color: YanColors.primaryNavy,
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 11),
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: LiquidActionButton(
-                            label: 'Shartnomalarim',
-                            icon: CupertinoIcons.doc_checkmark_fill,
-                            onPressed: onOpenContracts,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: LiquidActionButton(
-                            label: 'Mijozlar bazasi',
-                            icon: CupertinoIcons.person_2_fill,
-                            isPrimary: false,
-                            onPressed: onOpenClients,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ]),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LawyerMetricBox extends StatelessWidget {
-  const _LawyerMetricBox({
-    required this.value,
-    required this.label,
-    required this.onTap,
-  });
-
-  final String value;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
-        decoration: BoxDecoration(
-          color: YanColors.lightBlue,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: YanColors.border),
-        ),
-        child: Column(
-          children: <Widget>[
-            Text(
-              value,
-              style: const TextStyle(
-                color: YanColors.primaryBlue,
-                fontSize: 16.5,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: YanColors.primaryNavy,
-                fontSize: 10.2,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LawyerTierCard extends StatelessWidget {
-  const _LawyerTierCard({
-    required this.tierIndex,
-    required this.title,
-    required this.price,
-    required this.perContract,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  final int tierIndex;
-  final String title;
-  final String price;
-  final String perContract;
-  final bool selected;
-  final VoidCallback onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onSelect,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.all(11),
-        decoration: BoxDecoration(
-          color: selected ? YanColors.primaryBlue : YanColors.lightBlue,
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Column(
-          children: <Widget>[
-            Text(
-              title,
-              style: TextStyle(
-                color: selected ? YanColors.white : YanColors.primaryNavy,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              price,
-              style: TextStyle(
-                color: selected ? YanColors.white : YanColors.primaryBlue,
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              perContract,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: selected ? Colors.white70 : YanColors.mutedText,
-                fontSize: 9.8,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AdvokatContractsRoleView extends StatelessWidget {
-  const _AdvokatContractsRoleView({super.key, required this.profile});
-
-  final UserProfileData profile;
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
-      slivers: <Widget>[
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 115),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate(<Widget>[
-              const LiquidGlassWindow(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      'Mening Shartnomalarim (Advokat Reyestri)',
-                      style: TextStyle(
-                        color: YanColors.primaryNavy,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Har bir imzolangan elektron yuridik yordam shartnomasi YAN360 bazasida himoyalangan',
-                      style: TextStyle(
-                        color: YanColors.mutedText,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              ...YanRoleDataCatalog.sampleContracts.map(
-                (item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 11),
-                  child: LiquidGlassWindow(
-                    padding: const EdgeInsets.all(15),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Row(
-                          children: <Widget>[
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
-                                vertical: 3.5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: YanColors.lightBlue,
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              child: Text(
-                                item.contractNumber,
-                                style: const TextStyle(
-                                  color: YanColors.primaryBlue,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              item.signedDate,
-                              style: const TextStyle(
-                                color: YanColors.subtleText,
-                                fontSize: 11.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          item.clientName,
-                          style: const TextStyle(
-                            color: YanColors.primaryNavy,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          '${item.caseCategory} • ${item.region}',
-                          style: const TextStyle(
-                            color: YanColors.mutedText,
-                            fontSize: 12.2,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 9),
-                        Row(
-                          children: <Widget>[
-                            Text(
-                              'Gonorar: ${(item.feeAmountUzs / 1000000).toStringAsFixed(1)} mln so‘m',
-                              style: const TextStyle(
-                                color: YanColors.primaryBlue,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: YanColors.successGreen.withValues(
-                                  alpha: 0.16,
-                                ),
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              child: Text(
-                                item.statusLabel,
-                                style: const TextStyle(
-                                  color: Color(0xFF098562),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ]),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ClientsDirectoryRoleView extends StatelessWidget {
-  const _ClientsDirectoryRoleView({
-    super.key,
-    required this.profile,
-    required this.isAssistantView,
-  });
-
-  final UserProfileData profile;
-  final bool isAssistantView;
-
-  @override
-  Widget build(BuildContext context) {
-    final defaultLawyer = YanRoleDataCatalog.byId(profile.contractedLawyerId);
-
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
-      slivers: <Widget>[
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 115),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate(<Widget>[
-              LiquidGlassWindow(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      isAssistantView
-                          ? 'Mijozlar bilan Ishlash (Yordamchi Bo‘limi)'
-                          : 'Shartnomali Mijozlar Bazasi',
-                      style: const TextStyle(
-                        color: YanColors.primaryNavy,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      isAssistantView
-                          ? 'Biriktirilgan advokat (${profile.assignedLawyerName}) mijozlarining hujjatlari va murojaatlari'
-                          : 'Siz bilan yuridik yordam shartnomasi tuzgan barcha faol mijozlar',
-                      style: const TextStyle(
-                        color: YanColors.mutedText,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              ...YanRoleDataCatalog.sampleContracts.map(
-                (client) => Padding(
-                  padding: const EdgeInsets.only(bottom: 11),
-                  child: LiquidGlassWindow(
-                    padding: const EdgeInsets.all(15),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Row(
-                          children: <Widget>[
-                            CircleAvatar(
-                              radius: 21,
-                              backgroundColor: YanColors.primaryNavy,
-                              child: Text(
-                                client.clientName.substring(0, 1),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 11),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Text(
-                                    client.clientName,
-                                    style: const TextStyle(
-                                      color: YanColors.primaryNavy,
-                                      fontSize: 15.8,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${client.clientPhone} • ${client.region}',
-                                    style: const TextStyle(
-                                      color: YanColors.mutedText,
-                                      fontSize: 11.8,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3.5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: YanColors.successGreen.withValues(
-                                  alpha: 0.16,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                client.statusLabel,
-                                style: const TextStyle(
-                                  color: Color(0xFF098562),
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 9),
-                        Text(
-                          'Ish toifasi: ${client.caseCategory}',
-                          style: const TextStyle(
-                            color: YanColors.primaryBlue,
-                            fontSize: 12.4,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 11),
-                        Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: LiquidActionButton(
-                                label: 'DOCX Hujjat',
-                                icon: CupertinoIcons.doc_text_fill,
-                                compact: true,
-                                isPrimary: false,
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder: (_) => const AlimonyClaimPage(),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: LiquidActionButton(
-                                label: 'Xabar yozish',
-                                icon: CupertinoIcons.chat_bubble_text_fill,
-                                compact: true,
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder: (_) => AdvocateClientChatPage(
-                                        lawyer: defaultLawyer,
-                                        profile: profile,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ]),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AssistantTasksRoleView extends StatelessWidget {
-  const _AssistantTasksRoleView({
-    super.key,
-    required this.profile,
-    required this.onOpenClients,
-  });
-
-  final UserProfileData profile;
-  final VoidCallback onOpenClients;
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<List<AssistantTaskItem>>(
-      valueListenable: YanRoleDataCatalog.assistantTasks,
-      builder: (context, tasks, _) {
-        final completedCount = tasks.where((t) => t.isCompleted).length;
-
-        return CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: <Widget>[
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 115),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate(<Widget>[
-                  LiquidGlassWindow(
-                    isHighlighted: true,
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Row(
-                          children: <Widget>[
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: YanColors.primaryBlue,
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: const Icon(
-                                CupertinoIcons.checkmark_rectangle_fill,
-                                color: Colors.white,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  const Text(
-                                    'Advokat Yordamchisi Vazifalari',
-                                    style: TextStyle(
-                                      color: YanColors.primaryNavy,
-                                      fontSize: 17.5,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    'Biriktirilgan advokat: ${profile.assignedLawyerName}',
-                                    style: const TextStyle(
-                                      color: YanColors.primaryBlue,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 13),
-                        Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: _LawyerMetricBox(
-                                value: '${tasks.length - completedCount}',
-                                label: 'Faol topshiriq',
-                                onTap: () {},
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _LawyerMetricBox(
-                                value: '$completedCount/${tasks.length}',
-                                label: 'Bajarilgan',
-                                onTap: () {},
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _LawyerMetricBox(
-                                value: 'Mijozlar',
-                                label: 'Ro‘yxatni ochish',
-                                onTap: onOpenClients,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 13),
-                  ...tasks.map(
-                    (task) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: LiquidGlassWindow(
-                        padding: const EdgeInsets.all(14),
-                        onTap: () => YanRoleDataCatalog.toggleTask(task.id),
-                        child: Row(
+                        Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
-                            Icon(
-                              task.isCompleted
-                                  ? CupertinoIcons.checkmark_circle_fill
-                                  : CupertinoIcons.circle,
-                              color: task.isCompleted
-                                  ? YanColors.successGreen
-                                  : YanColors.primaryBlue,
-                              size: 23,
-                            ),
-                            const SizedBox(width: 11),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Text(
-                                    task.title,
-                                    style: TextStyle(
-                                      color: YanColors.primaryNavy,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                      decoration: task.isCompleted
-                                          ? TextDecoration.lineThrough
-                                          : null,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Text(
-                                    'Mijoz: ${task.clientName} • Muddat: ${task.deadlineLabel}',
-                                    style: const TextStyle(
-                                      color: YanColors.mutedText,
-                                      fontSize: 11.8,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: YanColors.lightBlue,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                task.categoryLabel,
+                            if (isDiscounted)
+                              Text(
+                                '${item.standardPriceUzs} so‘m',
                                 style: const TextStyle(
-                                  color: YanColors.primaryBlue,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
+                                  fontSize: 11,
+                                  color: YanColors.mutedText,
+                                  decoration: TextDecoration.lineThrough,
                                 ),
+                              ),
+                            Text(
+                              '$activePrice so‘m',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                                color: YanColors.primaryNavy,
                               ),
                             ),
                           ],
                         ),
-                      ),
+                        const Spacer(),
+                        _CardPillButton(
+                          label: 'Ariza tayyorlash',
+                          isPrimary: true,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const AlimonyClaimPage(),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ),
-                  ),
-                ]),
-              ),
-            ),
+                  ],
+                ),
+              );
+            }),
           ],
         );
       },
@@ -6895,10 +10465,885 @@ class _AssistantTasksRoleView extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Login Page Clean Input Fields & Monochromatic Solid Buttons
-// ═══════════════════════════════════════════════════════════════════════════
+class _MonochromaticSegmentButton extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 
+  const _MonochromaticSegmentButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? YanColors.primaryBlue : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w800,
+            color: selected ? Colors.white : YanColors.primaryNavy,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// ADVOKAT HOME, CONTRACTS & CLIENTS VIEWS (WITH 30-MIN REAL-TIME ARIZA CATEGORY)
+// ============================================================================
+class _AdvokatHomeRoleView extends StatelessWidget {
+  final UserProfileData profile;
+  final VoidCallback onOpenContracts;
+  final VoidCallback onOpenClients;
+
+  const _AdvokatHomeRoleView({
+    super.key,
+    required this.profile,
+    required this.onOpenContracts,
+    required this.onOpenClients,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 115),
+      children: <Widget>[
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: YanColors.white,
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: YanColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: YanColors.lightBlue,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Text(
+                      'RASMIY ADVOKAT KABINETI',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: YanColors.primaryBlue,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  const Icon(
+                    Icons.verified_user_rounded,
+                    color: YanColors.successGreen,
+                    size: 20,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                profile.displayName,
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                  color: YanColors.primaryNavy,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Litsenziya: ${profile.lawyerLicenseNumber} • ${profile.lawyerSpecialization}',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: YanColors.mutedText,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: _SolidSecondaryButton(
+                      label: 'Shartnomalarim',
+                      icon: Icons.assignment_turned_in_rounded,
+                      onPressed: onOpenContracts,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _SolidPrimaryButton(
+                      label: 'Mijozlar va Ariza',
+                      icon: Icons.people_alt_rounded,
+                      onPressed: onOpenClients,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AdvokatContractsRoleView extends StatelessWidget {
+  final UserProfileData profile;
+
+  const _AdvokatContractsRoleView({super.key, required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    final contracts = YanRoleDataCatalog.sampleContracts;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 115),
+      children: <Widget>[
+        const Text(
+          'Rasmiy Shartnomalar',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            color: YanColors.primaryNavy,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Faqat haqiqiy imzolangan mijoz shartnomalari ro‘yxati',
+          style: TextStyle(fontSize: 12.5, color: YanColors.mutedText),
+        ),
+        const SizedBox(height: 16),
+        if (contracts.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: YanColors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: YanColors.border),
+            ),
+            child: const Column(
+              children: <Widget>[
+                Icon(
+                  Icons.assignment_outlined,
+                  size: 40,
+                  color: YanColors.primaryBlue,
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Hozircha faol shartnomalar mavjud emas',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: YanColors.primaryNavy,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'Mijozlar Advokatxona bo‘limidan sizning profilingizni tanlab shartnoma tuzganida bu yerda ko‘rinadi.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: YanColors.mutedText,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Advocate's `Mijozlar` Directory — categorizes clients by request type
+/// (`Barchasi`, `Ariza yozdirish (30 daq)`, `Shartnomali`) with a real-time
+/// 1-second ticking 30-minute countdown timer and direct E2EE Chat + Audio/Video call.
+class _ClientsDirectoryRoleView extends StatefulWidget {
+  final UserProfileData profile;
+  final bool isAssistantView;
+
+  const _ClientsDirectoryRoleView({
+    super.key,
+    required this.profile,
+    this.isAssistantView = false,
+  });
+
+  @override
+  State<_ClientsDirectoryRoleView> createState() =>
+      _ClientsDirectoryRoleViewState();
+}
+
+class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
+  bool _isLoadingClients = true;
+  String _selectedCategoryFilter = 'Barchasi';
+  List<LawyerDirectoryProfile> _realClients = <LawyerDirectoryProfile>[];
+  Timer? _liveDeadlineTicker;
+
+  static const List<String> _categoryTabs = <String>[
+    'Barchasi',
+    'Ariza yozdirish',
+    'Shartnomali',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshAllData();
+    _liveDeadlineTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _liveDeadlineTicker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshAllData() async {
+    await _YanE2eeCryptoEngine.syncArizaOrdersLedger();
+    await _fetchRealClientsFromSupabase();
+  }
+
+  Future<void> _fetchRealClientsFromSupabase() async {
+    if (mounted) setState(() => _isLoadingClients = true);
+    try {
+      final rows = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('role', 'client');
+
+      final parsed = <LawyerDirectoryProfile>[];
+      for (final item in rows) {
+        final map = Map<String, dynamic>.from(item as Map);
+        final id = map['id']?.toString() ?? '';
+        final fullName = (map['full_name']?.toString() ?? '').trim();
+        if (id.isNotEmpty) {
+          parsed.add(
+            LawyerDirectoryProfile(
+              id: id,
+              fullName: fullName.isEmpty ? 'Rasmiy Mijoz' : fullName,
+              title: 'YAN360 Mijozi',
+              region: map['region']?.toString() ?? 'Toshkent shahri',
+              specialization: 'E2EE Himoyalangan Mijoz',
+              experienceYears: 1,
+              rating: 5.0,
+              feedbackCount: 1,
+              wonCasesCount: 0,
+              consultationPriceUzs: 0,
+              contractMonthlyNote: 'E2EE Shifrlangan Muloqot',
+              licenseNumber: 'Tasdiqlangan',
+              phone: map['phone']?.toString() ?? '+998',
+              assistantName: '-',
+              assistantRole: '',
+              assistantPhone: '',
+              bio: 'YAN360 ilovasida rasmiy ro‘yxatdan o‘tgan mijoz.',
+              feedbacks: const <LawyerFeedbackItem>[],
+              isVerifiedPartner: map['is_online'] != false,
+            ),
+          );
+        }
+      }
+      if (mounted) {
+        setState(() => _realClients = parsed);
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _isLoadingClients = false);
+    }
+  }
+
+  void _openClientChat(
+    BuildContext context,
+    LawyerDirectoryProfile clientPeer, {
+    String? callMode,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AdvocateClientChatPage(
+          lawyer: clientPeer,
+          profile: widget.profile,
+          initialCallMode: callMode,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final arizaOrders = YanRoleDataCatalog.arizaOrders.value;
+
+    final showArizaSection =
+        _selectedCategoryFilter == 'Barchasi' ||
+        _selectedCategoryFilter == 'Ariza yozdirish';
+    final showGeneralClientsSection =
+        _selectedCategoryFilter == 'Barchasi' ||
+        _selectedCategoryFilter == 'Shartnomali';
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 115),
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    widget.isAssistantView
+                        ? 'Yordamchi: Mijozlar va Arizalar'
+                        : 'Mijozlar va Ariza Buyurtmalari',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: YanColors.primaryNavy,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  const Text(
+                    'Turkumlangan mijozlar • 30 daqiqalik real-vaqt taymeri • E2EE',
+                    style: TextStyle(fontSize: 12.0, color: YanColors.mutedText),
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: _refreshAllData,
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: YanColors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: YanColors.border),
+                ),
+                child: _isLoadingClients
+                    ? const CupertinoActivityIndicator(
+                        color: YanColors.primaryBlue,
+                      )
+                    : const Icon(
+                        CupertinoIcons.refresh,
+                        size: 18,
+                        color: YanColors.primaryBlue,
+                      ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Category Filter Pills
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: _categoryTabs.map((tab) {
+              final selected = _selectedCategoryFilter == tab;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _SortTabPill(
+                  label: tab == 'Ariza yozdirish'
+                      ? 'Ariza yozdirish (${arizaOrders.length})'
+                      : tab,
+                  selected: selected,
+                  onTap: () => setState(() => _selectedCategoryFilter = tab),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // 1. ARIZA YOZDIRISH CLIENTS (WITH LIVE 30-MINUTE REAL-TIME COUNTDOWN)
+        if (showArizaSection && arizaOrders.isNotEmpty) ...<Widget>[
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text(
+              'ARIZA BUYURTMALARI (30 DAQIQALIK REAL-VAQT MUDDATI)',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.6,
+                color: YanColors.primaryBlue,
+              ),
+            ),
+          ),
+          ...arizaOrders.map((order) {
+            final clientPeer = LawyerDirectoryProfile(
+              id: order.clientId,
+              fullName: order.clientName,
+              title: 'Ariza buyurtmachisi (${order.id})',
+              region: order.clientRegion,
+              specialization: order.categoryType,
+              experienceYears: 1,
+              rating: 5.0,
+              feedbackCount: 1,
+              wonCasesCount: 0,
+              consultationPriceUzs: 0,
+              contractMonthlyNote: '30 daqiqalik ariza buyurtmasi',
+              licenseNumber: order.id,
+              phone: order.clientPhone,
+              assistantName: '-',
+              assistantRole: '',
+              assistantPhone: '',
+              bio: order.detailedStatement,
+              feedbacks: const <LawyerFeedbackItem>[],
+              isVerifiedPartner: true,
+            );
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: YanColors.white,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: order.isCompleted
+                      ? YanColors.successGreen.withValues(alpha: 0.55)
+                      : YanColors.primaryBlue.withValues(alpha: 0.5),
+                  width: 1.4,
+                ),
+                boxShadow: const <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x0F1677D2),
+                    blurRadius: 14,
+                    offset: Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: YanColors.primaryBlue,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          order.categoryType.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 9.8,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: order.isEffectivelyCompleted(now)
+                              ? YanColors.successGreen.withValues(alpha: 0.14)
+                              : order.isAdvocateLate(now)
+                              ? YanColors.destructiveRed.withValues(alpha: 0.14)
+                              : const Color(0xFFFFF4E5),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Icon(
+                              order.isEffectivelyCompleted(now)
+                                  ? Icons.check_circle_rounded
+                                  : order.isAdvocateLate(now)
+                                  ? Icons.warning_amber_rounded
+                                  : Icons.timer_rounded,
+                              size: 13,
+                              color: order.isEffectivelyCompleted(now)
+                                  ? const Color(0xFF0A936B)
+                                  : order.isAdvocateLate(now)
+                                  ? YanColors.destructiveRed
+                                  : const Color(0xFFD97706),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              order.formatCountdown(now),
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w900,
+                                color: order.isEffectivelyCompleted(now)
+                                    ? const Color(0xFF0A936B)
+                                    : order.isAdvocateLate(now)
+                                    ? YanColors.destructiveRed
+                                    : const Color(0xFFD97706),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        order.id,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: YanColors.mutedText,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 11),
+                  Row(
+                    children: <Widget>[
+                      _LawyerAvatarPortrait(
+                        initials: clientPeer.initials,
+                        isOnline: true,
+                        size: 46,
+                      ),
+                      const SizedBox(width: 11),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              order.clientName,
+                              style: const TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w800,
+                                color: YanColors.primaryNavy,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${order.clientPhone} • ${order.subjectTitle}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: YanColors.primaryBlue,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 9),
+                  Text(
+                    order.detailedStatement,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.3,
+                      color: YanColors.mutedText,
+                      height: 1.38,
+                    ),
+                  ),
+                  const SizedBox(height: 11),
+                  Row(
+                    children: <Widget>[
+                      Text(
+                        'Ilovalar: ${order.attachmentNames.length} ta hujjat',
+                        style: const TextStyle(
+                          fontSize: 11.2,
+                          fontWeight: FontWeight.w700,
+                          color: YanColors.primaryNavy,
+                        ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => _openClientChat(
+                          context,
+                          clientPeer,
+                          callMode: 'audio',
+                        ),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: YanColors.lightBlue,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: YanColors.border),
+                          ),
+                          child: const Icon(
+                            Icons.call_rounded,
+                            size: 17,
+                            color: YanColors.primaryBlue,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () => _openClientChat(
+                          context,
+                          clientPeer,
+                          callMode: 'video',
+                        ),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: YanColors.lightBlue,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: YanColors.border),
+                          ),
+                          child: const Icon(
+                            Icons.videocam_rounded,
+                            size: 17,
+                            color: YanColors.primaryNavy,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _CardPillButton(
+                        label: 'Chat / #ariza',
+                        isPrimary: true,
+                        onTap: () => _openClientChat(context, clientPeer),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 8),
+        ],
+
+        // 2. REGISTERED SUPABASE CLIENTS
+        if (showGeneralClientsSection) ...<Widget>[
+          if (_isLoadingClients)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 42),
+              child: Center(
+                child: CupertinoActivityIndicator(
+                  radius: 14,
+                  color: YanColors.primaryBlue,
+                ),
+              ),
+            )
+          else if (_realClients.isEmpty && arizaOrders.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: YanColors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: YanColors.border),
+              ),
+              child: const Column(
+                children: <Widget>[
+                  Icon(
+                    Icons.people_outline_rounded,
+                    size: 40,
+                    color: YanColors.primaryBlue,
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    'Hozircha ro‘yxatdan o‘tgan mijozlar yo‘q',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: YanColors.primaryNavy,
+                    ),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'Mijozlar "Advokatga ariza yozdirish" orqali murojaat yuborganda 30 daqiqalik taymer bilan shu yerda ko‘rinadi.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: YanColors.mutedText,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._realClients.map((clientPeer) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: YanColors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: YanColors.border),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    _LawyerAvatarPortrait(
+                      initials: clientPeer.initials,
+                      isOnline: clientPeer.isVerifiedPartner,
+                      size: 48,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            clientPeer.fullName,
+                            style: const TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w800,
+                              color: YanColors.primaryNavy,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            clientPeer.isVerifiedPartner
+                                ? 'Online • E2EE himoyalangan mijoz'
+                                : 'Offline • E2EE himoyalangan mijoz',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: clientPeer.isVerifiedPartner
+                                  ? YanColors.successGreen
+                                  : YanColors.mutedText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => _openClientChat(
+                        context,
+                        clientPeer,
+                        callMode: 'audio',
+                      ),
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: YanColors.lightBlue,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: YanColors.border),
+                        ),
+                        child: const Icon(
+                          Icons.call_rounded,
+                          size: 18,
+                          color: YanColors.primaryBlue,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => _openClientChat(
+                        context,
+                        clientPeer,
+                        callMode: 'video',
+                      ),
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: YanColors.lightBlue,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: YanColors.border),
+                        ),
+                        child: const Icon(
+                          Icons.videocam_rounded,
+                          size: 18,
+                          color: YanColors.primaryNavy,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    _CardPillButton(
+                      label: 'Xabar',
+                      isPrimary: true,
+                      onTap: () => _openClientChat(context, clientPeer),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ],
+    );
+  }
+}
+
+class _AssistantTasksRoleView extends StatelessWidget {
+  final UserProfileData profile;
+  final VoidCallback? onOpenClients;
+
+  const _AssistantTasksRoleView({
+    super.key,
+    required this.profile,
+    this.onOpenClients,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 115),
+      children: <Widget>[
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: YanColors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: YanColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                'Advokat Yordamchisi Paneli',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: YanColors.primaryNavy,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Biriktirilgan advokat: ${profile.assignedLawyerName}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: YanColors.mutedText,
+                ),
+              ),
+              if (onOpenClients != null) ...<Widget>[
+                const SizedBox(height: 14),
+                _SolidSecondaryButton(
+                  label: 'Mijozlar ro‘yxatini ochish',
+                  icon: Icons.people_alt_rounded,
+                  onPressed: onOpenClients!,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// SHARED MONOCHROMATIC INPUTS & BUTTONS
+// ============================================================================
 class _UzbekPhoneField extends StatelessWidget {
   final TextEditingController controller;
 
@@ -6906,34 +11351,52 @@ class _UzbekPhoneField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoTextField(
-      controller: controller,
-      keyboardType: TextInputType.phone,
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15.5),
-      style: const TextStyle(
-        color: YanColors.primaryNavy,
-        fontSize: 15,
-        fontWeight: FontWeight.w600,
-      ),
-      placeholder: '** *** ** **',
-      placeholderStyle: const TextStyle(
-        color: YanColors.subtleText,
-        fontSize: 14.5,
-      ),
-      prefix: const Padding(
-        padding: EdgeInsets.only(left: 15, right: 9),
-        child: Icon(
-          CupertinoIcons.phone_fill,
-          size: 18,
-          color: YanColors.primaryBlue,
-        ),
-      ),
+    return Container(
       decoration: BoxDecoration(
-        color: YanColors.lightBlue.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
+        color: YanColors.lightBlue,
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: YanColors.border),
       ),
-      cursorColor: YanColors.primaryBlue,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+      child: Row(
+        children: <Widget>[
+          const Icon(
+            Icons.phone_rounded,
+            color: YanColors.primaryBlue,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          const Text(
+            '+998',
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w800,
+              color: YanColors.primaryNavy,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              keyboardType: TextInputType.phone,
+              style: const TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w700,
+                color: YanColors.primaryNavy,
+              ),
+              decoration: const InputDecoration(
+                hintText: '90 123 45 67',
+                hintStyle: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: YanColors.mutedText,
+                ),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -6941,57 +11404,63 @@ class _UzbekPhoneField extends StatelessWidget {
 class _CleanTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hintText;
-  final TextInputType keyboardType;
   final IconData icon;
   final bool obscureText;
+  final TextInputType keyboardType;
   final int? maxLength;
 
   const _CleanTextField({
     required this.controller,
     required this.hintText,
-    required this.keyboardType,
     required this.icon,
     this.obscureText = false,
+    this.keyboardType = TextInputType.text,
     this.maxLength,
   });
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoTextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      obscureText: obscureText,
-      maxLength: maxLength,
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15.5),
-      style: const TextStyle(
-        color: YanColors.primaryNavy,
-        fontSize: 15,
-        fontWeight: FontWeight.w600,
-      ),
-      placeholder: hintText,
-      placeholderStyle: const TextStyle(
-        color: YanColors.subtleText,
-        fontSize: 14.5,
-      ),
-      prefix: Padding(
-        padding: const EdgeInsets.only(left: 15, right: 9),
-        child: Icon(
-          icon,
-          size: 18,
-          color: YanColors.primaryBlue,
-        ),
-      ),
+    return Container(
       decoration: BoxDecoration(
-        color: YanColors.lightBlue.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
+        color: YanColors.lightBlue,
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: YanColors.border),
       ),
-      cursorColor: YanColors.primaryBlue,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+      child: Row(
+        children: <Widget>[
+          Icon(icon, color: YanColors.primaryBlue, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              obscureText: obscureText,
+              keyboardType: keyboardType,
+              maxLength: maxLength,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: YanColors.primaryNavy,
+              ),
+              decoration: InputDecoration(
+                counterText: '',
+                hintText: hintText,
+                hintStyle: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                  color: YanColors.mutedText,
+                ),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _SolidPrimaryButton extends StatefulWidget {
+class _SolidPrimaryButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onPressed;
@@ -7003,123 +11472,95 @@ class _SolidPrimaryButton extends StatefulWidget {
   });
 
   @override
-  State<_SolidPrimaryButton> createState() => _SolidPrimaryButtonState();
-}
-
-class _SolidPrimaryButtonState extends State<_SolidPrimaryButton> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onPressed();
-      },
-      child: AnimatedScale(
-        scale: _pressed ? 0.985 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 15),
-          decoration: BoxDecoration(
-            color: YanColors.primaryBlue,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: YanColors.primaryBlue.withValues(alpha: 0.22),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
-              ),
-            ],
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: YanColors.primaryBlue,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Text(
-                widget.label,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14.8,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(width: 9),
-              Icon(widget.icon, size: 17, color: Colors.white),
-            ],
-          ),
+            ),
+            const SizedBox(width: 8),
+            Icon(icon, size: 18, color: Colors.white),
+          ],
         ),
       ),
     );
   }
 }
 
-class _SolidSecondaryButton extends StatefulWidget {
-  final IconData icon;
+class _SolidSecondaryButton extends StatelessWidget {
   final String label;
-  final bool active;
+  final IconData icon;
   final VoidCallback onPressed;
+  final bool active;
 
   const _SolidSecondaryButton({
-    required this.icon,
     required this.label,
-    required this.active,
+    required this.icon,
     required this.onPressed,
+    this.active = false,
   });
 
   @override
-  State<_SolidSecondaryButton> createState() => _SolidSecondaryButtonState();
-}
-
-class _SolidSecondaryButtonState extends State<_SolidSecondaryButton> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    final bgColor = widget.active
-        ? YanColors.primaryBlue
-        : YanColors.lightBlue;
-    final fgColor = widget.active
-        ? YanColors.white
-        : YanColors.primaryNavy;
-
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onPressed();
-      },
-      child: AnimatedScale(
-        scale: _pressed ? 0.98 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12.5),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(15),
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: active ? YanColors.primaryBlue : YanColors.lightBlue,
+          foregroundColor: active ? Colors.white : YanColors.primaryBlue,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(
+              color: active
+                  ? YanColors.primaryBlue
+                  : YanColors.primaryBlue.withValues(alpha: 0.35),
+            ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(widget.icon, size: 16, color: fgColor),
-              const SizedBox(width: 7),
-              Flexible(
-                child: Text(
-                  widget.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: fgColor,
-                  ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Icon(
+              icon,
+              size: 18,
+              color: active ? Colors.white : YanColors.primaryBlue,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

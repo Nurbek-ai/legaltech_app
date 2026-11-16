@@ -135,21 +135,21 @@ class UserProfileData {
     this.role = 'Raqamli huquqiy profil',
     this.memberSince = '2026',
     this.isVerified = true,
-    this.activeApplications = 1,
-    this.savedDocuments = 5,
+    this.activeApplications = 0,
+    this.savedDocuments = 0,
     this.biometricEnabled = true,
     this.notificationsEnabled = true,
     this.pinCode,
     this.avatarFile,
     this.roleType = UserRole.oddiy,
-    this.contractedLawyerId = 'LAW-001',
-    this.contractNumber = 'SH-2026/084',
+    this.contractedLawyerId,
+    this.contractNumber,
     this.contractSignedAt,
     this.lawyerSubscriptionTier = 2,
-    this.assignedLawyerName = 'Shohruh Jo‘rayev',
-    this.lawyerLicenseNumber = 'TN-004829',
+    this.assignedLawyerName = 'Biriktirilmagan',
+    this.lawyerLicenseNumber = 'Tasdiqlangan',
     this.lawyerSpecialization = 'Oila, mulk va fuqarolik huquqi',
-    this.lawyerExperienceYears = 9,
+    this.lawyerExperienceYears = 5,
   });
 
   final String clientId;
@@ -285,7 +285,7 @@ class UserProfileData {
 
   String get firstName {
     final parts = displayName.trim().split(RegExp(r'\s+'));
-    return parts.isNotEmpty && parts.first.isNotEmpty ? parts.first : 'Nurbek';
+    return parts.isNotEmpty && parts.first.isNotEmpty ? parts.first : 'Foydalanuvchi';
   }
 
   String get initials {
@@ -296,7 +296,7 @@ class UserProfileData {
         .map((p) => p[0])
         .join()
         .toUpperCase();
-    return result.isEmpty ? 'NO' : result;
+    return result.isEmpty ? 'YA' : result;
   }
 
   String get completionPercent => '${(profileCompletion * 100).round()}%';
@@ -324,6 +324,7 @@ class UserProfileData {
     bool clearAvatar = false,
     UserRole? roleType,
     String? contractedLawyerId,
+    bool clearContractedLawyer = false,
     String? contractNumber,
     DateTime? contractSignedAt,
     int? lawyerSubscriptionTier,
@@ -352,8 +353,12 @@ class UserProfileData {
       pinCode: clearPinCode ? null : (pinCode ?? this.pinCode),
       avatarFile: clearAvatar ? null : (avatarFile ?? this.avatarFile),
       roleType: nextRoleType,
-      contractedLawyerId: contractedLawyerId ?? this.contractedLawyerId,
-      contractNumber: contractNumber ?? this.contractNumber,
+      contractedLawyerId: clearContractedLawyer
+          ? null
+          : (contractedLawyerId ?? this.contractedLawyerId),
+      contractNumber: clearContractedLawyer
+          ? null
+          : (contractNumber ?? this.contractNumber),
       contractSignedAt: contractSignedAt ?? this.contractSignedAt,
       lawyerSubscriptionTier:
           lawyerSubscriptionTier ?? this.lawyerSubscriptionTier,
@@ -417,29 +422,31 @@ class UserProfileData {
       role: json['role']?.toString() ?? parsedRole.label,
       memberSince: json['memberSince']?.toString() ?? '2026',
       isVerified: json['isVerified'] != false,
-      activeApplications: (json['activeApplications'] as num?)?.toInt() ?? 1,
-      savedDocuments: (json['savedDocuments'] as num?)?.toInt() ?? 5,
+      activeApplications: (json['activeApplications'] as num?)?.toInt() ?? 0,
+      savedDocuments: (json['savedDocuments'] as num?)?.toInt() ?? 0,
       biometricEnabled: json['biometricEnabled'] != false,
       notificationsEnabled: json['notificationsEnabled'] != false,
       pinCode: json['pinCode']?.toString(),
       avatarFile: avatar,
       roleType: parsedRole,
-      contractedLawyerId: json['contractedLawyerId']?.toString() ?? 'LAW-001',
-      contractNumber: json['contractNumber']?.toString() ?? 'SH-2026/084',
+      contractedLawyerId: (json['contractedLawyerId']?.toString().startsWith('LAW-') ?? true)
+          ? null
+          : json['contractedLawyerId']?.toString(),
+      contractNumber: json['contractNumber']?.toString(),
       contractSignedAt: DateTime.tryParse(
         json['contractSignedAt']?.toString() ?? '',
       ),
       lawyerSubscriptionTier:
           (json['lawyerSubscriptionTier'] as num?)?.toInt() ?? 2,
       assignedLawyerName:
-          json['assignedLawyerName']?.toString() ?? 'Shohruh Jo‘rayev',
+          json['assignedLawyerName']?.toString() ?? 'Biriktirilmagan',
       lawyerLicenseNumber:
-          json['lawyerLicenseNumber']?.toString() ?? 'TN-004829',
+          json['lawyerLicenseNumber']?.toString() ?? 'Tasdiqlangan',
       lawyerSpecialization:
           json['lawyerSpecialization']?.toString() ??
           'Oila, mulk va fuqarolik huquqi',
       lawyerExperienceYears:
-          (json['lawyerExperienceYears'] as num?)?.toInt() ?? 9,
+          (json['lawyerExperienceYears'] as num?)?.toInt() ?? 5,
     );
   }
 }
@@ -467,9 +474,7 @@ class UserProfileNotifier extends ValueNotifier<UserProfileData> {
           }
         }
       }
-    } catch (_) {
-      // Keep default profile
-    }
+    } catch (_) {}
   }
 
   @override
@@ -494,11 +499,13 @@ class UserProfileNotifier extends ValueNotifier<UserProfileData> {
     value = value.copyWith(
       roleType: targetRole,
       role: targetRole.label,
-      contractedLawyerId: lawyerId ?? value.contractedLawyerId ?? 'LAW-001',
+      contractedLawyerId: lawyerId ?? value.contractedLawyerId,
       contractNumber:
           contractNo ??
           value.contractNumber ??
-          'SH-${now.year}/${100 + now.second}',
+          (targetRole == UserRole.mijoz
+              ? 'SH-${now.year}/${100 + now.second}'
+              : null),
       contractSignedAt: targetRole == UserRole.mijoz
           ? (value.contractSignedAt ?? now)
           : value.contractSignedAt,
@@ -509,9 +516,7 @@ class UserProfileNotifier extends ValueNotifier<UserProfileData> {
     try {
       final f = await _file();
       await f.writeAsString(jsonEncode(data.toJson()), flush: true);
-    } catch (_) {
-      // Ignore write errors in restricted environments
-    }
+    } catch (_) {}
   }
 }
 
@@ -519,7 +524,8 @@ class UserProfileNotifier extends ValueNotifier<UserProfileData> {
 final UserProfileNotifier userProfile = UserProfileNotifier();
 
 // ═══════════════════════════════════════════════════════════════════════════
-// YAN360 Lawyer Directory, Client Feedback, Contracts & Assistant Models
+// YAN360 Real Lawyer Directory, Client Feedback, Contracts & Assistant Models
+// (Zero hardcoded fake profiles; populated dynamically from Supabase!)
 // ═══════════════════════════════════════════════════════════════════════════
 
 class LawyerFeedbackItem {
@@ -585,7 +591,274 @@ class LawyerDirectoryProfile {
 
   String get initials {
     final parts = fullName.trim().split(RegExp(r'\s+'));
-    return parts.take(2).map((e) => e.isEmpty ? '' : e[0]).join().toUpperCase();
+    final res = parts
+        .take(2)
+        .map((e) => e.isEmpty ? '' : e[0])
+        .join()
+        .toUpperCase();
+    return res.isEmpty ? 'AD' : res;
+  }
+
+  LawyerDirectoryProfile copyWith({
+    double? rating,
+    int? feedbackCount,
+    int? wonCasesCount,
+    List<LawyerFeedbackItem>? feedbacks,
+  }) {
+    return LawyerDirectoryProfile(
+      id: id,
+      fullName: fullName,
+      title: title,
+      region: region,
+      specialization: specialization,
+      experienceYears: experienceYears,
+      rating: rating ?? this.rating,
+      feedbackCount: feedbackCount ?? this.feedbackCount,
+      wonCasesCount: wonCasesCount ?? this.wonCasesCount,
+      consultationPriceUzs: consultationPriceUzs,
+      contractMonthlyNote: contractMonthlyNote,
+      licenseNumber: licenseNumber,
+      phone: phone,
+      assistantName: assistantName,
+      assistantRole: assistantRole,
+      assistantPhone: assistantPhone,
+      bio: bio,
+      feedbacks: feedbacks ?? this.feedbacks,
+      isVerifiedPartner: isVerifiedPartner,
+    );
+  }
+
+  factory LawyerDirectoryProfile.fromSupabaseMap(Map<String, dynamic> row) {
+    final name = (row['full_name']?.toString() ?? '').trim();
+    return LawyerDirectoryProfile(
+      id: row['id']?.toString() ?? '',
+      fullName: name.isEmpty ? 'Rasmiy Advokat' : name,
+      title: 'Litsenziyali advokat • YAN360',
+      region: row['region']?.toString() ?? 'Toshkent shahri',
+      specialization:
+          row['specialization']?.toString() ?? 'Oila va fuqarolik huquqi',
+      experienceYears: (row['experience_years'] as num?)?.toInt() ?? 5,
+      rating: (row['rating'] as num?)?.toDouble() ?? 5.0,
+      feedbackCount: (row['feedback_count'] as num?)?.toInt() ?? 1,
+      wonCasesCount: (row['won_cases_count'] as num?)?.toInt() ?? 10,
+      consultationPriceUzs:
+          (row['consultation_price_uzs'] as num?)?.toInt() ?? 200000,
+      contractMonthlyNote: '3 oy bepul ilova obunasi • 30%–50% imtiyoz',
+      licenseNumber: row['license_number']?.toString() ?? 'Tasdiqlangan',
+      phone: row['phone']?.toString() ?? '+998',
+      assistantName: 'Yordamchi biriktirilmagan',
+      assistantRole: 'Advokat yordamchisi',
+      assistantPhone: '',
+      bio:
+          row['bio']?.toString() ??
+          'YAN360 platformasida rasmiy ro‘yxatdan o‘tgan va litsenziyasi tasdiqlangan advokat.',
+      feedbacks: const <LawyerFeedbackItem>[],
+      isVerifiedPartner: true,
+    );
+  }
+}
+
+class ArizaOrderItem {
+  const ArizaOrderItem({
+    required this.id,
+    required this.clientId,
+    required this.clientName,
+    required this.clientPhone,
+    required this.clientRegion,
+    required this.advocateId,
+    required this.advocateName,
+    required this.categoryType,
+    required this.subjectTitle,
+    required this.detailedStatement,
+    required this.attachmentNames,
+    required this.createdAt,
+    required this.deadlineAt,
+    this.isCompleted = false,
+    this.completedArizaText,
+    this.completedAt,
+    this.completedAttachmentMeta,
+    this.arizaSentAt,
+    this.clientResponseStatus,
+  });
+
+  final String id;
+  final String clientId;
+  final String clientName;
+  final String clientPhone;
+  final String clientRegion;
+  final String advocateId;
+  final String advocateName;
+  final String categoryType;
+  final String subjectTitle;
+  final String detailedStatement;
+  final List<String> attachmentNames;
+  final DateTime createdAt;
+  final DateTime deadlineAt;
+  final bool isCompleted;
+  final String? completedArizaText;
+  final DateTime? completedAt;
+  final String? completedAttachmentMeta;
+
+  /// Timestamp when the advocate sent the `#ariza` file in chat.
+  final DateTime? arizaSentAt;
+
+  /// `'accepted'`, `'rejected'`, or `null` (if not yet responded by client).
+  final String? clientResponseStatus;
+
+  Duration remainingTime(DateTime now) {
+    final diff = deadlineAt.difference(now);
+    return diff.isNegative ? Duration.zero : diff;
+  }
+
+  /// True if:
+  /// 1. Client clicked `Qabul qilish` (`clientResponseStatus == 'accepted'`), OR
+  /// 2. Advocate sent the `#ariza` (`arizaSentAt != null`), client has not
+  ///    responded (`clientResponseStatus == null`), and 30 minutes have passed!
+  bool isEffectivelyCompleted(DateTime now) {
+    if (isCompleted || clientResponseStatus == 'accepted') {
+      return true;
+    }
+    if (arizaSentAt != null &&
+        clientResponseStatus == null &&
+        now.difference(arizaSentAt!).inMinutes >= 30) {
+      return true;
+    }
+    return false;
+  }
+
+  /// True if the 30-minute deadline expired before the advocate delivered
+  /// an accepted ariza (or after client rejected it and timer ran out).
+  bool isAdvocateLate(DateTime now) {
+    if (isEffectivelyCompleted(now)) return false;
+    if (arizaSentAt != null && clientResponseStatus == null) {
+      return false;
+    }
+    return now.isAfter(deadlineAt);
+  }
+
+  String formatCountdown(DateTime now) {
+    if (isEffectivelyCompleted(now)) {
+      return 'Tayyor #ariza topshirildi';
+    }
+    if (arizaSentAt != null && clientResponseStatus == null) {
+      final elapsed = now.difference(arizaSentAt!);
+      final waitRem = const Duration(minutes: 30) - elapsed;
+      if (waitRem.isNegative || waitRem == Duration.zero) {
+        return 'Tayyor #ariza topshirildi';
+      }
+      final wm = waitRem.inMinutes.toString().padLeft(2, '0');
+      final ws = (waitRem.inSeconds % 60).toString().padLeft(2, '0');
+      return 'Mijoz tekshirmoqda ($wm:$ws)';
+    }
+    final rem = remainingTime(now);
+    if (rem == Duration.zero) {
+      return 'Kech qoldingiz!!!';
+    }
+    final mins = rem.inMinutes.toString().padLeft(2, '0');
+    final secs = (rem.inSeconds % 60).toString().padLeft(2, '0');
+    if (clientResponseStatus == 'rejected') {
+      return '$mins:$secs qoldi • Rad etildi';
+    }
+    return '$mins:$secs qoldi';
+  }
+
+  ArizaOrderItem copyWith({
+    bool? isCompleted,
+    String? completedArizaText,
+    DateTime? completedAt,
+    String? completedAttachmentMeta,
+    DateTime? arizaSentAt,
+    bool clearArizaSentAt = false,
+    String? clientResponseStatus,
+    bool clearClientResponseStatus = false,
+  }) {
+    return ArizaOrderItem(
+      id: id,
+      clientId: clientId,
+      clientName: clientName,
+      clientPhone: clientPhone,
+      clientRegion: clientRegion,
+      advocateId: advocateId,
+      advocateName: advocateName,
+      categoryType: categoryType,
+      subjectTitle: subjectTitle,
+      detailedStatement: detailedStatement,
+      attachmentNames: attachmentNames,
+      createdAt: createdAt,
+      deadlineAt: deadlineAt,
+      isCompleted: isCompleted ?? this.isCompleted,
+      completedArizaText: completedArizaText ?? this.completedArizaText,
+      completedAt: completedAt ?? this.completedAt,
+      completedAttachmentMeta:
+          completedAttachmentMeta ?? this.completedAttachmentMeta,
+      arizaSentAt: clearArizaSentAt ? null : (arizaSentAt ?? this.arizaSentAt),
+      clientResponseStatus: clearClientResponseStatus
+          ? null
+          : (clientResponseStatus ?? this.clientResponseStatus),
+    );
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'id': id,
+    'clientId': clientId,
+    'clientName': clientName,
+    'clientPhone': clientPhone,
+    'clientRegion': clientRegion,
+    'advocateId': advocateId,
+    'advocateName': advocateName,
+    'categoryType': categoryType,
+    'subjectTitle': subjectTitle,
+    'detailedStatement': detailedStatement,
+    'attachmentNames': attachmentNames,
+    'createdAt': createdAt.toIso8601String(),
+    'deadlineAt': deadlineAt.toIso8601String(),
+    'isCompleted': isCompleted,
+    'completedArizaText': completedArizaText,
+    'completedAt': completedAt?.toIso8601String(),
+    'completedAttachmentMeta': completedAttachmentMeta,
+    'arizaSentAt': arizaSentAt?.toIso8601String(),
+    'clientResponseStatus': clientResponseStatus,
+  };
+
+  factory ArizaOrderItem.fromJson(Map<String, dynamic> map) {
+    final rawAttachments = map['attachmentNames'];
+    final parsedAttachments = <String>[];
+    if (rawAttachments is List) {
+      for (final a in rawAttachments) {
+        parsedAttachments.add(a.toString());
+      }
+    }
+    final created =
+        DateTime.tryParse(map['createdAt']?.toString() ?? '')?.toLocal() ??
+        DateTime.now();
+    final deadline =
+        DateTime.tryParse(map['deadlineAt']?.toString() ?? '')?.toLocal() ??
+        created.add(const Duration(minutes: 30));
+    return ArizaOrderItem(
+      id: map['id']?.toString() ?? 'ARZ-1001',
+      clientId: map['clientId']?.toString() ?? '',
+      clientPhone: map['clientPhone']?.toString() ?? '+998',
+      clientName: map['clientName']?.toString() ?? 'Mijoz',
+      clientRegion: map['clientRegion']?.toString() ?? 'Toshkent shahri',
+      advocateId: map['advocateId']?.toString() ?? '',
+      advocateName: map['advocateName']?.toString() ?? 'Advokat',
+      categoryType: map['categoryType']?.toString() ?? 'Ariza yozdirish',
+      subjectTitle: map['subjectTitle']?.toString() ?? 'Rasmiy ariza',
+      detailedStatement: map['detailedStatement']?.toString() ?? '',
+      attachmentNames: parsedAttachments,
+      createdAt: created,
+      deadlineAt: deadline,
+      isCompleted: map['isCompleted'] == true,
+      completedArizaText: map['completedArizaText']?.toString(),
+      completedAt: DateTime.tryParse(
+        map['completedAt']?.toString() ?? '',
+      )?.toLocal(),
+      completedAttachmentMeta: map['completedAttachmentMeta']?.toString(),
+      arizaSentAt: DateTime.tryParse(
+        map['arizaSentAt']?.toString() ?? '',
+      )?.toLocal(),
+      clientResponseStatus: map['clientResponseStatus']?.toString(),
+    );
   }
 }
 
@@ -672,267 +945,238 @@ class YanRoleDataCatalog {
     'Jinoyat va ma’muriy himoya',
   ];
 
-  static const List<LawyerDirectoryProfile> lawyers = <LawyerDirectoryProfile>[
-    LawyerDirectoryProfile(
-      id: 'LAW-001',
-      fullName: 'Shohruh Jo‘rayev',
-      title: 'YAN Legal Firm Bosh advokati',
-      region: 'Toshkent shahri',
-      specialization: 'Oila va aliment huquqi',
-      experienceYears: 11,
-      rating: 4.98,
-      feedbackCount: 184,
-      wonCasesCount: 412,
-      consultationPriceUzs: 250000,
-      contractMonthlyNote: '3 oy bepul ilova obunasi • 30%–50% imtiyoz',
-      licenseNumber: 'TN-004829',
-      phone: '+998 90 945 11 22',
-      assistantName: 'Madina Karimova',
-      assistantRole: 'Katta advokat yordamchisi • Hujjatlar va sud monitoringi',
-      assistantPhone: '+998 90 945 11 23',
-      bio:
-          'Oila, aliment, nikohdan ajratish va mulkiy nizolar bo‘yicha 11 yillik tajribaga ega oliy toifali advokat.',
-      feedbacks: <LawyerFeedbackItem>[
-        LawyerFeedbackItem(
-          clientName: 'Dilnoza R.',
-          comment:
-              'Aliment va bola yashash joyi bo‘yicha sud jarayonini juda tez va professional hal qilib berdilar.',
-          rating: 5.0,
-          dateLabel: '2 kun oldin',
-          caseType: 'Aliment va oila nizosi',
-        ),
-        LawyerFeedbackItem(
-          clientName: 'Javohir M.',
-          comment:
-              'Shartnoma tuzganimdan so‘ng barcha arizalarga 50% chegirma berildi, advokat yordamchisi ham doim aloqada.',
-          rating: 5.0,
-          dateLabel: '1 hafta oldin',
-          caseType: 'Yuridik hamkorlik',
-        ),
-      ],
-    ),
-    LawyerDirectoryProfile(
-      id: 'LAW-002',
-      fullName: 'Kamola Islomova',
-      title: 'Katta hamkor advokat',
-      region: 'Toshkent shahri',
-      specialization: 'Fuqarolik va mulk huquqi',
-      experienceYears: 9,
-      rating: 4.95,
-      feedbackCount: 146,
-      wonCasesCount: 318,
-      consultationPriceUzs: 220000,
-      contractMonthlyNote: '3 oy bepul ilova obunasi • 30%–50% imtiyoz',
-      licenseNumber: 'TN-005194',
-      phone: '+998 93 512 88 90',
-      assistantName: 'Sardor Yo‘ldoshev',
-      assistantRole: 'Advokat yordamchisi • Kadastr va da’vo arizalari',
-      assistantPhone: '+998 93 512 88 91',
-      bio:
-          'Uy-joy, meros, shartnoma majburiyatlari va oilaviy mulk taqsimoti bo‘yicha yetakchi mutaxassis.',
-      feedbacks: <LawyerFeedbackItem>[
-        LawyerFeedbackItem(
-          clientName: 'Otabek T.',
-          comment:
-              'Uy-joy va ulush masalasida barcha hujjatlarni qonuniy asoslab sudda yutib chiqdik.',
-          rating: 5.0,
-          dateLabel: '3 kun oldin',
-          caseType: 'Mulk huquqi',
-        ),
-      ],
-    ),
-    LawyerDirectoryProfile(
-      id: 'LAW-003',
-      fullName: 'Bekzod Rahmonov',
-      title: 'Viloyat bo‘limi bosh advokati',
-      region: 'Samarqand viloyati',
-      specialization: 'Oila va aliment huquqi',
-      experienceYears: 8,
-      rating: 4.91,
-      feedbackCount: 118,
-      wonCasesCount: 265,
-      consultationPriceUzs: 180000,
-      contractMonthlyNote: '3 oy bepul ilova obunasi • 30%–50% imtiyoz',
-      licenseNumber: 'SM-002310',
-      phone: '+998 91 540 77 11',
-      assistantName: 'Zarina Normurodova',
-      assistantRole: 'Advokat yordamchisi • Sudga arizalar tayyorlash',
-      assistantPhone: '+998 91 540 77 12',
-      bio:
-          'Samarqand va qo‘shni viloyatlarda oilaviy nizolar, aliment va nikoh shartnomalari bo‘yicha 8 yillik amaliyot.',
-      feedbacks: <LawyerFeedbackItem>[
-        LawyerFeedbackItem(
-          clientName: 'Mohira S.',
-          comment:
-              'Masofadan turib shartnoma imzoladik, sudga bormasdan barcha hujjatlar tayyorlandi.',
-          rating: 4.9,
-          dateLabel: '5 kun oldin',
-          caseType: 'Ona ta’minoti va aliment',
-        ),
-      ],
-    ),
-    LawyerDirectoryProfile(
-      id: 'LAW-004',
-      fullName: 'Ulug‘bek Xolmatov',
-      title: 'Korporativ va mehnat huquqi advokati',
-      region: 'Farg‘ona viloyati',
-      specialization: 'Mehnat va shartnoma huquqi',
-      experienceYears: 12,
-      rating: 4.89,
-      feedbackCount: 104,
-      wonCasesCount: 290,
-      consultationPriceUzs: 200000,
-      contractMonthlyNote: '3 oy bepul ilova obunasi • 30%–50% imtiyoz',
-      licenseNumber: 'FR-001982',
-      phone: '+998 94 611 33 44',
-      assistantName: 'Abrorjon Toirov',
-      assistantRole: 'Advokat yordamchisi • Shartnomalar ekspertizasi',
-      assistantPhone: '+998 94 611 33 45',
-      bio:
-          'Mehnat nizolari, ishga tiklash, kompensatsiya undirish va tadbirkorlik shartnomalari bo‘yicha katta advokat.',
-      feedbacks: <LawyerFeedbackItem>[
-        LawyerFeedbackItem(
-          clientName: 'Sanjar K.',
-          comment:
-              'Ishdan noqonuniy bo‘shatilganim bo‘yicha da’vo arizasi yozilib, to‘liq kompensatsiya undirildi.',
-          rating: 4.9,
-          dateLabel: '1 hafta oldin',
-          caseType: 'Mehnat huquqi',
-        ),
-      ],
-    ),
-    LawyerDirectoryProfile(
-      id: 'LAW-005',
-      fullName: 'Nilufar Qodirova',
-      title: 'Oila va bolalar huquqi advokati',
-      region: 'Buxoro viloyati',
-      specialization: 'Oila va aliment huquqi',
-      experienceYears: 6,
-      rating: 4.86,
-      feedbackCount: 79,
-      wonCasesCount: 164,
-      consultationPriceUzs: 170000,
-      contractMonthlyNote: '3 oy bepul ilova obunasi • 30%–50% imtiyoz',
-      licenseNumber: 'BX-001450',
-      phone: '+998 97 302 45 67',
-      assistantName: 'Nigina Saidova',
-      assistantRole: 'Advokat yordamchisi • Mijozlar bilan ishlash',
-      assistantPhone: '+998 97 302 45 68',
-      bio:
-          'Bola bilan ko‘rishish tartibi, aliment miqdorini o‘zgartirish va vasiylik masalalari bo‘yicha ixtisoslashgan advokat.',
-      feedbacks: <LawyerFeedbackItem>[
-        LawyerFeedbackItem(
-          clientName: 'Gulnoza A.',
-          comment:
-              'Juda samimiy va professional yondashuv, barcha savollarimga aniq yechim berishdi.',
-          rating: 4.9,
-          dateLabel: '2 hafta oldin',
-          caseType: 'Bola bilan ko‘rishish tartibi',
-        ),
-      ],
-    ),
-  ];
+  /// Live list of real advocates fetched directly from Supabase `public.profiles`
+  /// where `role = 'advocate'`. Zero fake accounts!
+  static final ValueNotifier<List<LawyerDirectoryProfile>> registeredLawyers =
+      ValueNotifier<List<LawyerDirectoryProfile>>(<LawyerDirectoryProfile>[]);
 
-  static LawyerDirectoryProfile byId(String? id) {
-    for (final lawyer in lawyers) {
+  static List<LawyerDirectoryProfile> get lawyers => registeredLawyers.value;
+
+  static LawyerDirectoryProfile? byIdOrNull(String? id) {
+    if (id == null || id.trim().isEmpty) return null;
+    for (final lawyer in registeredLawyers.value) {
       if (lawyer.id == id) return lawyer;
     }
-    return lawyers.first;
+    return null;
   }
 
-  static const List<LegalContractItem> sampleContracts = <LegalContractItem>[
-    LegalContractItem(
-      contractNumber: 'SH-2026/084',
-      clientName: 'Nurbek Otamurodov',
-      clientPhone: '+998 90 123 45 67',
-      region: 'Toshkent shahri',
-      caseCategory: 'Bolaga aliment va yashash joyini belgilash',
-      signedDate: '05.11.2026',
-      statusLabel: 'Faol shartnoma',
-      feeAmountUzs: 1800000,
-      isPaid: true,
-    ),
-    LegalContractItem(
-      contractNumber: 'SH-2026/081',
-      clientName: 'Malika Abdullayeva',
-      clientPhone: '+998 93 441 92 10',
-      region: 'Toshkent shahri',
-      caseCategory: 'Ona ta’minoti va nikohdan ajrashish da’vosi',
-      signedDate: '02.11.2026',
-      statusLabel: 'Sud jarayonida',
-      feeAmountUzs: 2400000,
-      isPaid: true,
-    ),
-    LegalContractItem(
-      contractNumber: 'SH-2026/076',
-      clientName: 'Rustamjon Karimov',
-      clientPhone: '+998 99 812 04 55',
-      region: 'Samarqand viloyati',
-      caseCategory: 'Mulkiy ulush va meros huquqi',
-      signedDate: '28.10.2026',
-      statusLabel: 'Ekspertizada',
-      feeAmountUzs: 3200000,
-      isPaid: true,
-    ),
-    LegalContractItem(
-      contractNumber: 'SH-2026/069',
-      clientName: 'Sevara Mirzayeva',
-      clientPhone: '+998 97 701 33 19',
-      region: 'Toshkent viloyati',
-      caseCategory: 'Bola bilan ko‘rishish tartibini belgilash',
-      signedDate: '21.10.2026',
-      statusLabel: 'Yakunlangan',
-      feeAmountUzs: 1500000,
-      isPaid: true,
-    ),
-  ];
+  static LawyerDirectoryProfile byId(String? id) {
+    final found = byIdOrNull(id);
+    if (found != null) return found;
+    if (registeredLawyers.value.isNotEmpty) {
+      return registeredLawyers.value.first;
+    }
+    return const LawyerDirectoryProfile(
+      id: '',
+      fullName: 'Advokat tanlanmagan',
+      title: 'Advokatxona bo‘limidan tanlang',
+      region: 'O‘zbekiston',
+      specialization: 'Yuridik xizmatlar',
+      experienceYears: 0,
+      rating: 5.0,
+      feedbackCount: 0,
+      wonCasesCount: 0,
+      consultationPriceUzs: 0,
+      contractMonthlyNote: '',
+      licenseNumber: '-',
+      phone: '',
+      assistantName: '-',
+      assistantRole: '',
+      assistantPhone: '',
+      bio: 'Hozircha shartnomali advokat biriktirilmagan.',
+      feedbacks: <LawyerFeedbackItem>[],
+    );
+  }
+
+  /// Dynamic Pricing Configuration for "Advokatga ariza yozdirish".
+  /// Currently free (`isFreeNow = true`, `baseFeeUzs = 0`), but structured
+  /// dynamically so future price changes or Click payment integration work
+  /// by updating a single value.
+  static bool isArizaDraftFreeNow = true;
+  static int dynamicArizaBaseFeeUzs = 0;
+
+  static int computeArizaFeeUzs(UserProfileData profile) {
+    if (isArizaDraftFreeNow || dynamicArizaBaseFeeUzs <= 0) return 0;
+    return profile.applyDiscount(dynamicArizaBaseFeeUzs, category: 'service');
+  }
+
+  static String formatArizaFeeLabel(UserProfileData profile) {
+    final fee = computeArizaFeeUzs(profile);
+    if (fee <= 0) {
+      return 'Bepul (Hozircha to‘lov olinmaydi)';
+    }
+    return '$fee so‘m';
+  }
+
+  /// Live list of "Advokatga ariza yozdirish" orders & completed `#ariza` deliveries.
+  static final ValueNotifier<List<ArizaOrderItem>> arizaOrders =
+      ValueNotifier<List<ArizaOrderItem>>(<ArizaOrderItem>[]);
+
+  static void upsertArizaOrder(ArizaOrderItem item) {
+    final current = List<ArizaOrderItem>.from(arizaOrders.value);
+    final idx = current.indexWhere((e) => e.id == item.id);
+    if (idx >= 0) {
+      current[idx] = item;
+    } else {
+      current.insert(0, item);
+    }
+    arizaOrders.value = current;
+  }
+
+  /// Applies a 1..5 star rating from a client after accepting an #ariza file,
+  /// recalculating the advocate's overall rating and updating `registeredLawyers`.
+  static double applyAdvocateStarRating({
+    required String advocateId,
+    required String advocateName,
+    required int stars,
+    required String clientName,
+    String comment = '',
+  }) {
+    final clampedStars = stars.clamp(1, 5).toDouble();
+    final currentList = List<LawyerDirectoryProfile>.from(
+      registeredLawyers.value,
+    );
+    var updatedRating = clampedStars;
+    var found = false;
+
+    for (var i = 0; i < currentList.length; i++) {
+      final adv = currentList[i];
+      if (adv.id == advocateId ||
+          adv.fullName.toLowerCase() == advocateName.toLowerCase()) {
+        final oldCount = adv.feedbackCount < 0 ? 0 : adv.feedbackCount;
+        final nextCount = oldCount + 1;
+        final rawAvg = ((adv.rating * oldCount) + clampedStars) / nextCount;
+        updatedRating = double.parse(rawAvg.toStringAsFixed(2));
+        final newFeedback = LawyerFeedbackItem(
+          clientName: clientName,
+          comment: comment.trim().isEmpty
+              ? 'Tayyor #ariza hujjati qabul qilindi ($stars/5 yulduz).'
+              : comment.trim(),
+          rating: clampedStars,
+          dateLabel: 'Hozir',
+          caseType: 'Ariza yozdirish (#ariza)',
+        );
+        currentList[i] = adv.copyWith(
+          rating: updatedRating,
+          feedbackCount: nextCount,
+          wonCasesCount: adv.wonCasesCount + 1,
+          feedbacks: <LawyerFeedbackItem>[newFeedback, ...adv.feedbacks],
+        );
+        found = true;
+        break;
+      }
+    }
+
+    if (found) {
+      registeredLawyers.value = currentList;
+    }
+    return updatedRating;
+  }
+
+  /// Records when the advocate sends the `#ariza` file (`status = null` in DB,
+  /// waiting up to 30 minutes for client response).
+  static void markArizaSentByAdvocate({
+    required String clientId,
+    required String advocateId,
+    required DateTime sentAt,
+    String? attachmentMeta,
+  }) {
+    final current = List<ArizaOrderItem>.from(arizaOrders.value);
+    for (var i = 0; i < current.length; i++) {
+      final item = current[i];
+      if ((item.clientId == clientId || item.advocateId == advocateId) &&
+          !item.isCompleted) {
+        current[i] = item.copyWith(
+          arizaSentAt: sentAt,
+          clearClientResponseStatus: true,
+          completedAttachmentMeta: attachmentMeta,
+        );
+        break;
+      }
+    }
+    arizaOrders.value = current;
+  }
+
+  static void markArizaRejectedByClient({
+    required String clientId,
+    required String advocateId,
+    required String rejectionReason,
+  }) {
+    final current = List<ArizaOrderItem>.from(arizaOrders.value);
+    for (var i = 0; i < current.length; i++) {
+      final item = current[i];
+      if (item.clientId == clientId || item.advocateId == advocateId) {
+        current[i] = item.copyWith(
+          isCompleted: false,
+          clearArizaSentAt: true,
+          clientResponseStatus: 'rejected',
+          completedArizaText: 'Rad etildi: $rejectionReason',
+        );
+        break;
+      }
+    }
+    arizaOrders.value = current;
+  }
+
+  static void markArizaCompletedByHashtag({
+    required String clientId,
+    required String advocateId,
+    required String advocateName,
+    required String arizaContent,
+    String? attachmentMeta,
+  }) {
+    final now = DateTime.now();
+    final current = List<ArizaOrderItem>.from(arizaOrders.value);
+    var matched = false;
+    for (var i = 0; i < current.length; i++) {
+      final item = current[i];
+      if ((item.clientId == clientId || item.advocateId == advocateId) &&
+          !item.isCompleted) {
+        current[i] = item.copyWith(
+          isCompleted: true,
+          clientResponseStatus: 'accepted',
+          completedArizaText: arizaContent,
+          completedAt: now,
+          completedAttachmentMeta: attachmentMeta,
+        );
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      current.insert(
+        0,
+        ArizaOrderItem(
+          id: 'ARZ-${now.millisecondsSinceEpoch % 100000}',
+          clientId: clientId,
+          clientName: userProfile.value.displayName,
+          clientPhone: userProfile.value.phone,
+          clientRegion: userProfile.value.region,
+          advocateId: advocateId,
+          advocateName: advocateName,
+          categoryType: 'Ariza yozdirish',
+          subjectTitle: 'Advokat tayyorlagan rasmiy ariza (#ariza)',
+          detailedStatement: arizaContent,
+          attachmentNames: const <String>[],
+          createdAt: now.subtract(const Duration(minutes: 5)),
+          deadlineAt: now.add(const Duration(minutes: 25)),
+          isCompleted: true,
+          completedArizaText: arizaContent,
+          completedAt: now,
+          completedAttachmentMeta: attachmentMeta,
+        ),
+      );
+    }
+    arizaOrders.value = current;
+  }
+
+  static final ValueNotifier<List<LegalContractItem>> liveContracts =
+      ValueNotifier<List<LegalContractItem>>(<LegalContractItem>[]);
+
+  static List<LegalContractItem> get sampleContracts => liveContracts.value;
 
   static final ValueNotifier<List<AssistantTaskItem>> assistantTasks =
-      ValueNotifier<List<AssistantTaskItem>>(<AssistantTaskItem>[
-        const AssistantTaskItem(
-          id: 'TSK-101',
-          title:
-              'Nurbek Otamurodov ishi bo‘yicha DOCX da’vo arizasini tekshirish',
-          clientName: 'Nurbek Otamurodov',
-          assignedByLawyer: 'Shohruh Jo‘rayev',
-          deadlineLabel: 'Bugun, 17:30',
-          categoryLabel: 'Da’vo arizasi',
-          priorityLabel: 'Muhim',
-          isCompleted: false,
-        ),
-        const AssistantTaskItem(
-          id: 'TSK-102',
-          title:
-              'Fuqarolik ishlari bo‘yicha Yunusobod sudiga ilova hujjatlarni yuklash',
-          clientName: 'Malika Abdullayeva',
-          assignedByLawyer: 'Shohruh Jo‘rayev',
-          deadlineLabel: 'Ertaga, 11:00',
-          categoryLabel: 'E-Sud monitoring',
-          priorityLabel: 'Yuqori',
-          isCompleted: false,
-        ),
-        const AssistantTaskItem(
-          id: 'TSK-103',
-          title: 'Mijoz bilan 20 daqiqalik videomuloqot vaqtini tasdiqlash',
-          clientName: 'Rustamjon Karimov',
-          assignedByLawyer: 'Shohruh Jo‘rayev',
-          deadlineLabel: '07.11.2026',
-          categoryLabel: 'Konsultatsiya',
-          priorityLabel: 'Rejadagi',
-          isCompleted: true,
-        ),
-        const AssistantTaskItem(
-          id: 'TSK-104',
-          title:
-              'Nikohdan ajrashish bo‘yicha guvohnoma va tug‘ilganlik ma’lumotlarini solishtirish',
-          clientName: 'Sevara Mirzayeva',
-          assignedByLawyer: 'Shohruh Jo‘rayev',
-          deadlineLabel: '08.11.2026',
-          categoryLabel: 'Hujjat tahlili',
-          priorityLabel: 'Tayyor',
-          isCompleted: true,
-        ),
-      ]);
+      ValueNotifier<List<AssistantTaskItem>>(<AssistantTaskItem>[]);
 
   static void toggleTask(String id) {
     assistantTasks.value = assistantTasks.value
@@ -945,9 +1189,6 @@ class YanRoleDataCatalog {
 // Selective Liquid Glass Surface & Strict Monochromatic Solid Buttons
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Selective Liquid Glass container for profile banners, search bars, and cards
-/// on the #FEFEFA canvas. Uses clean translucent white/light-blue surfaces,
-/// thin borders, and soft elevation shadows without distracting decorative lines.
 class LiquidGlassWindow extends StatelessWidget {
   const LiquidGlassWindow({
     super.key,
@@ -1023,12 +1264,6 @@ class LiquidGlassWindow extends StatelessWidget {
   }
 }
 
-/// Strictly monochromatic, single-solid-color button:
-/// - Primary (`isPrimary: true`): solid #1677D2 background, white text/icon
-/// - Secondary (`isPrimary: false`): solid #EAF5FF background, #1677D2 or #102B57 text/icon
-/// - Neutral (`isNeutral: true`): solid #FFFFFF background, #102B57 text/icon
-/// - Destructive (`isDestructive: true`): solid #E53935 background, white text/icon
-/// No gradients, no two-color backgrounds, no decorative inner lines.
 class LiquidActionButton extends StatefulWidget {
   const LiquidActionButton({
     super.key,
@@ -1078,11 +1313,11 @@ class _LiquidActionButtonState extends State<LiquidActionButton> {
       fgColor = YanColors.primaryNavy;
       border = Border.all(color: YanColors.border, width: 1.0);
     } else if (widget.isPrimary) {
-      bgColor = YanColors.primaryBlue; // Solid #1677D2
+      bgColor = YanColors.primaryBlue;
       fgColor = YanColors.white;
       border = null;
     } else {
-      bgColor = YanColors.lightBlue; // Solid #EAF5FF
+      bgColor = YanColors.lightBlue;
       fgColor = YanColors.primaryNavy;
       border = Border.all(color: YanColors.border, width: 1.0);
     }
@@ -1325,8 +1560,6 @@ class ActivityHistoryRepository {
                 .toList();
           }
         }
-      } else {
-        loaded = _defaultSeedEntries();
       }
 
       await GeneratedDocumentRepository.instance.reload();
@@ -1336,7 +1569,7 @@ class ActivityHistoryRepository {
           .whereType<String>()
           .toSet();
 
-      var changed = !await file.exists();
+      var changed = false;
       for (final doc in docs) {
         if (!existingPaths.contains(doc.path)) {
           final filename = doc.path.split(Platform.pathSeparator).last;
@@ -1368,11 +1601,7 @@ class ActivityHistoryRepository {
       if (changed) {
         await _persist(loaded);
       }
-    } catch (_) {
-      if (entries.value.isEmpty) {
-        entries.value = List<ActivityEntry>.unmodifiable(_defaultSeedEntries());
-      }
-    }
+    } catch (_) {}
   }
 
   Future<ActivityEntry> record({
@@ -1442,44 +1671,6 @@ class ActivityHistoryRepository {
       final file = await _storageFile();
       final encoded = jsonEncode(list.map((e) => e.toJson()).toList());
       await file.writeAsString(encoded, flush: true);
-    } catch (_) {
-      // Ignore disk write errors in restricted environments
-    }
-  }
-
-  List<ActivityEntry> _defaultSeedEntries() {
-    final now = DateTime.now();
-    return <ActivityEntry>[
-      ActivityEntry(
-        id: 'PRF-SEED-1',
-        title: 'Raqamli yuridik profil faollashtirildi',
-        description:
-            'YAN360 shaxsiy kabineti va hujjatlar ombori shifrlangan holda ishga tushirildi',
-        category: ActivityCategory.profile,
-        statusLabel: 'Himoyalangan',
-        createdAt: now.subtract(const Duration(hours: 2, minutes: 15)),
-        referenceCode: '#PRF-20261',
-        metadata: const <String, String>{
-          'Modul': 'YAN360 Shaxsiy Kabinet',
-          'Xavfsizlik': 'AES-256 va Biometrik himoya',
-          'Holati': 'Tasdiqlangan foydalanuvchi',
-        },
-      ),
-      ActivityEntry(
-        id: 'CNS-SEED-2',
-        title: 'Advokat konsultatsiyasi bo‘yicha ma’lumotnoma',
-        description:
-            'Bosh advokat Shohruh Jo‘rayev bilan 20 daqiqalik jonli videomuloqot tizimi tayyor',
-        category: ActivityCategory.consultation,
-        statusLabel: 'Faol xizmat',
-        createdAt: now.subtract(const Duration(days: 1, hours: 3)),
-        referenceCode: '#CNS-10492',
-        metadata: const <String, String>{
-          'Mutaxassis': 'Shohruh Jo‘rayev (YAN Legal Firm)',
-          'Davomiyligi': '20 daqiqa (onlayn)',
-          'Hudud': 'Toshkent va barcha viloyatlar',
-        },
-      ),
-    ];
+    } catch (_) {}
   }
 }

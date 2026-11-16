@@ -29,3 +29,14 @@ flutter:
     - assets/logo.png
     - assets/service_artwork/
     - assets/templates/
+
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  image_picker: ^1.1.2
+  archive: 3.6.1
+  path_provider: 2.1.5
+  open_filex: 4.7.0
+  share_plus: ^10.1.4
