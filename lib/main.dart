@@ -73,12 +73,16 @@ UserRole mapDbRoleToUserRole(String? dbRole) {
   }
 }
 
+final GlobalKey<NavigatorState> yanRootNavigatorKey =
+    GlobalKey<NavigatorState>();
+
 class YAN360App extends StatelessWidget {
   const YAN360App({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: yanRootNavigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'YAN360',
       theme: ThemeData(
@@ -2767,6 +2771,7 @@ class _MainDashboardState extends State<MainDashboard> {
     _selectedTab = widget.initialTab.clamp(0, 3);
     GeneratedDocumentRepository.instance.reload();
     ActivityHistoryRepository.instance.ensureInitialized();
+    _YanGlobalCallCenter.instance.startGlobalListening();
   }
 
   List<DashboardNavData> _navItemsForRole(UserRole role) {
@@ -5355,13 +5360,6 @@ class _ArizaFileDeliveryMeta {
         rejectionReason: map['reason'] ?? '',
       );
     }
-    if (messageText.toLowerCase().contains('#ariza') ||
-        (rawMeta?.toLowerCase().contains('#ariza') ?? false)) {
-      return const _ArizaFileDeliveryMeta(
-        status: 'null',
-        fileName: 'Tayyor_Ariza.docx',
-      );
-    }
     return null;
   }
 }
@@ -5639,13 +5637,17 @@ class _YanE2eeCryptoEngine {
     ArizaOrderItem existing,
     ArizaOrderItem incoming,
   ) {
-    if (incoming.isCompleted && !existing.isCompleted) return incoming;
-    if (existing.isCompleted && !incoming.isCompleted) return existing;
-    if (incoming.clientResponseStatus == 'accepted') return incoming;
-    if (existing.clientResponseStatus == 'accepted') return existing;
-    if (incoming.clientResponseStatus == 'rejected' &&
-        existing.clientResponseStatus != 'rejected') {
+    if (incoming.clientResponseStatus == 'accepted' || incoming.isCompleted) {
       return incoming;
+    }
+    if (existing.clientResponseStatus == 'accepted' || existing.isCompleted) {
+      return existing;
+    }
+    if (incoming.clientResponseStatus == 'rejected') {
+      return incoming;
+    }
+    if (existing.clientResponseStatus == 'rejected') {
+      return existing;
     }
     if (incoming.arizaSentAt != null && existing.arizaSentAt == null) {
       return incoming;
@@ -6123,7 +6125,6 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
   DateTime _peerLastSeen = DateTime.now();
   DateTime? _lastPeerRealtimePingAt;
   bool _isSyncingHistory = true;
-  bool _incomingCallDialogVisible = false;
   bool _isPollingProfiles = false;
 
   @override
@@ -6258,6 +6259,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
               if (!mounted) return;
               final msgId = payload['message_id']?.toString() ?? '';
               final newMeta = payload['media_meta']?.toString() ?? '';
+              final decision = payload['decision']?.toString() ?? '';
               final idx = _messages.indexWhere((m) => m.id == msgId);
               if (idx >= 0 && newMeta.isNotEmpty) {
                 setState(() {
@@ -6265,6 +6267,30 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                 });
                 _saveLocalEncryptedCache();
                 _syncMyRoomStateToProfileEnvelope();
+              }
+              if (decision == 'rejected') {
+                final reason = payload['rejection_reason']?.toString() ?? '';
+                final isAdvocate =
+                    widget.profile.roleType == UserRole.advokat ||
+                    widget.profile.roleType == UserRole.yordamchi;
+                YanRoleDataCatalog.markArizaRejectedByClient(
+                  clientId: isAdvocate ? _peerUserId : _myUserId,
+                  advocateId: isAdvocate ? _myUserId : _peerUserId,
+                  rejectionReason: reason,
+                );
+              } else if (decision == 'accepted') {
+                final isAdvocate =
+                    widget.profile.roleType == UserRole.advokat ||
+                    widget.profile.roleType == UserRole.yordamchi;
+                YanRoleDataCatalog.markArizaCompletedByHashtag(
+                  clientId: isAdvocate ? _peerUserId : _myUserId,
+                  advocateId: isAdvocate ? _myUserId : _peerUserId,
+                  advocateName: isAdvocate
+                      ? widget.profile.displayName
+                      : widget.lawyer.fullName,
+                  arizaContent: 'Ariza qabul qilindi',
+                  attachmentMeta: newMeta,
+                );
               }
               final stars = (payload['rated_stars'] as num?)?.toInt() ?? 0;
               if (stars >= 1 && stars <= 5) {
@@ -6423,21 +6449,10 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
             event: 'call_signal',
             callback: (payload) {
               if (!mounted) return;
-              final action = payload['action']?.toString() ?? '';
-              final callerId = payload['caller_id']?.toString() ?? '';
-              if (_YanE2eeCryptoEngine.normalizeParticipantId(callerId) ==
-                  _YanE2eeCryptoEngine.normalizeParticipantId(_myUserId)) {
-                return;
-              }
-              if (action == 'invite' && !_incomingCallDialogVisible) {
-                final isVideo = payload['call_type'] == 'video';
-                final callerName =
-                    payload['caller_name']?.toString() ?? widget.lawyer.fullName;
-                _showIncomingCallModal(
-                  callerName: callerName,
-                  isVideo: isVideo,
-                );
-              }
+              _YanGlobalCallCenter.instance.handleIncomingSignalPayload(
+                Map<String, dynamic>.from(payload),
+                myUserIdOverride: _myUserId,
+              );
             },
           )
           .subscribe((status, error) {
@@ -7528,6 +7543,9 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
   /// Generates a real watermarked copy of the advocate's `#ariza` file so the client
   /// can open and inspect it with watermarks BEFORE confirming (`Qabul qilish`).
   /// Once confirmed, the original unwatermarked file is sent!
+  /// Builds a true diagonal background watermark for `.docx` (Word VML `<v:textpath>` background
+  /// header watermark) and `.pdf` (incremental diagonal rotated PDF page content stream overlay)
+  /// without inserting inline warning lines between paragraphs!
   Uint8List _buildWatermarkedArizaFileBytes({
     required Uint8List originalBytes,
     required String fileName,
@@ -7535,57 +7553,154 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     required String advocateName,
   }) {
     final lower = fileName.toLowerCase();
-    final watermarkBanner =
-        'YAN360 • HIMOYALANGAN KO‘RIK NUSXASI ($arizaId) — TASDIQLANMAGAN (QABUL QILISH KUTILMOQDA)';
 
-    // 1. For .docx files: inject bold red watermark banner paragraphs at top, middle, and bottom of word/document.xml
+    // 1. TRUE DIAGONAL BACKGROUND WATERMARK FOR WORD (.DOCX)
     if (lower.endsWith('.docx')) {
       try {
         final archive = ZipDecoder().decodeBytes(originalBytes);
         final outArchive = Archive();
+
+        // Standard WordprocessingML diagonal VML background watermark header XML
+        const watermarkHeaderXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+            'xmlns:v="urn:schemas-microsoft-com:vml" '
+            'xmlns:o="urn:schemas-microsoft-com:office:office">'
+            '<w:p>'
+            '<w:pPr><w:pStyle w:val="Header"/></w:pPr>'
+            '<w:r>'
+            '<w:rPr><w:noProof/></w:rPr>'
+            '<w:pict>'
+            '<v:shapetype id="_x0000_t136" coordsize="21600,21600" o:spt="136" adj="10800" path="m@7,l@8,m@5,21600l@6,21600e">'
+            '<v:formulas>'
+            '<v:f eqn="sum #0 0 10800"/>'
+            '<v:f eqn="prod #0 2 1"/>'
+            '<v:f eqn="sum 21600 0 @1"/>'
+            '<v:f eqn="sum 0 0 @2"/>'
+            '<v:f eqn="sum 21600 0 @3"/>'
+            '<v:f eqn="if @0 @3 0"/>'
+            '<v:f eqn="if @0 21600 @1"/>'
+            '<v:f eqn="if @0 0 @2"/>'
+            '<v:f eqn="if @0 @4 21600"/>'
+            '<v:f eqn="mid @5 @6"/>'
+            '<v:f eqn="mid @8 @5"/>'
+            '<v:f eqn="mid @7 @8"/>'
+            '<v:f eqn="mid @6 @7"/>'
+            '<v:f eqn="sum @6 0 @5"/>'
+            '</v:formulas>'
+            '<v:path textpathok="t" o:connecttype="custom" o:connectlocs="@9,0;@10,10800;@11,21600;@12,10800" o:connectangles="270,180,90,0"/>'
+            '<v:textpath on="t" fitshape="t"/>'
+            '<v:handles><v:h position="#0,bottomRight" xrange="6629,14971"/></v:handles>'
+            '<o:lock v:ext="edit" text="t" shapetype="t"/>'
+            '</v:shapetype>'
+            '<v:shape id="PowerPlusWaterMarkObject" o:spid="_x0000_s2049" type="#_x0000_t136" '
+            'style="position:absolute;margin-left:0;margin-top:0;width:468pt;height:136pt;rotation:315;'
+            'z-index:-251654144;mso-position-horizontal:center;mso-position-horizontal-relative:margin;'
+            'mso-position-vertical:center;mso-position-vertical-relative:margin" '
+            'o:allowincell="f" fillcolor="#B0BEC5" stroked="f">'
+            '<v:fill opacity=".32"/>'
+            '<v:textpath style="font-family:&quot;Arial&quot;;font-size:1pt" string="YAN360 • KO‘RIK NUSXASI"/>'
+            '</v:shape>'
+            '</w:pict>'
+            '</w:r>'
+            '</w:p>'
+            '</w:hdr>';
+
+        // Also inject a floating behind-text diagonal VML watermark shape once at the start of <w:body>
+        // so mobile DOCX viewers that ignore <w:hdr> still render a diagonal background watermark behind the text!
+        const bodyFloatingWatermarkParagraph =
+            '<w:p xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">'
+            '<w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr>'
+            '<w:r>'
+            '<w:rPr><w:noProof/></w:rPr>'
+            '<w:pict>'
+            '<v:shapetype id="_x0000_t136" coordsize="21600,21600" o:spt="136" adj="10800" path="m@7,l@8,m@5,21600l@6,21600e">'
+            '<v:path textpathok="t" o:connecttype="custom"/>'
+            '<v:textpath on="t" fitshape="t"/>'
+            '</v:shapetype>'
+            '<v:shape id="YanBodyWatermark1" type="#_x0000_t136" '
+            'style="position:absolute;margin-left:18pt;margin-top:180pt;width:440pt;height:120pt;rotation:315;'
+            'z-index:-251654144;mso-position-horizontal:center;mso-position-horizontal-relative:page;'
+            'mso-position-vertical:center;mso-position-vertical-relative:page" '
+            'o:allowincell="f" fillcolor="#90A4AE" stroked="f">'
+            '<v:fill opacity=".28"/>'
+            '<v:textpath style="font-family:&quot;Arial&quot;;font-size:1pt" string="YAN360 • KO‘RIK NUSXASI"/>'
+            '</v:shape>'
+            '</w:pict>'
+            '</w:r>'
+            '</w:p>';
+
+        const wmHeaderFileName = 'word/header_yan360_wm.xml';
+        const wmRelId = 'rIdYan360Wm99';
+
         for (final file in archive) {
-          if (file.isFile && file.name == 'word/document.xml') {
-            final xmlContent = utf8.decode(
-              file.content as List<int>,
-              allowMalformed: true,
-            );
-            final wmParagraphXml =
-                '<w:p>'
-                '<w:pPr><w:jc w:val="center"/></w:pPr>'
-                '<w:r><w:rPr><w:b/><w:color w:val="C62828"/><w:sz w:val="24"/></w:rPr>'
-                '<w:t>⚠️ $watermarkBanner ⚠️</w:t>'
-                '</w:r>'
-                '</w:p>';
-            var modifiedXml = xmlContent;
-            final bodyOpenIdx = modifiedXml.indexOf('<w:body>');
+          if (!file.isFile) continue;
+          final rawData = file.content as List<int>;
+
+          if (file.name == 'word/document.xml') {
+            var xml = utf8.decode(rawData, allowMalformed: true);
+            final bodyOpenIdx = xml.indexOf('<w:body>');
             if (bodyOpenIdx >= 0) {
               final insertPos = bodyOpenIdx + '<w:body>'.length;
-              modifiedXml =
-                  modifiedXml.substring(0, insertPos) +
-                  wmParagraphXml +
-                  modifiedXml.substring(insertPos);
+              xml =
+                  xml.substring(0, insertPos) +
+                  bodyFloatingWatermarkParagraph +
+                  xml.substring(insertPos);
             }
-            // Also inject watermark between paragraphs so the entire document is watermarked
-            var pCount = 0;
-            modifiedXml = modifiedXml.replaceAllMapped(
-              RegExp(r'</w:p>'),
-              (match) {
-                pCount++;
-                if (pCount % 3 == 0) {
-                  return '</w:p>$wmParagraphXml';
-                }
-                return '</w:p>';
-              },
-            );
-            final encodedXml = utf8.encode(modifiedXml);
+            // Attach headerReference to <w:sectPr> if not already referencing our watermark header
+            if (xml.contains('<w:sectPr')) {
+              xml = xml.replaceAllMapped(
+                RegExp(r'<w:sectPr([^>]*)>'),
+                (m) =>
+                    '<w:sectPr${m.group(1)}>'
+                    '<w:headerReference w:type="default" r:id="$wmRelId"/>'
+                    '<w:headerReference w:type="first" r:id="$wmRelId"/>'
+                    '<w:headerReference w:type="even" r:id="$wmRelId"/>',
+              );
+            }
+            final encoded = utf8.encode(xml);
             outArchive.addFile(
-              ArchiveFile('word/document.xml', encodedXml.length, encodedXml),
+              ArchiveFile(file.name, encoded.length, encoded),
             );
-          } else if (file.isFile) {
-            final data = file.content as List<int>;
-            outArchive.addFile(ArchiveFile(file.name, data.length, data));
+          } else if (file.name == 'word/_rels/document.xml.rels') {
+            var relsXml = utf8.decode(rawData, allowMalformed: true);
+            if (!relsXml.contains(wmRelId)) {
+              relsXml = relsXml.replaceFirst(
+                '</Relationships>',
+                '<Relationship Id="$wmRelId" '
+                    'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" '
+                    'Target="header_yan360_wm.xml"/></Relationships>',
+              );
+            }
+            final encoded = utf8.encode(relsXml);
+            outArchive.addFile(
+              ArchiveFile(file.name, encoded.length, encoded),
+            );
+          } else if (file.name == '[Content_Types].xml') {
+            var ctXml = utf8.decode(rawData, allowMalformed: true);
+            if (!ctXml.contains('header_yan360_wm.xml')) {
+              ctXml = ctXml.replaceFirst(
+                '</Types>',
+                '<Override PartName="/word/header_yan360_wm.xml" '
+                    'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>',
+              );
+            }
+            final encoded = utf8.encode(ctXml);
+            outArchive.addFile(
+              ArchiveFile(file.name, encoded.length, encoded),
+            );
+          } else {
+            outArchive.addFile(
+              ArchiveFile(file.name, rawData.length, rawData),
+            );
           }
         }
+
+        final hdrBytes = utf8.encode(watermarkHeaderXml);
+        outArchive.addFile(
+          ArchiveFile(wmHeaderFileName, hdrBytes.length, hdrBytes),
+        );
+
         final zipped = ZipEncoder().encode(outArchive);
         if (zipped != null && zipped.isNotEmpty) {
           return Uint8List.fromList(zipped);
@@ -7593,42 +7708,112 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
       } catch (_) {}
     }
 
-    // 2. For .txt / plain text files: interleave watermark lines
+    // 2. TRUE DIAGONAL WATERMARK FOR PDF (.PDF) — WORKS EVEN ON COMPRESSED / FLATEDECODE PDFS
+    if (lower.endsWith('.pdf')) {
+      try {
+        return _stampDiagonalPdfWatermark(originalBytes, arizaId);
+      } catch (_) {}
+    }
+
+    // 3. For .txt files
     if (lower.endsWith('.txt')) {
       try {
         final text = utf8.decode(originalBytes, allowMalformed: true);
-        final lines = text.split('\n');
         final buf = StringBuffer()
-          ..writeln('========================================================')
-          ..writeln('⚠️ $watermarkBanner')
-          ..writeln('Advokat: $advocateName • Asl fayl "Qabul qilish" bosilgach yuboriladi.')
-          ..writeln('========================================================\n');
-        for (var i = 0; i < lines.length; i++) {
-          buf.writeln(lines[i]);
-          if ((i + 1) % 5 == 0) {
-            buf.writeln('\n[ $watermarkBanner ]\n');
-          }
-        }
+          ..writeln('[ YAN360 • WATERMARK • KO‘RIK NUSXASI ($arizaId) ]\n')
+          ..writeln(text)
+          ..writeln('\n[ YAN360 • WATERMARK • KO‘RIK NUSXASI ($arizaId) ]');
         return Uint8List.fromList(utf8.encode(buf.toString()));
       } catch (_) {}
     }
 
-    // 3. For .pdf files: inject a visible watermark overlay stream into each page if possible
-    if (lower.endsWith('.pdf')) {
-      try {
-        final rawLatin = latin1.decode(originalBytes, allowInvalid: true);
-        const wmStream =
-            'q 0.82 0.12 0.12 rg /F1 14 Tf 1 0 0 1 48 770 Tm (YAN360 WATERMARK - TASDIQLANMAGAN NUSXA - QABUL QILISH KUTILMOQDA) Tj '
-            '1 0 0 1 48 410 Tm (YAN360 WATERMARK - HIMOYALANGAN KORIK NUSXASI) Tj '
-            '1 0 0 1 48 45 Tm (YAN360 WATERMARK - ASL NUSXA QABUL QILINGACH YUBORILADI) Tj Q';
-        if (rawLatin.contains('BT') && !rawLatin.contains('/Filter')) {
-          final patched = rawLatin.replaceFirst('BT', '$wmStream BT');
-          return Uint8List.fromList(latin1.encode(patched));
-        }
-      } catch (_) {}
+    return originalBytes;
+  }
+
+  /// Injects a diagonal 45-degree rotated semi-transparent watermark stream into every page
+  /// of a PDF file (including compressed FlateDecode PDFs) by adding a new PDF stream object
+  /// and appending its reference to each `/Type /Page` `/Contents` entry + `/Resources /Font`.
+  /// Injects a diagonal 45-degree rotated background watermark stream into every page
+  /// of a PDF file (including compressed FlateDecode PDFs) BEFORE the page content stream
+  /// so the watermark renders behind the text without covering it!
+  Uint8List _stampDiagonalPdfWatermark(Uint8List pdfBytes, String arizaId) {
+    final raw = latin1.decode(pdfBytes, allowInvalid: true);
+
+    var maxObjNum = 100;
+    for (final m in RegExp(r'(\d+)\s+0\s+obj').allMatches(raw)) {
+      final n = int.tryParse(m.group(1) ?? '') ?? 0;
+      if (n > maxObjNum) maxObjNum = n;
+    }
+    final fontObjNum = maxObjNum + 1;
+    final streamObjNum = maxObjNum + 2;
+
+    // Diagonal 45-degree rotated watermark graphics stream (3 centered diagonal lines across the page)
+    final wmContent =
+        'q\n'
+        '0.82 0.85 0.89 rg\n'
+        'BT\n'
+        '/FWM1 28 Tf\n'
+        '0.7071 0.7071 -0.7071 0.7071 95 140 Tm\n'
+        '(YAN360  WATERMARK  -  KORIK NUSXASI) Tj\n'
+        'ET\n'
+        'BT\n'
+        '/FWM1 28 Tf\n'
+        '0.7071 0.7071 -0.7071 0.7071 95 340 Tm\n'
+        '(YAN360  WATERMARK  -  $arizaId) Tj\n'
+        'ET\n'
+        'BT\n'
+        '/FWM1 28 Tf\n'
+        '0.7071 0.7071 -0.7071 0.7071 95 540 Tm\n'
+        '(YAN360  WATERMARK  -  KORIK NUSXASI) Tj\n'
+        'ET\n'
+        'Q\n';
+
+    // Prepend `streamObjNum 0 R` to `/Contents` so the watermark is drawn BEHIND the page text!
+    var patched = raw.replaceAllMapped(
+      RegExp(r'/Contents\s+(\d+\s+0\s+R)'),
+      (m) => '/Contents [$streamObjNum 0 R ${m.group(1)}]',
+    );
+    if (patched == raw) {
+      patched = raw.replaceAllMapped(
+        RegExp(r'/Contents\s*\[([^\]]*)\]'),
+        (m) => '/Contents [$streamObjNum 0 R ${m.group(1)}]',
+      );
     }
 
-    return originalBytes;
+    if (patched.contains('/Font')) {
+      patched = patched.replaceAllMapped(
+        RegExp(r'/Font\s*<<'),
+        (m) => '/Font << /FWM1 $fontObjNum 0 R ',
+      );
+    } else {
+      patched = patched.replaceAllMapped(
+        RegExp(r'/Resources\s*<<'),
+        (m) => '/Resources << /Font << /FWM1 $fontObjNum 0 R >> ',
+      );
+    }
+
+    final extraObjects =
+        '\n$fontObjNum 0 obj\n'
+        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\n'
+        'endobj\n'
+        '$streamObjNum 0 obj\n'
+        '<< /Length ${wmContent.length} >>\n'
+        'stream\n'
+        '$wmContent'
+        'endstream\n'
+        'endobj\n';
+
+    final eofIdx = patched.lastIndexOf('%%EOF');
+    if (eofIdx > 0) {
+      patched =
+          patched.substring(0, eofIdx) +
+          extraObjects +
+          '%%EOF\n';
+    } else {
+      patched = '$patched$extraObjects%%EOF\n';
+    }
+
+    return Uint8List.fromList(latin1.encode(patched));
   }
 
   /// Downloads either the WATERMARKED inspection copy (when `useWatermarkedCopy = true`)
@@ -8044,9 +8229,15 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
       status: 'rejected',
     );
 
+    final isAdvocateSender =
+        widget.profile.roleType == UserRole.advokat ||
+        widget.profile.roleType == UserRole.yordamchi;
+    final clientId = isAdvocateSender ? _peerUserId : _myUserId;
+    final advocateId = isAdvocateSender ? _myUserId : _peerUserId;
+
     YanRoleDataCatalog.markArizaRejectedByClient(
-      clientId: _myUserId,
-      advocateId: _peerUserId,
+      clientId: clientId,
+      advocateId: advocateId,
       rejectionReason: mandatoryReason,
     );
     await _YanE2eeCryptoEngine.persistArizaOrdersLedger();
@@ -8057,16 +8248,14 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
         'message_id': msg.id,
         'media_meta': updatedMeta,
         'decision': 'rejected',
+        'rejection_reason': mandatoryReason,
       },
     );
 
-    _dispatchInstantEncryptedMessage(
-      text:
-          '❌ ARIZA RAD ETILDI (${meta.fileName})\n'
-          '• Xatolik / Kamchilik izohi: $mandatoryReason\n'
-          '• Holati: Taymer davom etmoqda — kamchilikni tuzatib qayta #ariza yuboring.',
-      mediaType: _ChatMediaType.text,
-    );
+    // Save state without sending any automatic follow-up message!
+    // The original #ariza card stays red with the rejection reason until the advocate sends a new one.
+    await _saveLocalEncryptedCache();
+    await _syncMyRoomStateToProfileEnvelope(isOnline: true);
   }
 
   Future<void> _openFiveEmptyStarsRatingSheet(
@@ -8476,140 +8665,46 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
   Future<void> _startE2eeCall({
     required bool isVideo,
     bool isAnswering = false,
+    String? existingCallId,
   }) async {
-    if (!isAnswering) {
-      try {
-        await _roomChannel?.sendBroadcastMessage(
-          event: 'call_signal',
-          payload: <String, dynamic>{
-            'action': 'invite',
-            'call_type': isVideo ? 'video' : 'audio',
-            'caller_id': _myUserId,
-            'caller_name': widget.profile.displayName,
-            'timestamp': DateTime.now().toUtc().toIso8601String(),
-          },
-        );
-      } catch (_) {}
-    }
+    final callId = existingCallId ??
+        'CALL-${DateTime.now().millisecondsSinceEpoch}-${_myUserId.hashCode.abs()}';
 
     if (!mounted) return;
-    final durationSeconds = await Navigator.of(context).push<int>(
-      MaterialPageRoute<int>(
+    final outcome = await Navigator.of(context).push<_TelegramCallOutcome>(
+      MaterialPageRoute<_TelegramCallOutcome>(
         builder: (_) => _E2eeLiveCallScreen(
+          callId: callId,
+          peerId: _peerUserId,
           peerName: widget.lawyer.fullName,
           peerInitials: widget.lawyer.initials,
           peerSubtitle: widget.lawyer.specialization,
-          isInitialVideo: isVideo,
-          roomChannel: _roomChannel,
           myUserId: _myUserId,
+          myUserName: widget.profile.displayName,
+          roomKey: _roomKey,
+          roomChannel: _roomChannel,
+          isInitialVideo: isVideo,
+          isCaller: !isAnswering,
         ),
       ),
     );
 
-    if (durationSeconds != null && mounted) {
-      final mins = (durationSeconds ~/ 60).toString().padLeft(2, '0');
-      final secs = (durationSeconds % 60).toString().padLeft(2, '0');
-      final label = isVideo
-          ? 'E2EE Video qo‘ng‘iroq yakunlandi ($mins:$secs)'
-          : 'E2EE Audio qo‘ng‘iroq yakunlandi ($mins:$secs)';
+    if (outcome != null && mounted && !isAnswering) {
+      // Only the caller dispatches the Telegram-style call log message so it is logged once with exact status & duration!
+      final callMeta = _TelegramCallLogMeta(
+        callId: callId,
+        callType: outcome.wasVideo ? 'video' : 'audio',
+        status: outcome.status, // 'completed', 'missed', 'declined', 'canceled'
+        durationSeconds: outcome.durationSeconds,
+        callerId: _myUserId,
+      ).encode();
+
       _dispatchInstantEncryptedMessage(
-        text: label,
+        text: outcome.summaryTitle,
         mediaType: _ChatMediaType.callLog,
-        mediaMeta: isVideo
-            ? 'HD Video • $mins:$secs'
-            : 'HD Audio • $mins:$secs',
+        mediaMeta: callMeta,
       );
     }
-  }
-
-  void _showIncomingCallModal({
-    required String callerName,
-    required bool isVideo,
-  }) {
-    _incomingCallDialogVisible = true;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: YanColors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: <Widget>[
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: YanColors.successGreen.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isVideo ? Icons.videocam_rounded : Icons.call_rounded,
-                color: YanColors.successGreen,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                isVideo
-                    ? 'Kiruvchi E2EE Video qo‘ng‘iroq'
-                    : 'Kiruvchi E2EE Audio qo‘ng‘iroq',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: YanColors.primaryNavy,
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          '$callerName siz bilan E2EE himoyalangan ${isVideo ? "video" : "ovozli"} aloqaga ulanmoqchi.',
-          style: const TextStyle(
-            fontSize: 13,
-            color: YanColors.mutedText,
-            height: 1.4,
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () {
-              _incomingCallDialogVisible = false;
-              Navigator.pop(ctx);
-            },
-            child: const Text(
-              'Rad etish',
-              style: TextStyle(
-                color: YanColors.destructiveRed,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: YanColors.successGreen,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            onPressed: () {
-              _incomingCallDialogVisible = false;
-              Navigator.pop(ctx);
-              _startE2eeCall(isVideo: isVideo, isAnswering: true);
-            },
-            icon: Icon(
-              isVideo ? Icons.videocam_rounded : Icons.call_rounded,
-              size: 18,
-            ),
-            label: const Text(
-              'Javob berish',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
-      ),
-    ).whenComplete(() => _incomingCallDialogVisible = false);
   }
 
   void _showMessageDetailsSheet(_ChatMessageItem msg) {
@@ -8787,6 +8882,142 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     final minutesPart = (seconds ~/ 60).toString().padLeft(2, '0');
     final secondsPart = (seconds % 60).toString().padLeft(2, '0');
     return '$minutesPart:$secondsPart';
+  }
+
+  Widget _buildTelegramCallLogCard(_ChatMessageItem m, bool mine) {
+    final parsed = _TelegramCallLogMeta.tryParse(m.mediaMeta, m.text, m.senderId);
+    final isVideo = parsed.callType == 'video';
+    final isOutgoing = YanRoleDataCatalog.isSameParticipant(
+      parsed.callerId.isNotEmpty ? parsed.callerId : m.senderId,
+      _myUserId,
+    );
+    final isMissedOrFailed = parsed.status == 'missed' ||
+        parsed.status == 'declined' ||
+        parsed.status == 'canceled';
+
+    String titleText;
+    if (parsed.status == 'completed') {
+      titleText = isOutgoing
+          ? (isVideo ? 'Chiquvchi video qo‘ng‘iroq' : 'Chiquvchi audio qo‘ng‘iroq')
+          : (isVideo ? 'Kiruvchi video qo‘ng‘iroq' : 'Kiruvchi audio qo‘ng‘iroq');
+    } else if (parsed.status == 'declined') {
+      titleText = isOutgoing
+          ? 'Rad etilgan qo‘ng‘iroq'
+          : 'Javobsiz / Rad etilgan qo‘ng‘iroq';
+    } else if (parsed.status == 'canceled') {
+      titleText = isOutgoing
+          ? 'Bekor qilingan qo‘ng‘iroq'
+          : 'O‘tkazib yuborilgan qo‘ng‘iroq';
+    } else {
+      titleText = isOutgoing
+          ? 'Javobsiz qo‘ng‘iroq'
+          : 'O‘tkazib yuborilgan qo‘ng‘iroq';
+    }
+
+    final subtitleText = parsed.status == 'completed'
+        ? '${parsed.formattedDuration} • Zero-Knowledge E2EE'
+        : (isVideo ? 'HD Video • Javob berilmadi' : 'Ovozli aloqa • Javob berilmadi');
+
+    final arrowIcon = isOutgoing
+        ? Icons.call_made_rounded
+        : (isMissedOrFailed ? Icons.call_missed_rounded : Icons.call_received_rounded);
+    final arrowColor = isMissedOrFailed
+        ? (mine ? const Color(0xFFFFB4AB) : YanColors.destructiveRed)
+        : (mine ? const Color(0xFF6EE7B7) : YanColors.successGreen);
+
+    return GestureDetector(
+      onTap: () => _startE2eeCall(isVideo: isVideo),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: mine
+              ? Colors.white.withValues(alpha: 0.14)
+              : YanColors.lightBlue,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isMissedOrFailed
+                    ? YanColors.destructiveRed.withValues(
+                        alpha: mine ? 0.85 : 0.14,
+                      )
+                    : (mine
+                          ? Colors.white.withValues(alpha: 0.22)
+                          : YanColors.primaryBlue.withValues(alpha: 0.14)),
+              ),
+              child: Icon(
+                isVideo ? Icons.videocam_rounded : Icons.call_rounded,
+                size: 20,
+                color: isMissedOrFailed
+                    ? (mine ? Colors.white : YanColors.destructiveRed)
+                    : (mine ? Colors.white : YanColors.primaryBlue),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    titleText,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: mine ? Colors.white : YanColors.primaryNavy,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Icon(arrowIcon, size: 14, color: arrowColor),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          subtitleText,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.2,
+                            fontWeight: FontWeight.w700,
+                            color: mine
+                                ? Colors.white.withValues(alpha: 0.88)
+                                : YanColors.mutedText,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: mine
+                    ? Colors.white.withValues(alpha: 0.2)
+                    : YanColors.white,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                'Qayta terish',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: mine ? Colors.white : YanColors.primaryBlue,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildInteractiveArizaDeliveryControls(
@@ -9289,7 +9520,8 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
               ),
               const SizedBox(width: 6),
               GestureDetector(
-                onTap: _openCallOptionsSheet,
+                onTap: () => _startE2eeCall(isVideo: false),
+                onLongPress: _openCallOptionsSheet,
                 child: Container(
                   width: 39,
                   height: 39,
@@ -9582,15 +9814,15 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                             ),
                           ),
                           const SizedBox(height: 7),
+                        ] else if (m.mediaType == _ChatMediaType.callLog) ...<Widget>[
+                          _buildTelegramCallLogCard(m, mine),
                         ] else if (m.mediaType != _ChatMediaType.text &&
                             chatFileMeta == null) ...<Widget>[
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: <Widget>[
                               Icon(
-                                m.mediaType == _ChatMediaType.callLog
-                                    ? Icons.phone_in_talk_rounded
-                                    : m.mediaType == _ChatMediaType.voice
+                                m.mediaType == _ChatMediaType.voice
                                     ? Icons.mic_rounded
                                     : m.mediaType == _ChatMediaType.video
                                     ? Icons.videocam_rounded
@@ -9619,9 +9851,11 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                           ),
                           const SizedBox(height: 4),
                         ],
-                        if (chatFileMeta == null ||
-                            (m.text.trim().isNotEmpty &&
-                                m.text.trim() != (chatFileMeta['name'] ?? '').trim()))
+                        if (m.mediaType != _ChatMediaType.callLog &&
+                            (chatFileMeta == null ||
+                                (m.text.trim().isNotEmpty &&
+                                    m.text.trim() !=
+                                        (chatFileMeta['name'] ?? '').trim())))
                           Text(
                             m.text,
                             style: TextStyle(
@@ -9853,56 +10087,653 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
 }
 
 // ============================================================================
-// REAL-TIME E2EE AUDIO & VIDEO CALL SCREEN (USABLE BY ADVOCATE & CLIENT)
+// TELEGRAM-GRADE GLOBAL E2EE CALL ENGINE, FULL-SCREEN RINGING & CALL STATISTICS
 // ============================================================================
+
+class _TelegramCallOutcome {
+  final String callId;
+  final String status; // 'completed', 'missed', 'declined', 'canceled'
+  final int durationSeconds;
+  final bool wasVideo;
+
+  const _TelegramCallOutcome({
+    required this.callId,
+    required this.status,
+    required this.durationSeconds,
+    required this.wasVideo,
+  });
+
+  String get formattedDuration {
+    final mins = (durationSeconds ~/ 60).toString().padLeft(2, '0');
+    final secs = (durationSeconds % 60).toString().padLeft(2, '0');
+    return '$mins:$secs';
+  }
+
+  String get summaryTitle {
+    final kind = wasVideo ? 'Video qo‘ng‘iroq' : 'Audio qo‘ng‘iroq';
+    switch (status) {
+      case 'completed':
+        return '$kind ($formattedDuration)';
+      case 'declined':
+        return 'Rad etilgan ${kind.toLowerCase()}';
+      case 'canceled':
+        return 'Bekor qilingan ${kind.toLowerCase()}';
+      case 'missed':
+      default:
+        return 'Javobsiz ${kind.toLowerCase()}';
+    }
+  }
+}
+
+class _TelegramCallLogMeta {
+  final String callId;
+  final String callType; // 'audio' | 'video'
+  final String status; // 'completed' | 'missed' | 'declined' | 'canceled'
+  final int durationSeconds;
+  final String callerId;
+
+  const _TelegramCallLogMeta({
+    required this.callId,
+    required this.callType,
+    required this.status,
+    required this.durationSeconds,
+    required this.callerId,
+  });
+
+  String get formattedDuration {
+    final mins = (durationSeconds ~/ 60).toString().padLeft(2, '0');
+    final secs = (durationSeconds % 60).toString().padLeft(2, '0');
+    return '$mins:$secs';
+  }
+
+  String encode() {
+    return 'CALL_LOG_V2|id:${Uri.encodeComponent(callId)}|type:$callType|status:$status|dur:$durationSeconds|caller:${Uri.encodeComponent(callerId)}';
+  }
+
+  static _TelegramCallLogMeta tryParse(
+    String? rawMeta,
+    String fallbackText,
+    String fallbackSenderId,
+  ) {
+    if (rawMeta != null && rawMeta.startsWith('CALL_LOG_V2|')) {
+      final map = <String, String>{};
+      for (final part in rawMeta.split('|').skip(1)) {
+        final idx = part.indexOf(':');
+        if (idx > 0) {
+          map[part.substring(0, idx)] = Uri.decodeComponent(
+            part.substring(idx + 1),
+          );
+        }
+      }
+      return _TelegramCallLogMeta(
+        callId: map['id'] ?? 'CALL',
+        callType: map['type'] ?? 'audio',
+        status: map['status'] ?? 'completed',
+        durationSeconds: int.tryParse(map['dur'] ?? '0') ?? 0,
+        callerId: map['caller'] ?? fallbackSenderId,
+      );
+    }
+    final isVideo =
+        (rawMeta?.toLowerCase().contains('video') ?? false) ||
+        fallbackText.toLowerCase().contains('video');
+    var dur = 0;
+    final match = RegExp(r'(\d{2}):(\d{2})').firstMatch(rawMeta ?? fallbackText);
+    if (match != null) {
+      final m = int.tryParse(match.group(1) ?? '0') ?? 0;
+      final s = int.tryParse(match.group(2) ?? '0') ?? 0;
+      dur = m * 60 + s;
+    }
+    return _TelegramCallLogMeta(
+      callId: 'LEGACY',
+      callType: isVideo ? 'video' : 'audio',
+      status: dur > 0 ? 'completed' : 'missed',
+      durationSeconds: dur,
+      callerId: fallbackSenderId,
+    );
+  }
+}
+
+/// Global 0.00s Call Signaling & Offline Wake-Up Engine:
+/// - Listens on a global Supabase Realtime broadcast channel (`yan360_global_call_bus`)
+///   AND polls the current user's `profiles.public_key` envelope for `active_call_signal`
+///   every 1.5 seconds so the phone rings on ANY screen (or immediately when waking from background),
+///   even if the recipient is not inside the chat page!
+class _YanGlobalCallCenter {
+  _YanGlobalCallCenter._();
+  static final _YanGlobalCallCenter instance = _YanGlobalCallCenter._();
+
+  RealtimeChannel? _globalChannel;
+  Timer? _envelopeWatchTimer;
+  String? _activeCallId;
+  final Set<String> _handledCallIds = <String>{};
+  final ValueNotifier<Map<String, dynamic>?> latestSignalNotifier =
+      ValueNotifier<Map<String, dynamic>?>(null);
+
+  String _resolveMyId([String? overrideId]) {
+    if (overrideId != null && overrideId.trim().isNotEmpty) {
+      return overrideId.trim();
+    }
+    final authId = Supabase.instance.client.auth.currentUser?.id ?? '';
+    if (authId.trim().isNotEmpty) return authId.trim();
+    return userProfile.value.clientId.trim();
+  }
+
+  void startGlobalListening() {
+    if (_globalChannel == null) {
+      try {
+        final ch = Supabase.instance.client.channel(
+          'yan360_global_call_bus',
+          opts: const RealtimeChannelConfig(self: false, ack: false),
+        );
+        ch
+            .onBroadcast(
+              event: 'call_signal',
+              callback: (payload) {
+                handleIncomingSignalPayload(Map<String, dynamic>.from(payload));
+              },
+            )
+            .subscribe();
+        _globalChannel = ch;
+      } catch (_) {}
+    }
+
+    _envelopeWatchTimer ??= Timer.periodic(
+      const Duration(milliseconds: 1600),
+      (_) => _pollMyProfileEnvelopeForIncomingCall(),
+    );
+  }
+
+  void markCallActive(String callId) {
+    _activeCallId = callId;
+    _handledCallIds.add(callId);
+  }
+
+  void clearActiveCall(String callId) {
+    if (_activeCallId == callId) {
+      _activeCallId = null;
+    }
+  }
+
+  Future<void> dispatchCallSignal({
+    required String callId,
+    required String action, // 'invite' | 'ringing' | 'accept' | 'decline' | 'cancel' | 'hangup' | 'media_state'
+    required String callerId,
+    required String callerName,
+    required String callerInitials,
+    required String calleeId,
+    required String calleeName,
+    required String roomKey,
+    required bool isVideo,
+    int durationSeconds = 0,
+    bool isMuted = false,
+    RealtimeChannel? roomChannel,
+  }) async {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    final payload = <String, dynamic>{
+      'call_id': callId,
+      'action': action,
+      'call_type': isVideo ? 'video' : 'audio',
+      'caller_id': callerId,
+      'caller_name': callerName,
+      'caller_initials': callerInitials,
+      'callee_id': calleeId,
+      'callee_name': calleeName,
+      'room_key': roomKey,
+      'duration': durationSeconds,
+      'is_muted': isMuted,
+      'timestamp': nowIso,
+    };
+
+    try {
+      await _globalChannel?.sendBroadcastMessage(
+        event: 'call_signal',
+        payload: payload,
+      );
+    } catch (_) {}
+
+    try {
+      await roomChannel?.sendBroadcastMessage(
+        event: 'call_signal',
+        payload: payload,
+      );
+    } catch (_) {}
+
+    // Also persist into the target peer's `profiles.public_key` envelope so even if the peer
+    // was on another tab or briefly offline, their device rings within 1.5s!
+    final targetProfileId = (action == 'invite' ||
+            action == 'cancel' ||
+            action == 'hangup')
+        ? calleeId
+        : callerId;
+    if (targetProfileId.trim().isNotEmpty && action != 'media_state') {
+      _writeSignalToProfileEnvelope(targetProfileId, payload);
+    }
+  }
+
+  Future<void> _writeSignalToProfileEnvelope(
+    String targetUserId,
+    Map<String, dynamic> signalPayload,
+  ) async {
+    try {
+      final row = await Supabase.instance.client
+          .from('profiles')
+          .select('id, public_key')
+          .eq('id', targetUserId)
+          .maybeSingle();
+      if (row == null) return;
+      final existingPubKey = row['public_key']?.toString();
+      final env = _YanE2eeCryptoEngine.decodeProfileEnvelope(existingPubKey);
+      env['active_call_signal'] = signalPayload;
+      final newPubKey = _YanE2eeCryptoEngine.encodeProfileEnvelope(
+        existingPubKey,
+        env,
+      );
+      await Supabase.instance.client
+          .from('profiles')
+          .update(<String, dynamic>{'public_key': newPubKey})
+          .eq('id', targetUserId);
+    } catch (_) {}
+  }
+
+  Future<void> _pollMyProfileEnvelopeForIncomingCall() async {
+    final myId = _resolveMyId();
+    if (myId.isEmpty) return;
+    try {
+      final row = await Supabase.instance.client
+          .from('profiles')
+          .select('public_key')
+          .eq('id', myId)
+          .maybeSingle();
+      if (row == null) return;
+      final pubKey = row['public_key']?.toString();
+      if (pubKey == null ||
+          !pubKey.contains(_YanE2eeCryptoEngine._envelopeSeparator)) {
+        return;
+      }
+      final env = _YanE2eeCryptoEngine.decodeProfileEnvelope(pubKey);
+      final rawSig = env['active_call_signal'];
+      if (rawSig is Map) {
+        final sig = Map<String, dynamic>.from(rawSig);
+        final ts = DateTime.tryParse(sig['timestamp']?.toString() ?? '');
+        if (ts != null &&
+            DateTime.now().toUtc().difference(ts).inSeconds <= 45) {
+          handleIncomingSignalPayload(sig, myUserIdOverride: myId);
+        }
+      }
+    } catch (_) {}
+  }
+
+  void handleIncomingSignalPayload(
+    Map<String, dynamic> payload, {
+    String? myUserIdOverride,
+  }) {
+    final myId = _resolveMyId(myUserIdOverride);
+    if (myId.isEmpty) return;
+
+    final callId = payload['call_id']?.toString() ?? '';
+    final action = payload['action']?.toString() ?? '';
+    final callerId = payload['caller_id']?.toString() ?? '';
+    final calleeId = payload['callee_id']?.toString() ?? '';
+
+    final isForMeAsCallee =
+        calleeId.isEmpty ||
+        YanRoleDataCatalog.isSameParticipant(calleeId, myId);
+    final isForMeAsCaller = YanRoleDataCatalog.isSameParticipant(
+      callerId,
+      myId,
+    );
+
+    if (!isForMeAsCallee && !isForMeAsCaller) return;
+
+    // Broadcast to any open _E2eeLiveCallScreen
+    latestSignalNotifier.value = payload;
+
+    // If this is a new incoming call invite for me and I am not already in this call,
+    // immediately present the full-screen Telegram Incoming Call Ringing screen!
+    if (action == 'invite' &&
+        !isForMeAsCaller &&
+        isForMeAsCallee &&
+        callId.isNotEmpty &&
+        _activeCallId == null &&
+        !_handledCallIds.contains(callId)) {
+      _handledCallIds.add(callId);
+      _activeCallId = callId;
+
+      final callerName =
+          payload['caller_name']?.toString() ?? 'YAN360 Foydalanuvchisi';
+      final callerInitials =
+          payload['caller_initials']?.toString() ??
+          (callerName.isNotEmpty ? callerName[0].toUpperCase() : 'Y');
+      final isVideo = payload['call_type'] == 'video';
+      final roomKey =
+          payload['room_key']?.toString() ??
+          _YanE2eeCryptoEngine.buildCanonicalRoomKey(myId, callerId);
+
+      // Immediately notify caller that our phone is ringing ("Diyorlanmoqda / Chaqirolmoqda...")
+      dispatchCallSignal(
+        callId: callId,
+        action: 'ringing',
+        callerId: callerId,
+        callerName: callerName,
+        callerInitials: callerInitials,
+        calleeId: myId,
+        calleeName: userProfile.value.displayName,
+        roomKey: roomKey,
+        isVideo: isVideo,
+      );
+
+      final nav = yanRootNavigatorKey.currentState;
+      if (nav != null) {
+        nav
+            .push<_TelegramCallOutcome>(
+              MaterialPageRoute<_TelegramCallOutcome>(
+                fullscreenDialog: true,
+                builder: (_) => _E2eeLiveCallScreen(
+                  callId: callId,
+                  peerId: callerId,
+                  peerName: callerName,
+                  peerInitials: callerInitials,
+                  peerSubtitle: isVideo
+                      ? 'Kiruvchi HD E2EE Video qo‘ng‘iroq'
+                      : 'Kiruvchi E2EE Audio qo‘ng‘iroq',
+                  myUserId: myId,
+                  myUserName: userProfile.value.displayName,
+                  roomKey: roomKey,
+                  roomChannel: null,
+                  isInitialVideo: isVideo,
+                  isCaller: false,
+                ),
+              ),
+            )
+            .whenComplete(() => clearActiveCall(callId));
+      } else {
+        clearActiveCall(callId);
+      }
+    }
+  }
+}
+
 class _E2eeLiveCallScreen extends StatefulWidget {
+  final String callId;
+  final String peerId;
   final String peerName;
   final String peerInitials;
   final String peerSubtitle;
-  final bool isInitialVideo;
-  final RealtimeChannel? roomChannel;
   final String myUserId;
+  final String myUserName;
+  final String roomKey;
+  final RealtimeChannel? roomChannel;
+  final bool isInitialVideo;
+  final bool isCaller;
 
   const _E2eeLiveCallScreen({
+    required this.callId,
+    required this.peerId,
     required this.peerName,
     required this.peerInitials,
     required this.peerSubtitle,
-    required this.isInitialVideo,
-    required this.roomChannel,
     required this.myUserId,
+    required this.myUserName,
+    required this.roomKey,
+    required this.roomChannel,
+    required this.isInitialVideo,
+    required this.isCaller,
   });
 
   @override
   State<_E2eeLiveCallScreen> createState() => _E2eeLiveCallScreenState();
 }
 
-class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen> {
+enum _TelegramCallStage {
+  outgoingCalling, // Caller: "Ulanmoqda..."
+  outgoingRinging, // Caller: "Chaqirilmoqda..." (Callee's phone is ringing!)
+  incomingRinging, // Callee: Full-screen ringing with Accept / Decline
+  connected, // Active call with ticking MM:SS clock
+  ended, // Brief closing state
+}
+
+class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
+    with SingleTickerProviderStateMixin {
+  late _TelegramCallStage _stage;
   late bool _isVideoEnabled;
+  bool _isPeerVideoEnabled = false;
   bool _isMuted = false;
+  bool _isPeerMuted = false;
   bool _isSpeakerOn = true;
   bool _isFrontCamera = true;
   int _elapsedSeconds = 0;
-  bool _active = true;
+  bool _closed = false;
+
+  Timer? _callClockTimer;
+  Timer? _ringtoneLoopTimer;
+  Timer? _noAnswerTimeoutTimer;
+  late final AnimationController _pulseController;
+
+  // 4-emoji Telegram E2EE key verification fingerprint derived deterministically from roomKey + callId
+  late final List<String> _e2eeEmojis;
+
+  static const List<String> _emojiPool = <String>[
+    '🛡️', '🔑', '⚖️', '🏛️', '💎', '🦅', '🦁', '🌙',
+    '⭐', '🔥', '🏔️', '🌊', '🍀', '👑', '🚀', '⚡',
+  ];
 
   @override
   void initState() {
     super.initState();
+    _YanGlobalCallCenter.instance.markCallActive(widget.callId);
     _isVideoEnabled = widget.isInitialVideo;
-    _startCallClock();
+    _isPeerVideoEnabled = widget.isInitialVideo;
+    _stage = widget.isCaller
+        ? _TelegramCallStage.outgoingCalling
+        : _TelegramCallStage.incomingRinging;
+
+    _e2eeEmojis = _deriveVerificationEmojis('${widget.roomKey}|${widget.callId}');
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+
+    _YanGlobalCallCenter.instance.latestSignalNotifier.addListener(
+      _onGlobalCallSignal,
+    );
+
+    _startRingtoneAndVibrationLoop();
+
+    if (widget.isCaller) {
+      _sendSignal('invite');
+      // Timeout after 45 seconds if callee does not answer
+      _noAnswerTimeoutTimer = Timer(const Duration(seconds: 45), () {
+        if (!_closed && _stage != _TelegramCallStage.connected) {
+          _sendSignal('cancel');
+          _finishCallWithOutcome('missed');
+        }
+      });
+    } else {
+      _noAnswerTimeoutTimer = Timer(const Duration(seconds: 45), () {
+        if (!_closed && _stage == _TelegramCallStage.incomingRinging) {
+          _finishCallWithOutcome('missed');
+        }
+      });
+    }
+  }
+
+  List<String> _deriveVerificationEmojis(String seed) {
+    var hash = 0x811C9DC5;
+    for (final unit in seed.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0xFFFFFFFF;
+    }
+    return List<String>.generate(4, (i) {
+      final idx = ((hash >> (i * 4)) + i * 7) % _emojiPool.length;
+      return _emojiPool[idx.abs()];
+    });
+  }
+
+  void _startRingtoneAndVibrationLoop() {
+    _triggerRingPulse();
+    _ringtoneLoopTimer = Timer.periodic(
+      const Duration(milliseconds: 1500),
+      (_) {
+        if (_closed ||
+            (_stage != _TelegramCallStage.incomingRinging &&
+                _stage != _TelegramCallStage.outgoingCalling &&
+                _stage != _TelegramCallStage.outgoingRinging)) {
+          _ringtoneLoopTimer?.cancel();
+          return;
+        }
+        _triggerRingPulse();
+      },
+    );
+  }
+
+  Future<void> _triggerRingPulse() async {
+    try {
+      if (_stage == _TelegramCallStage.incomingRinging) {
+        // Strong incoming phone ring vibration + system alert sound
+        await HapticFeedback.heavyImpact();
+        await SystemSound.play(SystemSoundType.alert);
+        await Future<void>.delayed(const Duration(milliseconds: 220));
+        await HapticFeedback.vibrate();
+      } else {
+        // Soft outgoing dial-tone pulse for caller
+        await HapticFeedback.selectionClick();
+        await SystemSound.play(SystemSoundType.click);
+      }
+    } catch (_) {}
+  }
+
+  void _sendSignal(String action) {
+    final myInitials = widget.myUserName.trim().isNotEmpty
+        ? widget.myUserName.trim()[0].toUpperCase()
+        : 'Y';
+    _YanGlobalCallCenter.instance.dispatchCallSignal(
+      callId: widget.callId,
+      action: action,
+      callerId: widget.isCaller ? widget.myUserId : widget.peerId,
+      callerName: widget.isCaller ? widget.myUserName : widget.peerName,
+      callerInitials: widget.isCaller ? myInitials : widget.peerInitials,
+      calleeId: widget.isCaller ? widget.peerId : widget.myUserId,
+      calleeName: widget.isCaller ? widget.peerName : widget.myUserName,
+      roomKey: widget.roomKey,
+      isVideo: _isVideoEnabled,
+      durationSeconds: _elapsedSeconds,
+      isMuted: _isMuted,
+      roomChannel: widget.roomChannel,
+    );
+  }
+
+  void _onGlobalCallSignal() {
+    final sig = _YanGlobalCallCenter.instance.latestSignalNotifier.value;
+    if (sig == null || _closed) return;
+    final sigCallId = sig['call_id']?.toString() ?? '';
+    if (sigCallId != widget.callId) return;
+
+    final action = sig['action']?.toString() ?? '';
+    if (action == 'ringing' &&
+        widget.isCaller &&
+        _stage == _TelegramCallStage.outgoingCalling) {
+      if (mounted) {
+        setState(() => _stage = _TelegramCallStage.outgoingRinging);
+      }
+    } else if (action == 'accept' &&
+        _stage != _TelegramCallStage.connected) {
+      _transitionToConnected();
+    } else if (action == 'decline') {
+      _finishCallWithOutcome('declined');
+    } else if (action == 'cancel') {
+      _finishCallWithOutcome('canceled');
+    } else if (action == 'hangup') {
+      final remoteDur = (sig['duration'] as num?)?.toInt() ?? _elapsedSeconds;
+      if (remoteDur > _elapsedSeconds) {
+        _elapsedSeconds = remoteDur;
+      }
+      _finishCallWithOutcome(
+        _stage == _TelegramCallStage.connected || _elapsedSeconds > 0
+            ? 'completed'
+            : 'canceled',
+      );
+    } else if (action == 'media_state') {
+      if (mounted) {
+        setState(() {
+          _isPeerVideoEnabled = sig['call_type'] == 'video';
+          _isPeerMuted = sig['is_muted'] == true;
+        });
+      }
+    }
+  }
+
+  void _acceptIncomingCall() {
+    HapticFeedback.mediumImpact();
+    _sendSignal('accept');
+    _transitionToConnected();
+  }
+
+  void _declineIncomingCall() {
+    HapticFeedback.heavyImpact();
+    _sendSignal('decline');
+    _finishCallWithOutcome('declined');
+  }
+
+  void _transitionToConnected() {
+    _ringtoneLoopTimer?.cancel();
+    _noAnswerTimeoutTimer?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _stage = _TelegramCallStage.connected;
+    });
+    _callClockTimer?.cancel();
+    _callClockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_closed || !mounted) return;
+      setState(() => _elapsedSeconds++);
+    });
+  }
+
+  void _hangupOrCancelCall() {
+    HapticFeedback.mediumImpact();
+    if (_stage == _TelegramCallStage.connected) {
+      _sendSignal('hangup');
+      _finishCallWithOutcome('completed');
+    } else if (widget.isCaller) {
+      _sendSignal('cancel');
+      _finishCallWithOutcome('canceled');
+    } else {
+      _sendSignal('decline');
+      _finishCallWithOutcome('declined');
+    }
+  }
+
+  void _finishCallWithOutcome(String status) {
+    if (_closed) return;
+    _closed = true;
+    _ringtoneLoopTimer?.cancel();
+    _noAnswerTimeoutTimer?.cancel();
+    _callClockTimer?.cancel();
+    _YanGlobalCallCenter.instance.clearActiveCall(widget.callId);
+
+    if (!mounted) return;
+    Navigator.of(context).pop(
+      _TelegramCallOutcome(
+        callId: widget.callId,
+        status: status,
+        durationSeconds: _elapsedSeconds,
+        wasVideo: _isVideoEnabled,
+      ),
+    );
   }
 
   @override
   void dispose() {
-    _active = false;
+    _closed = true;
+    _ringtoneLoopTimer?.cancel();
+    _noAnswerTimeoutTimer?.cancel();
+    _callClockTimer?.cancel();
+    _YanGlobalCallCenter.instance.latestSignalNotifier.removeListener(
+      _onGlobalCallSignal,
+    );
+    _YanGlobalCallCenter.instance.clearActiveCall(widget.callId);
+    _pulseController.dispose();
     super.dispose();
-  }
-
-  Future<void> _startCallClock() async {
-    while (_active && mounted) {
-      await Future<void>.delayed(const Duration(seconds: 1));
-      if (!_active || !mounted) break;
-      setState(() => _elapsedSeconds++);
-    }
   }
 
   String get _formattedDuration {
@@ -9911,279 +10742,539 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen> {
     return '$mins:$secs';
   }
 
-  void _endCall() {
-    _active = false;
-    try {
-      widget.roomChannel?.sendBroadcastMessage(
-        event: 'call_signal',
-        payload: <String, dynamic>{
-          'action': 'hangup',
-          'caller_id': widget.myUserId,
-          'duration': _elapsedSeconds,
-        },
-      );
-    } catch (_) {}
-    Navigator.of(context).pop(_elapsedSeconds);
+  String get _statusHeadline {
+    switch (_stage) {
+      case _TelegramCallStage.outgoingCalling:
+        return 'Ulanmoqda...';
+      case _TelegramCallStage.outgoingRinging:
+        return 'Chaqirilmoqda... (Telefon jiringlamoqda)';
+      case _TelegramCallStage.incomingRinging:
+        return _isVideoEnabled
+            ? 'Kiruvchi E2EE Video qo‘ng‘iroq...'
+            : 'Kiruvchi E2EE Audio qo‘ng‘iroq...';
+      case _TelegramCallStage.connected:
+        return _formattedDuration;
+      case _TelegramCallStage.ended:
+        return 'Qo‘ng‘iroq yakunlandi';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isRinging = _stage == _TelegramCallStage.incomingRinging ||
+        _stage == _TelegramCallStage.outgoingCalling ||
+        _stage == _TelegramCallStage.outgoingRinging;
+
     return Scaffold(
-      backgroundColor: YanColors.primaryNavy,
-      body: SafeArea(
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            if (_isVideoEnabled)
-              Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFF0B1F42),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+      backgroundColor: const Color(0xFF0A1931),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: <Color>[
+              Color(0xFF0A1931),
+              Color(0xFF102B57),
+              Color(0xFF0D2346),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              // Top bar: E2EE Verification Emojis (Telegram style) + Signal Strength
+              Positioned(
+                top: 14,
+                left: 16,
+                right: 16,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: <Widget>[
                     Container(
-                      width: 112,
-                      height: 112,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: YanColors.primaryBlue.withValues(alpha: 0.25),
+                        color: Colors.white.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(999),
                         border: Border.all(
-                          color: YanColors.cyanAccent,
-                          width: 2.5,
+                          color: Colors.white.withValues(alpha: 0.16),
                         ),
                       ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        widget.peerInitials,
-                        style: const TextStyle(
-                          fontSize: 38,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          const Icon(
+                            Icons.lock_rounded,
+                            size: 13,
+                            color: YanColors.successGreen,
+                          ),
+                          const SizedBox(width: 5),
+                          const Text(
+                            'E2EE 0.00s',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.signal_cellular_alt_rounded,
+                            size: 14,
+                            color: YanColors.successGreen,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Telegram 4-Emoji E2EE Key Fingerprint Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.16),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      widget.peerName,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'HD E2EE Video oqimi faol • $_formattedDuration',
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: YanColors.successGreen,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: _e2eeEmojis
+                            .map(
+                              (e) => Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 2.5,
+                                ),
+                                child: Text(
+                                  e,
+                                  style: const TextStyle(fontSize: 13.5),
+                                ),
+                              ),
+                            )
+                            .toList(),
                       ),
                     ),
                   ],
                 ),
-              )
-            else
+              ),
+
+              // Center Avatar + Animated Ripple Rings + Peer Name + Live Status / Timer
               Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Icon(
-                          Icons.lock_rounded,
-                          size: 14,
-                          color: YanColors.successGreen,
+                  SizedBox(
+                    width: 190,
+                    height: 190,
+                    child: AnimatedBuilder(
+                      animation: _pulseController,
+                      builder: (context, child) {
+                        final pulse = _pulseController.value;
+                        return Stack(
+                          alignment: Alignment.center,
+                          children: <Widget>[
+                            if (isRinging) ...<Widget>[
+                              Container(
+                                width: 132 + (pulse * 52),
+                                height: 132 + (pulse * 52),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: (_stage ==
+                                              _TelegramCallStage.incomingRinging
+                                          ? YanColors.successGreen
+                                          : YanColors.primaryBlue)
+                                      .withValues(alpha: (1 - pulse) * 0.24),
+                                ),
+                              ),
+                              Container(
+                                width: 124 + (pulse * 28),
+                                height: 124 + (pulse * 28),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: (_stage ==
+                                              _TelegramCallStage.incomingRinging
+                                          ? YanColors.successGreen
+                                          : YanColors.primaryBlue)
+                                      .withValues(alpha: (1 - pulse) * 0.36),
+                                ),
+                              ),
+                            ],
+                            child!,
+                          ],
+                        );
+                      },
+                      child: Container(
+                        width: 122,
+                        height: 122,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: YanColors.primaryBlue,
+                          border: Border.all(
+                            color: _stage == _TelegramCallStage.connected
+                                ? YanColors.successGreen
+                                : Colors.white,
+                            width: 3,
+                          ),
+                          boxShadow: <BoxShadow>[
+                            BoxShadow(
+                              color: YanColors.primaryBlue.withValues(
+                                alpha: 0.45,
+                              ),
+                              blurRadius: 28,
+                              spreadRadius: 4,
+                            ),
+                          ],
                         ),
-                        SizedBox(width: 6),
-                        Text(
-                          'SRTP • Zero-Knowledge E2EE Audio Qo‘ng‘iroq',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
+                        alignment: Alignment.center,
+                        child: Text(
+                          widget.peerInitials,
+                          style: const TextStyle(
+                            fontSize: 42,
+                            fontWeight: FontWeight.w900,
                             color: Colors.white,
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 28),
-                  Container(
-                    width: 118,
-                    height: 118,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: YanColors.primaryBlue,
-                      border: Border.all(color: Colors.white, width: 3),
-                    ),
-                    alignment: Alignment.center,
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Text(
-                      widget.peerInitials,
+                      widget.peerName,
+                      textAlign: TextAlign.center,
                       style: const TextStyle(
-                        fontSize: 40,
+                        fontSize: 25,
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 18),
-                  Text(
-                    widget.peerName,
-                    style: const TextStyle(
-                      fontSize: 23,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     widget.peerSubtitle,
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.76),
+                      color: Colors.white.withValues(alpha: 0.72),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _formattedDuration,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: YanColors.successGreen,
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _stage == _TelegramCallStage.connected
+                          ? YanColors.successGreen.withValues(alpha: 0.18)
+                          : Colors.white.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      _statusHeadline,
+                      style: TextStyle(
+                        fontSize: _stage == _TelegramCallStage.connected
+                            ? 19
+                            : 14,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.4,
+                        color: _stage == _TelegramCallStage.connected
+                            ? YanColors.successGreen
+                            : Colors.white,
+                      ),
                     ),
                   ),
+                  if (_isPeerMuted && _stage == _TelegramCallStage.connected) ...<Widget>[
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        const Icon(
+                          Icons.mic_off_rounded,
+                          size: 15,
+                          color: Color(0xFFFFB4AB),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          '${widget.peerName} mikrofoni o‘chiq',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFFFB4AB),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
 
-            if (_isVideoEnabled)
-              Positioned(
-                right: 16,
-                top: 16,
-                child: Container(
-                  width: 105,
-                  height: 148,
-                  decoration: BoxDecoration(
-                    color: YanColors.primaryNavy,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.white, width: 1.5),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: <Widget>[
-                      const Icon(
-                        Icons.videocam_rounded,
-                        color: YanColors.cyanAccent,
-                        size: 28,
+              // Picture-in-Picture Local Camera Preview when Video is active
+              if (_isVideoEnabled && _stage == _TelegramCallStage.connected)
+                Positioned(
+                  right: 16,
+                  top: 64,
+                  child: GestureDetector(
+                    onTap: () =>
+                        setState(() => _isFrontCamera = !_isFrontCamera),
+                    child: Container(
+                      width: 108,
+                      height: 154,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF071326),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white, width: 1.6),
+                        boxShadow: const <BoxShadow>[
+                          BoxShadow(
+                            color: Color(0x55000000),
+                            blurRadius: 16,
+                            offset: Offset(0, 6),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _isFrontCamera ? 'Old kamera' : 'Orqa kamera',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: 24,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 16,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: <Widget>[
-                    _CallControlButton(
-                      icon: _isMuted
-                          ? Icons.mic_off_rounded
-                          : Icons.mic_rounded,
-                      label: _isMuted ? 'O‘chiq' : 'Mikrofon',
-                      active: !_isMuted,
-                      onTap: () => setState(() => _isMuted = !_isMuted),
-                    ),
-                    _CallControlButton(
-                      icon: _isVideoEnabled
-                          ? Icons.videocam_rounded
-                          : Icons.videocam_off_rounded,
-                      label: _isVideoEnabled ? 'Video' : 'Audio',
-                      active: _isVideoEnabled,
-                      onTap: () =>
-                          setState(() => _isVideoEnabled = !_isVideoEnabled),
-                    ),
-                    _CallControlButton(
-                      icon: _isSpeakerOn
-                          ? Icons.volume_up_rounded
-                          : Icons.volume_down_rounded,
-                      label: 'Karnay',
-                      active: _isSpeakerOn,
-                      onTap: () => setState(() => _isSpeakerOn = !_isSpeakerOn),
-                    ),
-                    if (_isVideoEnabled)
-                      _CallControlButton(
-                        icon: Icons.cameraswitch_rounded,
-                        label: 'Kamera',
-                        active: true,
-                        onTap: () =>
-                            setState(() => _isFrontCamera = !_isFrontCamera),
-                      ),
-                    GestureDetector(
-                      onTap: _endCall,
                       child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: <Widget>[
-                          Container(
-                            width: 54,
-                            height: 54,
-                            decoration: const BoxDecoration(
-                              color: YanColors.destructiveRed,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.call_end_rounded,
+                          const Icon(
+                            Icons.videocam_rounded,
+                            color: YanColors.cyanAccent,
+                            size: 28,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _isFrontCamera ? 'Old kamera' : 'Orqa kamera',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
                               color: Colors.white,
-                              size: 26,
                             ),
                           ),
-                          const SizedBox(height: 5),
-                          const Text(
-                            'Yakunlash',
-                            style: TextStyle(
-                              fontSize: 11,
+                          const SizedBox(height: 3),
+                          Text(
+                            _isPeerVideoEnabled ? 'HD 60fps' : 'Faol',
+                            style: const TextStyle(
+                              fontSize: 9.8,
                               fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                              color: YanColors.successGreen,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
+
+              // Bottom Controls:
+              // - If Incoming Ringing: Telegram-style Two-Button Bar (Red "Rad etish" + Green "Javob berish")
+              // - Otherwise: Full Live Call Dock (Mute, Video, Speaker, Flip Camera, Hangup)
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 26,
+                child: _stage == _TelegramCallStage.incomingRinging
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 18,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.18),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: <Widget>[
+                            // Decline button
+                            GestureDetector(
+                              onTap: _declineIncomingCall,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  Container(
+                                    width: 66,
+                                    height: 66,
+                                    decoration: const BoxDecoration(
+                                      color: YanColors.destructiveRed,
+                                      shape: BoxShape.circle,
+                                      boxShadow: <BoxShadow>[
+                                        BoxShadow(
+                                          color: Color(0x66D92D20),
+                                          blurRadius: 18,
+                                          offset: Offset(0, 6),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.call_end_rounded,
+                                      color: Colors.white,
+                                      size: 30,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Rad etish',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // Accept button
+                            GestureDetector(
+                              onTap: _acceptIncomingCall,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  Container(
+                                    width: 66,
+                                    height: 66,
+                                    decoration: const BoxDecoration(
+                                      color: YanColors.successGreen,
+                                      shape: BoxShape.circle,
+                                      boxShadow: <BoxShadow>[
+                                        BoxShadow(
+                                          color: Color(0x6610C995),
+                                          blurRadius: 18,
+                                          offset: Offset(0, 6),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Icon(
+                                      _isVideoEnabled
+                                          ? Icons.videocam_rounded
+                                          : Icons.call_rounded,
+                                      color: Colors.white,
+                                      size: 30,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Javob berish',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.16),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: <Widget>[
+                            _CallControlButton(
+                              icon: _isMuted
+                                  ? Icons.mic_off_rounded
+                                  : Icons.mic_rounded,
+                              label: _isMuted ? 'O‘chiq' : 'Mikrofon',
+                              active: !_isMuted,
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                setState(() => _isMuted = !_isMuted);
+                                _sendSignal('media_state');
+                              },
+                            ),
+                            _CallControlButton(
+                              icon: _isVideoEnabled
+                                  ? Icons.videocam_rounded
+                                  : Icons.videocam_off_rounded,
+                              label: _isVideoEnabled ? 'Video' : 'Audio',
+                              active: _isVideoEnabled,
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                setState(
+                                  () => _isVideoEnabled = !_isVideoEnabled,
+                                );
+                                _sendSignal('media_state');
+                              },
+                            ),
+                            _CallControlButton(
+                              icon: _isSpeakerOn
+                                  ? Icons.volume_up_rounded
+                                  : Icons.volume_down_rounded,
+                              label: _isSpeakerOn ? 'Karnay' : 'Quloqchin',
+                              active: _isSpeakerOn,
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                setState(() => _isSpeakerOn = !_isSpeakerOn);
+                              },
+                            ),
+                            if (_isVideoEnabled)
+                              _CallControlButton(
+                                icon: Icons.cameraswitch_rounded,
+                                label: 'Kamera',
+                                active: true,
+                                onTap: () {
+                                  HapticFeedback.selectionClick();
+                                  setState(
+                                    () => _isFrontCamera = !_isFrontCamera,
+                                  );
+                                },
+                              ),
+                            GestureDetector(
+                              onTap: _hangupOrCancelCall,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  Container(
+                                    width: 54,
+                                    height: 54,
+                                    decoration: const BoxDecoration(
+                                      color: YanColors.destructiveRed,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.call_end_rounded,
+                                      color: Colors.white,
+                                      size: 26,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  const Text(
+                                    'Yakunlash',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

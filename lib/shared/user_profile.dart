@@ -1163,11 +1163,30 @@ class YanRoleDataCatalog {
       final item = current[i];
       if (isSameParticipant(item.clientId, clientId) &&
           isSameParticipant(item.advocateId, advocateId)) {
-        current[i] = item.copyWith(
+        final now = DateTime.now();
+        final newDeadline = item.deadlineAt.isBefore(now)
+            ? now.add(const Duration(minutes: 15))
+            : item.deadlineAt;
+        current[i] = ArizaOrderItem(
+          id: item.id,
+          clientId: item.clientId,
+          clientName: item.clientName,
+          clientPhone: item.clientPhone,
+          clientRegion: item.clientRegion,
+          advocateId: item.advocateId,
+          advocateName: item.advocateName,
+          categoryType: item.categoryType,
+          subjectTitle: item.subjectTitle,
+          detailedStatement: item.detailedStatement,
+          attachmentNames: item.attachmentNames,
+          createdAt: item.createdAt,
+          deadlineAt: newDeadline,
           isCompleted: false,
-          clearArizaSentAt: true,
-          clientResponseStatus: 'rejected',
           completedArizaText: 'Rad etildi: $rejectionReason',
+          completedAt: null,
+          completedAttachmentMeta: null,
+          arizaSentAt: null,
+          clientResponseStatus: 'rejected',
         );
         break;
       }
