@@ -9,7 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:archive/archive.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -10256,7 +10258,7 @@ class _YanGlobalCallCenter {
 
   Future<void> dispatchCallSignal({
     required String callId,
-    required String action, // 'invite' | 'ringing' | 'accept' | 'decline' | 'cancel' | 'hangup' | 'media_state'
+    required String action, // 'invite' | 'ringing' | 'accept' | 'decline' | 'cancel' | 'hangup' | 'media_state' | 'webrtc_offer' | 'webrtc_answer' | 'webrtc_ice'
     required String callerId,
     required String callerName,
     required String callerInitials,
@@ -10266,6 +10268,7 @@ class _YanGlobalCallCenter {
     required bool isVideo,
     int durationSeconds = 0,
     bool isMuted = false,
+    Map<String, dynamic>? webrtcData,
     RealtimeChannel? roomChannel,
   }) async {
     final nowIso = DateTime.now().toUtc().toIso8601String();
@@ -10281,6 +10284,7 @@ class _YanGlobalCallCenter {
       'room_key': roomKey,
       'duration': durationSeconds,
       'is_muted': isMuted,
+      if (webrtcData != null) 'webrtc': webrtcData,
       'timestamp': nowIso,
     };
 
@@ -10305,7 +10309,9 @@ class _YanGlobalCallCenter {
             action == 'hangup')
         ? calleeId
         : callerId;
-    if (targetProfileId.trim().isNotEmpty && action != 'media_state') {
+    if (targetProfileId.trim().isNotEmpty &&
+        action != 'media_state' &&
+        !action.startsWith('webrtc_')) {
       _writeSignalToProfileEnvelope(targetProfileId, payload);
     }
   }
@@ -10504,12 +10510,27 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
   int _elapsedSeconds = 0;
   bool _closed = false;
 
+  // Real WebRTC Audio & Video Streaming State
+  final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
+  final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
+  bool _renderersInitialized = false;
+  MediaStream? _localStream;
+  RTCPeerConnection? _peerConnection;
+  final List<RTCIceCandidate> _queuedRemoteCandidates = <RTCIceCandidate>[];
+  final Set<String> _handledWebRtcSignals = <String>{};
+  bool _remoteDescriptionSet = false;
+  bool _webrtcOfferSent = false;
+  bool _webrtcOfferInProgress = false;
+  bool _incomingOfferInProgress = false;
+  bool _hasRemoteVideoTrack = false;
+  MediaStream? _remoteStream;
+  bool _ownsRemoteStream = false;
+  late Future<void> _mediaInitialization;
+
   Timer? _callClockTimer;
   Timer? _ringtoneLoopTimer;
   Timer? _noAnswerTimeoutTimer;
   late final AnimationController _pulseController;
-
-  // 4-emoji Telegram E2EE key verification fingerprint derived deterministically from roomKey + callId
   late final List<String> _e2eeEmojis;
 
   static const List<String> _emojiPool = <String>[
@@ -10539,10 +10560,10 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     );
 
     _startRingtoneAndVibrationLoop();
+    _mediaInitialization = _initHardwareMediaAndPermissions();
 
     if (widget.isCaller) {
       _sendSignal('invite');
-      // Timeout after 45 seconds if callee does not answer
       _noAnswerTimeoutTimer = Timer(const Duration(seconds: 45), () {
         if (!_closed && _stage != _TelegramCallStage.connected) {
           _sendSignal('cancel');
@@ -10556,6 +10577,293 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
         }
       });
     }
+  }
+
+  /// Requests real OS Microphone & Camera permissions and opens local audio/video tracks
+  Future<void> _initHardwareMediaAndPermissions() async {
+    try {
+      await _localRenderer.initialize();
+      await _remoteRenderer.initialize();
+      _renderersInitialized = true;
+
+      // 1. Request OS runtime permissions for Microphone (and Camera if video call)
+      final micStatus = await Permission.microphone.request();
+      PermissionStatus? camStatus;
+      if (_isVideoEnabled) {
+        camStatus = await Permission.camera.request();
+      }
+
+      if (!micStatus.isGranted) {
+        _showMediaPermissionMessage(
+          'Ovozli qo‘ng‘iroq uchun mikrofon ruxsatini bering. Telefon sozlamalarida ilova ruxsatlarini tekshiring.',
+        );
+        return;
+      }
+
+      final wantVideo = _isVideoEnabled && (camStatus?.isGranted ?? false);
+
+      // 2. Capture real device microphone & camera stream via WebRTC
+      final mediaConstraints = <String, dynamic>{
+        'audio': <String, dynamic>{
+          'echoCancellation': true,
+          'noiseSuppression': true,
+          'autoGainControl': true,
+        },
+        'video': wantVideo
+            ? <String, dynamic>{
+                'facingMode': _isFrontCamera ? 'user' : 'environment',
+                'width': <String, dynamic>{'ideal': 720},
+                'height': <String, dynamic>{'ideal': 1280},
+                'frameRate': <String, dynamic>{'ideal': 30},
+              }
+            : false,
+      };
+
+      MediaStream stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+      } catch (error) {
+        if (!wantVideo) rethrow;
+        debugPrint('Combined audio/video capture failed: $error');
+        stream = await navigator.mediaDevices.getUserMedia(
+          <String, dynamic>{
+            'audio': mediaConstraints['audio'],
+            'video': false,
+          },
+        );
+        _isVideoEnabled = false;
+        _showMediaPermissionMessage(
+          'Kamera ochilmadi. Qo‘ng‘iroq audio rejimida davom etadi.',
+        );
+      }
+      if (_closed) {
+        for (final t in stream.getTracks()) {
+          t.stop();
+        }
+        await stream.dispose();
+        return;
+      }
+
+      _localStream = stream;
+      _localRenderer.srcObject = stream;
+      await Helper.setSpeakerphoneOn(_isSpeakerOn);
+
+      await _ensurePeerConnectionCreated();
+      if (mounted) setState(() {});
+    } catch (error) {
+      _showMediaPermissionMessage(
+        'Mikrofon yoki kamerani ishga tushirib bo‘lmadi. Ilova ruxsatlari va qurilma sozlamalarini tekshiring.',
+      );
+      debugPrint('Call media initialization failed: $error');
+    }
+  }
+
+  void _showMediaPermissionMessage(String message) {
+    if (!mounted || _closed) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: YanColors.destructiveRed,
+        ),
+      );
+  }
+
+  Future<RTCPeerConnection?> _ensurePeerConnectionCreated() async {
+    if (_peerConnection != null) return _peerConnection;
+    try {
+      final config = <String, dynamic>{
+        'sdpSemantics': 'unified-plan',
+        'iceServers': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'urls': <String>[
+              'stun:stun.l.google.com:19302',
+              'stun:stun1.l.google.com:19302',
+              'stun:stun2.l.google.com:19302',
+            ],
+          },
+        ],
+      };
+
+      final pc = await createPeerConnection(config);
+      _peerConnection = pc;
+
+      if (_localStream != null) {
+        for (final track in _localStream!.getTracks()) {
+          await pc.addTrack(track, _localStream!);
+        }
+      }
+
+      pc.onIceCandidate = (RTCIceCandidate candidate) {
+        if (candidate.candidate == null || _closed) return;
+        _sendSignal(
+          'webrtc_ice',
+          webrtcData: <String, dynamic>{
+            'candidate': candidate.candidate,
+            'sdpMid': candidate.sdpMid,
+            'sdpMLineIndex': candidate.sdpMLineIndex,
+          },
+        );
+      };
+
+      pc.onTrack = (RTCTrackEvent event) {
+        _attachRemoteTrack(event);
+      };
+
+      pc.onAddStream = (MediaStream stream) {
+        if (_closed) return;
+        _remoteRenderer.srcObject = stream;
+        if (mounted) {
+          setState(() {
+            _hasRemoteVideoTrack = stream.getVideoTracks().isNotEmpty;
+          });
+        }
+      };
+
+      return pc;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _attachRemoteTrack(RTCTrackEvent event) async {
+    if (_closed) return;
+    try {
+      if (event.streams.isNotEmpty) {
+        _remoteRenderer.srcObject = event.streams.first;
+        _remoteStream = event.streams.first;
+      } else {
+        final stream = _remoteStream ??= await createLocalMediaStream(
+          'remote-${widget.callId}',
+        );
+        if (_closed) return;
+        _ownsRemoteStream = true;
+        await stream.addTrack(event.track);
+        _remoteRenderer.srcObject = stream;
+      }
+      final hasVideo = _remoteRenderer.srcObject?.getVideoTracks().isNotEmpty ?? false;
+      if (mounted) {
+        setState(() => _hasRemoteVideoTrack = hasVideo);
+      }
+    } catch (error) {
+      debugPrint('Attaching remote call track failed: $error');
+    }
+  }
+
+  Future<void> _startCallerWebRtcOffer() async {
+    if (_webrtcOfferSent || _webrtcOfferInProgress || _closed) return;
+    _webrtcOfferInProgress = true;
+    try {
+      await _mediaInitialization;
+      if (_closed) return;
+      final pc = await _ensurePeerConnectionCreated();
+      if (pc == null) return;
+      if (_localStream?.getAudioTracks().isEmpty ?? true) {
+        _showMediaPermissionMessage(
+          'Mikrofon ruxsati yo‘q. Ovozli qo‘ng‘iroq uchun mikrofon ruxsatini yoqing.',
+        );
+        return;
+      }
+      final offer = await pc.createOffer(<String, dynamic>{
+        'offerToReceiveAudio': 1,
+        'offerToReceiveVideo': 1,
+      });
+      await pc.setLocalDescription(offer);
+      _webrtcOfferSent = true;
+      _sendSignal(
+        'webrtc_offer',
+        webrtcData: <String, dynamic>{
+          'sdp': offer.sdp,
+          'type': offer.type,
+        },
+      );
+    } catch (error) {
+      _webrtcOfferSent = false;
+      debugPrint('Creating WebRTC offer failed: $error');
+      _showMediaPermissionMessage('Ovozli ulanishni boshlashda xatolik yuz berdi.');
+    } finally {
+      _webrtcOfferInProgress = false;
+    }
+  }
+
+  Future<void> _handleIncomingWebRtcOffer(Map<String, dynamic> data) async {
+    if (_incomingOfferInProgress || _closed) return;
+    _incomingOfferInProgress = true;
+    try {
+      await _mediaInitialization;
+      if (_closed) return;
+      final sdp = data['sdp']?.toString();
+      final type = data['type']?.toString() ?? 'offer';
+      if (sdp == null || sdp.isEmpty) return;
+
+      final pc = await _ensurePeerConnectionCreated();
+      if (pc == null) return;
+      if (_localStream?.getAudioTracks().isEmpty ?? true) {
+        _showMediaPermissionMessage(
+          'Mikrofon ruxsati yo‘q. Ovozli qo‘ng‘iroq uchun mikrofon ruxsatini yoqing.',
+        );
+      }
+
+      await pc.setRemoteDescription(RTCSessionDescription(sdp, type));
+      _remoteDescriptionSet = true;
+      for (final c in _queuedRemoteCandidates) {
+        await pc.addCandidate(c);
+      }
+      _queuedRemoteCandidates.clear();
+
+      final answer = await pc.createAnswer(<String, dynamic>{
+        'offerToReceiveAudio': 1,
+        'offerToReceiveVideo': 1,
+      });
+      await pc.setLocalDescription(answer);
+      _sendSignal(
+        'webrtc_answer',
+        webrtcData: <String, dynamic>{
+          'sdp': answer.sdp,
+          'type': answer.type,
+        },
+      );
+    } catch (error) {
+      debugPrint('Handling WebRTC offer failed: $error');
+      _showMediaPermissionMessage('Ovozli ulanishni o‘rnatib bo‘lmadi.');
+    } finally {
+      _incomingOfferInProgress = false;
+    }
+  }
+
+  Future<void> _handleIncomingWebRtcAnswer(Map<String, dynamic> data) async {
+    try {
+      final sdp = data['sdp']?.toString();
+      final type = data['type']?.toString() ?? 'answer';
+      if (sdp == null || sdp.isEmpty || _peerConnection == null) return;
+
+      await _peerConnection!.setRemoteDescription(
+        RTCSessionDescription(sdp, type),
+      );
+      _remoteDescriptionSet = true;
+      for (final c in _queuedRemoteCandidates) {
+        await _peerConnection!.addCandidate(c);
+      }
+      _queuedRemoteCandidates.clear();
+    } catch (_) {}
+  }
+
+  Future<void> _handleIncomingWebRtcIce(Map<String, dynamic> data) async {
+    try {
+      final candStr = data['candidate']?.toString();
+      if (candStr == null || candStr.isEmpty) return;
+      final candidate = RTCIceCandidate(
+        candStr,
+        data['sdpMid']?.toString(),
+        (data['sdpMLineIndex'] as num?)?.toInt(),
+      );
+      if (_peerConnection != null && _remoteDescriptionSet) {
+        await _peerConnection!.addCandidate(candidate);
+      } else {
+        _queuedRemoteCandidates.add(candidate);
+      }
+    } catch (_) {}
   }
 
   List<String> _deriveVerificationEmojis(String seed) {
@@ -10590,20 +10898,18 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
   Future<void> _triggerRingPulse() async {
     try {
       if (_stage == _TelegramCallStage.incomingRinging) {
-        // Strong incoming phone ring vibration + system alert sound
         await HapticFeedback.heavyImpact();
         await SystemSound.play(SystemSoundType.alert);
         await Future<void>.delayed(const Duration(milliseconds: 220));
         await HapticFeedback.vibrate();
       } else {
-        // Soft outgoing dial-tone pulse for caller
         await HapticFeedback.selectionClick();
         await SystemSound.play(SystemSoundType.click);
       }
     } catch (_) {}
   }
 
-  void _sendSignal(String action) {
+  void _sendSignal(String action, {Map<String, dynamic>? webrtcData}) {
     final myInitials = widget.myUserName.trim().isNotEmpty
         ? widget.myUserName.trim()[0].toUpperCase()
         : 'Y';
@@ -10619,6 +10925,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
       isVideo: _isVideoEnabled,
       durationSeconds: _elapsedSeconds,
       isMuted: _isMuted,
+      webrtcData: webrtcData,
       roomChannel: widget.roomChannel,
     );
   }
@@ -10630,15 +10937,40 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     if (sigCallId != widget.callId) return;
 
     final action = sig['action']?.toString() ?? '';
+    final rawWebrtc = sig['webrtc'];
+    final webrtcMap = rawWebrtc is Map
+        ? Map<String, dynamic>.from(rawWebrtc)
+        : null;
+
+    final signalTimestamp = sig['timestamp']?.toString();
+    if (signalTimestamp != null &&
+        (action.startsWith('webrtc_') || action == 'accept')) {
+      final signalKey = '$action|$signalTimestamp';
+      if (!_handledWebRtcSignals.add(signalKey)) return;
+      if (_handledWebRtcSignals.length > 256) {
+        _handledWebRtcSignals.remove(_handledWebRtcSignals.first);
+      }
+    }
+
     if (action == 'ringing' &&
         widget.isCaller &&
         _stage == _TelegramCallStage.outgoingCalling) {
       if (mounted) {
         setState(() => _stage = _TelegramCallStage.outgoingRinging);
       }
-    } else if (action == 'accept' &&
-        _stage != _TelegramCallStage.connected) {
-      _transitionToConnected();
+    } else if (action == 'accept') {
+      if (_stage != _TelegramCallStage.connected) {
+        _transitionToConnected();
+      }
+      if (widget.isCaller) {
+        _startCallerWebRtcOffer();
+      }
+    } else if (action == 'webrtc_offer' && webrtcMap != null) {
+      _handleIncomingWebRtcOffer(webrtcMap);
+    } else if (action == 'webrtc_answer' && webrtcMap != null) {
+      _handleIncomingWebRtcAnswer(webrtcMap);
+    } else if (action == 'webrtc_ice' && webrtcMap != null) {
+      _handleIncomingWebRtcIce(webrtcMap);
     } else if (action == 'decline') {
       _finishCallWithOutcome('declined');
     } else if (action == 'cancel') {
@@ -10663,8 +10995,11 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     }
   }
 
-  void _acceptIncomingCall() {
+  Future<void> _acceptIncomingCall() async {
     HapticFeedback.mediumImpact();
+    await _mediaInitialization;
+    if (_closed) return;
+    await _ensurePeerConnectionCreated();
     _sendSignal('accept');
     _transitionToConnected();
   }
@@ -10689,6 +11024,169 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     });
   }
 
+  Future<void> _toggleMicrophoneMute() async {
+    HapticFeedback.selectionClick();
+    await _mediaInitialization;
+    if (_closed) return;
+
+    if (_localStream?.getAudioTracks().isEmpty ?? true) {
+      final permission = await Permission.microphone.request();
+      if (!permission.isGranted) {
+        _showMediaPermissionMessage(
+          'Ovozli qo‘ng‘iroq uchun mikrofon ruxsatini yoqing.',
+        );
+        return;
+      }
+
+      try {
+        final audioStream = await navigator.mediaDevices.getUserMedia(
+          <String, dynamic>{
+            'audio': <String, dynamic>{
+              'echoCancellation': true,
+              'noiseSuppression': true,
+              'autoGainControl': true,
+            },
+            'video': false,
+          },
+        );
+        final audioTrack = audioStream.getAudioTracks().firstOrNull;
+        if (audioTrack == null) {
+          await audioStream.dispose();
+          _showMediaPermissionMessage('Mikrofon trekini ochib bo‘lmadi.');
+          return;
+        }
+
+        final localStream = _localStream;
+        if (localStream == null) {
+          _localStream = audioStream;
+          _localRenderer.srcObject = audioStream;
+        } else {
+          await localStream.addTrack(audioTrack);
+        }
+        audioTrack.enabled = true;
+        _isMuted = false;
+
+        final existingPeerConnection = _peerConnection;
+        if (existingPeerConnection == null) {
+          await _ensurePeerConnectionCreated();
+        } else {
+          await existingPeerConnection.addTrack(audioTrack, _localStream!);
+        }
+
+        if (_stage == _TelegramCallStage.connected) {
+          _webrtcOfferSent = false;
+          await _startCallerWebRtcOffer();
+        }
+        if (mounted) setState(() {});
+        _sendSignal('media_state');
+        return;
+      } catch (error) {
+        debugPrint('Opening call microphone failed: $error');
+        _showMediaPermissionMessage('Mikrofonni ochib bo‘lmadi.');
+        return;
+      }
+    }
+
+    final nextMute = !_isMuted;
+    setState(() => _isMuted = nextMute);
+    final tracks = _localStream?.getAudioTracks() ?? const <MediaStreamTrack>[];
+    for (final t in tracks) {
+      t.enabled = !nextMute;
+    }
+    _sendSignal('media_state');
+  }
+
+  Future<void> _toggleVideoStream() async {
+    HapticFeedback.selectionClick();
+    final nextVideo = !_isVideoEnabled;
+    if (nextVideo) {
+      final camStatus = await Permission.camera.request();
+      if (!camStatus.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Video qo‘ng‘iroq uchun kamera ruxsatini bering.'),
+              backgroundColor: YanColors.destructiveRed,
+            ),
+          );
+        }
+        return;
+      }
+      final existingVideoTracks =
+          _localStream?.getVideoTracks() ?? const <MediaStreamTrack>[];
+      if (existingVideoTracks.isNotEmpty) {
+        for (final t in existingVideoTracks) {
+          t.enabled = true;
+        }
+      } else {
+        try {
+          final camStream = await navigator.mediaDevices.getUserMedia(
+            <String, dynamic>{
+              'audio': false,
+              'video': <String, dynamic>{
+                'facingMode': _isFrontCamera ? 'user' : 'environment',
+              },
+            },
+          );
+          final videoTrack = camStream.getVideoTracks().firstOrNull;
+          if (videoTrack != null) {
+            final localStream = _localStream;
+            if (localStream == null) {
+              videoTrack.stop();
+              await camStream.dispose();
+              _showMediaPermissionMessage(
+                'Kamera ishga tushmadi. Qo‘ng‘iroq media ruxsatlarini tekshiring.',
+              );
+              return;
+            }
+            await localStream.addTrack(videoTrack);
+            if (_peerConnection != null && _localStream != null) {
+              await _peerConnection!.addTrack(videoTrack, localStream);
+              _webrtcOfferSent = false;
+              await _startCallerWebRtcOffer();
+            }
+          }
+        } catch (error) {
+          debugPrint('Opening call camera failed: $error');
+          _showMediaPermissionMessage(
+            'Kamerani ochib bo‘lmadi. Kamera ruxsati va boshqa ilovalar kameradan foydalanmayotganini tekshiring.',
+          );
+          return;
+        }
+      }
+    } else {
+      final existingVideoTracks =
+          _localStream?.getVideoTracks() ?? const <MediaStreamTrack>[];
+      for (final t in existingVideoTracks) {
+        t.enabled = false;
+      }
+    }
+    if (mounted) {
+      setState(() => _isVideoEnabled = nextVideo);
+    }
+    _sendSignal('media_state');
+  }
+
+  Future<void> _toggleSpeakerphone() async {
+    HapticFeedback.selectionClick();
+    final nextSpeaker = !_isSpeakerOn;
+    setState(() => _isSpeakerOn = nextSpeaker);
+    try {
+      await Helper.setSpeakerphoneOn(nextSpeaker);
+    } catch (_) {}
+  }
+
+  Future<void> _switchCameraDirection() async {
+    HapticFeedback.selectionClick();
+    setState(() => _isFrontCamera = !_isFrontCamera);
+    try {
+      final videoTrack = _localStream?.getVideoTracks().firstOrNull;
+      if (videoTrack != null) {
+        await Helper.switchCamera(videoTrack);
+      }
+    } catch (_) {}
+  }
+
   void _hangupOrCancelCall() {
     HapticFeedback.mediumImpact();
     if (_stage == _TelegramCallStage.connected) {
@@ -10703,6 +11201,45 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     }
   }
 
+  Future<void> _cleanupWebRtcResources() async {
+    try {
+      final stream = _localStream;
+      _localStream = null;
+      if (stream != null) {
+        for (final t in stream.getTracks()) {
+          t.stop();
+        }
+        await stream.dispose();
+      }
+    } catch (_) {}
+    try {
+      final remoteStream = _remoteStream;
+      _remoteStream = null;
+      if (_ownsRemoteStream && remoteStream != null) {
+        if (identical(remoteStream, _remoteRenderer.srcObject)) {
+          _remoteRenderer.srcObject = null;
+        }
+        await remoteStream.dispose();
+      }
+      _ownsRemoteStream = false;
+    } catch (_) {}
+    try {
+      final pc = _peerConnection;
+      _peerConnection = null;
+      await pc?.close();
+      await pc?.dispose();
+    } catch (_) {}
+    if (_renderersInitialized) {
+      try {
+        _localRenderer.srcObject = null;
+        _remoteRenderer.srcObject = null;
+        await _localRenderer.dispose();
+        await _remoteRenderer.dispose();
+      } catch (_) {}
+      _renderersInitialized = false;
+    }
+  }
+
   void _finishCallWithOutcome(String status) {
     if (_closed) return;
     _closed = true;
@@ -10710,6 +11247,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     _noAnswerTimeoutTimer?.cancel();
     _callClockTimer?.cancel();
     _YanGlobalCallCenter.instance.clearActiveCall(widget.callId);
+    _cleanupWebRtcResources();
 
     if (!mounted) return;
     Navigator.of(context).pop(
@@ -10732,6 +11270,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
       _onGlobalCallSignal,
     );
     _YanGlobalCallCenter.instance.clearActiveCall(widget.callId);
+    _cleanupWebRtcResources();
     _pulseController.dispose();
     super.dispose();
   }
@@ -10764,6 +11303,10 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     final isRinging = _stage == _TelegramCallStage.incomingRinging ||
         _stage == _TelegramCallStage.outgoingCalling ||
         _stage == _TelegramCallStage.outgoingRinging;
+    final showFullRemoteVideo = _stage == _TelegramCallStage.connected &&
+        (_isPeerVideoEnabled || _hasRemoteVideoTrack) &&
+        _renderersInitialized &&
+        _remoteRenderer.srcObject != null;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A1931),
@@ -10783,7 +11326,16 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
           child: Stack(
             fit: StackFit.expand,
             children: <Widget>[
-              // Top bar: E2EE Verification Emojis (Telegram style) + Signal Strength
+              // 0. Full-Screen Live Remote Video Feed when Peer Video is Active
+              if (showFullRemoteVideo)
+                Positioned.fill(
+                  child: RTCVideoView(
+                    _remoteRenderer,
+                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                  ),
+                ),
+
+              // 1. Top bar: E2EE Verification Emojis + Signal Strength
               Positioned(
                 top: 14,
                 left: 16,
@@ -10797,31 +11349,31 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.10),
+                        color: Colors.black.withValues(alpha: 0.32),
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(
                           color: Colors.white.withValues(alpha: 0.16),
                         ),
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          const Icon(
+                          Icon(
                             Icons.lock_rounded,
                             size: 13,
                             color: YanColors.successGreen,
                           ),
-                          const SizedBox(width: 5),
-                          const Text(
-                            'E2EE 0.00s',
+                          SizedBox(width: 5),
+                          Text(
+                            'E2EE WebRTC',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          const Icon(
+                          SizedBox(width: 6),
+                          Icon(
                             Icons.signal_cellular_alt_rounded,
                             size: 14,
                             color: YanColors.successGreen,
@@ -10829,14 +11381,13 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
                         ],
                       ),
                     ),
-                    // Telegram 4-Emoji E2EE Key Fingerprint Badge
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.10),
+                        color: Colors.black.withValues(alpha: 0.32),
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(
                           color: Colors.white.withValues(alpha: 0.16),
@@ -10863,216 +11414,248 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
                 ),
               ),
 
-              // Center Avatar + Animated Ripple Rings + Peer Name + Live Status / Timer
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  SizedBox(
-                    width: 190,
-                    height: 190,
-                    child: AnimatedBuilder(
-                      animation: _pulseController,
-                      builder: (context, child) {
-                        final pulse = _pulseController.value;
-                        return Stack(
-                          alignment: Alignment.center,
-                          children: <Widget>[
-                            if (isRinging) ...<Widget>[
-                              Container(
-                                width: 132 + (pulse * 52),
-                                height: 132 + (pulse * 52),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: (_stage ==
-                                              _TelegramCallStage.incomingRinging
-                                          ? YanColors.successGreen
-                                          : YanColors.primaryBlue)
-                                      .withValues(alpha: (1 - pulse) * 0.24),
+              // 2. Center Avatar + Animated Ripple Rings + Peer Name + Live Status / Timer
+              // (Shown when in audio mode or ringing; compact top badge when remote video is fullscreen)
+              if (!showFullRemoteVideo)
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    SizedBox(
+                      width: 190,
+                      height: 190,
+                      child: AnimatedBuilder(
+                        animation: _pulseController,
+                        builder: (context, child) {
+                          final pulse = _pulseController.value;
+                          return Stack(
+                            alignment: Alignment.center,
+                            children: <Widget>[
+                              if (isRinging) ...<Widget>[
+                                Container(
+                                  width: 132 + (pulse * 52),
+                                  height: 132 + (pulse * 52),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: (_stage ==
+                                                _TelegramCallStage.incomingRinging
+                                            ? YanColors.successGreen
+                                            : YanColors.primaryBlue)
+                                        .withValues(alpha: (1 - pulse) * 0.24),
+                                  ),
                                 ),
-                              ),
-                              Container(
-                                width: 124 + (pulse * 28),
-                                height: 124 + (pulse * 28),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: (_stage ==
-                                              _TelegramCallStage.incomingRinging
-                                          ? YanColors.successGreen
-                                          : YanColors.primaryBlue)
-                                      .withValues(alpha: (1 - pulse) * 0.36),
+                                Container(
+                                  width: 124 + (pulse * 28),
+                                  height: 124 + (pulse * 28),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: (_stage ==
+                                                _TelegramCallStage.incomingRinging
+                                            ? YanColors.successGreen
+                                            : YanColors.primaryBlue)
+                                        .withValues(alpha: (1 - pulse) * 0.36),
+                                  ),
                                 ),
+                              ],
+                              child!,
+                            ],
+                          );
+                        },
+                        child: Container(
+                          width: 122,
+                          height: 122,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: YanColors.primaryBlue,
+                            border: Border.all(
+                              color: _stage == _TelegramCallStage.connected
+                                  ? YanColors.successGreen
+                                  : Colors.white,
+                              width: 3,
+                            ),
+                            boxShadow: <BoxShadow>[
+                              BoxShadow(
+                                color: YanColors.primaryBlue.withValues(
+                                  alpha: 0.45,
+                                ),
+                                blurRadius: 28,
+                                spreadRadius: 4,
                               ),
                             ],
-                            child!,
-                          ],
-                        );
-                      },
-                      child: Container(
-                        width: 122,
-                        height: 122,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: YanColors.primaryBlue,
-                          border: Border.all(
-                            color: _stage == _TelegramCallStage.connected
-                                ? YanColors.successGreen
-                                : Colors.white,
-                            width: 3,
                           ),
-                          boxShadow: <BoxShadow>[
-                            BoxShadow(
-                              color: YanColors.primaryBlue.withValues(
-                                alpha: 0.45,
-                              ),
-                              blurRadius: 28,
-                              spreadRadius: 4,
+                          alignment: Alignment.center,
+                          child: Text(
+                            widget.peerInitials,
+                            style: const TextStyle(
+                              fontSize: 42,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
                             ),
-                          ],
+                          ),
                         ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          widget.peerInitials,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        widget.peerName,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 25,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.peerSubtitle,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.72),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _stage == _TelegramCallStage.connected
+                            ? YanColors.successGreen.withValues(alpha: 0.18)
+                            : Colors.white.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        _statusHeadline,
+                        style: TextStyle(
+                          fontSize: _stage == _TelegramCallStage.connected
+                              ? 19
+                              : 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.4,
+                          color: _stage == _TelegramCallStage.connected
+                              ? YanColors.successGreen
+                              : Colors.white,
+                        ),
+                      ),
+                    ),
+                    if (_isPeerMuted && _stage == _TelegramCallStage.connected) ...<Widget>[
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: <Widget>[
+                          const Icon(
+                            Icons.mic_off_rounded,
+                            size: 15,
+                            color: Color(0xFFFFB4AB),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            '${widget.peerName} mikrofoni o‘chiq',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFFFB4AB),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                )
+              else
+                Positioned(
+                  top: 62,
+                  left: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          widget.peerName,
                           style: const TextStyle(
-                            fontSize: 42,
+                            fontSize: 16,
                             fontWeight: FontWeight.w900,
                             color: Colors.white,
                           ),
                         ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Text(
-                      widget.peerName,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 25,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    widget.peerSubtitle,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.72),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _stage == _TelegramCallStage.connected
-                          ? YanColors.successGreen.withValues(alpha: 0.18)
-                          : Colors.white.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      _statusHeadline,
-                      style: TextStyle(
-                        fontSize: _stage == _TelegramCallStage.connected
-                            ? 19
-                            : 14,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.4,
-                        color: _stage == _TelegramCallStage.connected
-                            ? YanColors.successGreen
-                            : Colors.white,
-                      ),
-                    ),
-                  ),
-                  if (_isPeerMuted && _stage == _TelegramCallStage.connected) ...<Widget>[
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        const Icon(
-                          Icons.mic_off_rounded,
-                          size: 15,
-                          color: Color(0xFFFFB4AB),
-                        ),
-                        const SizedBox(width: 5),
+                        const SizedBox(height: 2),
                         Text(
-                          '${widget.peerName} mikrofoni o‘chiq',
+                          _statusHeadline,
                           style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFFFFB4AB),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: YanColors.successGreen,
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ],
-              ),
+                  ),
+                ),
 
-              // Picture-in-Picture Local Camera Preview when Video is active
-              if (_isVideoEnabled && _stage == _TelegramCallStage.connected)
+              // 3. Picture-in-Picture Local Camera Preview (Real Live Camera Feed via RTCVideoView!)
+              if (_isVideoEnabled && _renderersInitialized)
                 Positioned(
                   right: 16,
                   top: 64,
                   child: GestureDetector(
-                    onTap: () =>
-                        setState(() => _isFrontCamera = !_isFrontCamera),
-                    child: Container(
-                      width: 108,
-                      height: 154,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF071326),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white, width: 1.6),
-                        boxShadow: const <BoxShadow>[
-                          BoxShadow(
-                            color: Color(0x55000000),
-                            blurRadius: 16,
-                            offset: Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: <Widget>[
-                          const Icon(
-                            Icons.videocam_rounded,
-                            color: YanColors.cyanAccent,
-                            size: 28,
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _isFrontCamera ? 'Old kamera' : 'Orqa kamera',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            _isPeerVideoEnabled ? 'HD 60fps' : 'Faol',
-                            style: const TextStyle(
-                              fontSize: 9.8,
-                              fontWeight: FontWeight.w700,
-                              color: YanColors.successGreen,
-                            ),
-                          ),
-                        ],
+                    onTap: _switchCameraDirection,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        width: 112,
+                        height: 162,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF071326),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white, width: 1.8),
+                        ),
+                        child: _localRenderer.srcObject != null
+                            ? RTCVideoView(
+                                _localRenderer,
+                                mirror: _isFrontCamera,
+                                objectFit: RTCVideoViewObjectFit
+                                    .RTCVideoViewObjectFitCover,
+                              )
+                            : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: <Widget>[
+                                  const Icon(
+                                    Icons.videocam_rounded,
+                                    color: YanColors.cyanAccent,
+                                    size: 28,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _isFrontCamera
+                                        ? 'Old kamera'
+                                        : 'Orqa kamera',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
                       ),
                     ),
                   ),
                 ),
 
-              // Bottom Controls:
-              // - If Incoming Ringing: Telegram-style Two-Button Bar (Red "Rad etish" + Green "Javob berish")
-              // - Otherwise: Full Live Call Dock (Mute, Video, Speaker, Flip Camera, Hangup)
+              // 4. Bottom Controls
               Positioned(
                 left: 20,
                 right: 20,
@@ -11084,7 +11667,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
                           vertical: 18,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
+                          color: Colors.black.withValues(alpha: 0.38),
                           borderRadius: BorderRadius.circular(30),
                           border: Border.all(
                             color: Colors.white.withValues(alpha: 0.18),
@@ -11093,7 +11676,6 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: <Widget>[
-                            // Decline button
                             GestureDetector(
                               onTap: _declineIncomingCall,
                               child: Column(
@@ -11131,8 +11713,6 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
                                 ],
                               ),
                             ),
-
-                            // Accept button
                             GestureDetector(
                               onTap: _acceptIncomingCall,
                               child: Column(
@@ -11181,7 +11761,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
                           vertical: 16,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
+                          color: Colors.black.withValues(alpha: 0.38),
                           borderRadius: BorderRadius.circular(28),
                           border: Border.all(
                             color: Colors.white.withValues(alpha: 0.16),
@@ -11196,11 +11776,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
                                   : Icons.mic_rounded,
                               label: _isMuted ? 'O‘chiq' : 'Mikrofon',
                               active: !_isMuted,
-                              onTap: () {
-                                HapticFeedback.selectionClick();
-                                setState(() => _isMuted = !_isMuted);
-                                _sendSignal('media_state');
-                              },
+                              onTap: _toggleMicrophoneMute,
                             ),
                             _CallControlButton(
                               icon: _isVideoEnabled
@@ -11208,13 +11784,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
                                   : Icons.videocam_off_rounded,
                               label: _isVideoEnabled ? 'Video' : 'Audio',
                               active: _isVideoEnabled,
-                              onTap: () {
-                                HapticFeedback.selectionClick();
-                                setState(
-                                  () => _isVideoEnabled = !_isVideoEnabled,
-                                );
-                                _sendSignal('media_state');
-                              },
+                              onTap: _toggleVideoStream,
                             ),
                             _CallControlButton(
                               icon: _isSpeakerOn
@@ -11222,22 +11792,14 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
                                   : Icons.volume_down_rounded,
                               label: _isSpeakerOn ? 'Karnay' : 'Quloqchin',
                               active: _isSpeakerOn,
-                              onTap: () {
-                                HapticFeedback.selectionClick();
-                                setState(() => _isSpeakerOn = !_isSpeakerOn);
-                              },
+                              onTap: _toggleSpeakerphone,
                             ),
                             if (_isVideoEnabled)
                               _CallControlButton(
                                 icon: Icons.cameraswitch_rounded,
                                 label: 'Kamera',
                                 active: true,
-                                onTap: () {
-                                  HapticFeedback.selectionClick();
-                                  setState(
-                                    () => _isFrontCamera = !_isFrontCamera,
-                                  );
-                                },
+                                onTap: _switchCameraDirection,
                               ),
                             GestureDetector(
                               onTap: _hangupOrCancelCall,
