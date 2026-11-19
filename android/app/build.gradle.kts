@@ -46,6 +46,7 @@ android {
             )
         }
     }
+}
 
 kotlin {
     compilerOptions {

@@ -29,6 +29,21 @@ import 'shared/user_profile.dart';
 // Supabase Configuration (Europe Region + Strict RLS + E2EE Ready)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// WebRTC TURN Server Configuration (For 3G/4G/5G Mobile Data & Strict Firewalls)
+// Get free credentials (no credit card) at: https://www.metered.ca/stun-turn
+// Option A (Recommended): Paste your Metered REST API URL (returns geo-nearest servers):
+//   e.g. 'https://yourapp.metered.live/api/v1/turn/credentials?apiKey=YOUR_API_KEY'
+// Option B: Or paste static username & credential from Metered Dashboard below.
+// ═══════════════════════════════════════════════════════════════════════════
+const String yanMeteredTurnApiUrl = '';
+const String yanStaticTurnUsername = 'a563ad5fa22790872c877d8a';
+const String yanStaticTurnCredential = 'Tz+qYirv3gOulwmK';
+
+// Set to true once you deploy your Supabase Edge Function `send-call-push` + Firebase Cloud Messaging (FCM)
+const bool yanEnableFcmCallPush = false;
+
+
 const String kSupabaseUrl = 'https://driqciowlqmvribbpuud.supabase.co';
 const String kSupabasePublishableKey =
     'sb_publishable_VRCn93Hc3eKnFxuiaI4faA_ZaYo1Iz0';
@@ -445,6 +460,15 @@ class _IntroScreenState extends State<IntroScreen>
     required ImageSource source,
   }) async {
     try {
+      if (source == ImageSource.camera) {
+        final camPerm = await Permission.camera.request();
+        if (!camPerm.isGranted) {
+          _showMessage(
+            'Hujjatni suratga olish uchun ilovaga kamera ruxsatini bering.',
+          );
+          return;
+        }
+      }
       final picked = await _licensePicker.pickImage(
         source: source,
         imageQuality: 92,
@@ -7117,6 +7141,22 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
           builder: (ctx, setSheetState) {
             Future<void> pickFromGalleryOrMedia({required bool isCamera}) async {
               try {
+                if (isCamera) {
+                  final camPerm = await Permission.camera.request();
+                  if (!camPerm.isGranted) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Kameradan foydalanish uchun ilova ruxsatlarini yoqing.',
+                          ),
+                          backgroundColor: YanColors.destructiveRed,
+                        ),
+                      );
+                    }
+                    return;
+                  }
+                }
                 final XFile? picked = isCamera
                     ? await _filePicker.pickImage(
                         source: ImageSource.camera,
@@ -7135,7 +7175,9 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                         : picked.path.split(Platform.pathSeparator).last;
                   });
                 }
-              } catch (_) {}
+              } catch (error) {
+                debugPrint('Camera/Gallery pick error: $error');
+              }
             }
 
             Future<void> pickFromDeviceStorage() async {
@@ -10195,19 +10237,23 @@ class _TelegramCallLogMeta {
   }
 }
 
-/// Global 0.00s Call Signaling & Offline Wake-Up Engine:
-/// - Listens on a global Supabase Realtime broadcast channel (`yan360_global_call_bus`)
-///   AND polls the current user's `profiles.public_key` envelope for `active_call_signal`
-///   every 1.5 seconds so the phone rings on ANY screen (or immediately when waking from background),
-///   even if the recipient is not inside the chat page!
-class _YanGlobalCallCenter {
+/// Scalable Call Signaling & FCM-Ready Wake-Up Engine:
+/// - Subscribes ONLY to this user's private Realtime channel (`yan360_call_inbox_<myId>`)
+///   instead of a shared global bus (prevents N*N Realtime message amplification at scale).
+/// - Zero background DB polling timer: checks `profiles.public_key` ONLY once on startup
+///   and once when returning to foreground (`AppLifecycleState.resumed`).
+/// - Ready for Firebase Cloud Messaging (FCM): pass incoming push data to `handleFcmCallPayload()`.
+class _YanGlobalCallCenter with WidgetsBindingObserver {
   _YanGlobalCallCenter._();
   static final _YanGlobalCallCenter instance = _YanGlobalCallCenter._();
 
-  RealtimeChannel? _globalChannel;
-  Timer? _envelopeWatchTimer;
+  RealtimeChannel? _myInboxChannel;
+  String? _subscribedInboxUserId;
+  bool _lifecycleAttached = false;
   String? _activeCallId;
   final Set<String> _handledCallIds = <String>{};
+  final Set<String> _handledEnvelopeSignalKeys = <String>{};
+  final Map<String, RealtimeChannel> _peerSendChannels = <String, RealtimeChannel>{};
   final ValueNotifier<Map<String, dynamic>?> latestSignalNotifier =
       ValueNotifier<Map<String, dynamic>?>(null);
 
@@ -10220,11 +10266,30 @@ class _YanGlobalCallCenter {
     return userProfile.value.clientId.trim();
   }
 
+  String _inboxTopicFor(String userId) {
+    final clean = userId.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+    return 'yan360_call_inbox_$clean';
+  }
+
   void startGlobalListening() {
-    if (_globalChannel == null) {
+    if (!_lifecycleAttached) {
+      WidgetsBinding.instance.addObserver(this);
+      _lifecycleAttached = true;
+    }
+
+    final myId = _resolveMyId();
+    if (myId.isEmpty) return;
+
+    if (_myInboxChannel == null || _subscribedInboxUserId != myId) {
+      final oldChannel = _myInboxChannel;
+      if (oldChannel != null) {
+        try {
+          Supabase.instance.client.removeChannel(oldChannel);
+        } catch (_) {}
+      }
       try {
         final ch = Supabase.instance.client.channel(
-          'yan360_global_call_bus',
+          _inboxTopicFor(myId),
           opts: const RealtimeChannelConfig(self: false, ack: false),
         );
         ch
@@ -10235,14 +10300,30 @@ class _YanGlobalCallCenter {
               },
             )
             .subscribe();
-        _globalChannel = ch;
-      } catch (_) {}
+        _myInboxChannel = ch;
+        _subscribedInboxUserId = myId;
+      } catch (e) {
+        debugPrint('Call inbox channel subscribe warning: $e');
+      }
     }
 
-    _envelopeWatchTimer ??= Timer.periodic(
-      const Duration(milliseconds: 1600),
-      (_) => _pollMyProfileEnvelopeForIncomingCall(),
-    );
+    // One-shot check on app launch (no repeating 1.6s timer!)
+    _checkPendingCallEnvelopeOnce();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      startGlobalListening();
+    }
+  }
+
+  /// Entry point for Firebase Cloud Messaging (FCM) push notifications:
+  /// Call `_YanGlobalCallCenter.instance.handleFcmCallPayload(message.data)`
+  /// from `FirebaseMessaging.onMessage` / `onMessageOpenedApp`.
+  void handleFcmCallPayload(Map<String, dynamic> fcmData) {
+    if (fcmData.isEmpty) return;
+    handleIncomingSignalPayload(Map<String, dynamic>.from(fcmData));
   }
 
   void markCallActive(String callId) {
@@ -10253,6 +10334,57 @@ class _YanGlobalCallCenter {
   void clearActiveCall(String callId) {
     if (_activeCallId == callId) {
       _activeCallId = null;
+    }
+  }
+
+  Future<void> _broadcastToPeerInbox(
+    String targetUserId,
+    Map<String, dynamic> payload,
+  ) async {
+    final cleanId = targetUserId.trim();
+    if (cleanId.isEmpty) return;
+    try {
+      var ch = _peerSendChannels[cleanId];
+      if (ch == null) {
+        ch = Supabase.instance.client.channel(
+          _inboxTopicFor(cleanId),
+          opts: const RealtimeChannelConfig(self: false, ack: false),
+        );
+        ch.subscribe();
+        _peerSendChannels[cleanId] = ch;
+        // Keep cache bounded so memory stays tiny
+        if (_peerSendChannels.length > 20) {
+          final oldestKey = _peerSendChannels.keys.first;
+          final oldestCh = _peerSendChannels.remove(oldestKey);
+          if (oldestCh != null) {
+            Supabase.instance.client.removeChannel(oldestCh);
+          }
+        }
+      }
+      await ch.sendBroadcastMessage(
+        event: 'call_signal',
+        payload: payload,
+      );
+    } catch (e) {
+      debugPrint('Peer inbox broadcast warning: $e');
+    }
+  }
+
+  Future<void> _triggerFcmPushIfEnabled(
+    String targetUserId,
+    Map<String, dynamic> payload,
+  ) async {
+    if (!yanEnableFcmCallPush) return;
+    try {
+      await Supabase.instance.client.functions.invoke(
+        'send-call-push',
+        body: <String, dynamic>{
+          'target_user_id': targetUserId,
+          'signal': payload,
+        },
+      );
+    } catch (e) {
+      debugPrint('FCM push invoke warning: $e');
     }
   }
 
@@ -10270,6 +10402,7 @@ class _YanGlobalCallCenter {
     bool isMuted = false,
     Map<String, dynamic>? webrtcData,
     RealtimeChannel? roomChannel,
+    String? targetPeerId,
   }) async {
     final nowIso = DateTime.now().toUtc().toIso8601String();
     final payload = <String, dynamic>{
@@ -10288,13 +10421,19 @@ class _YanGlobalCallCenter {
       'timestamp': nowIso,
     };
 
-    try {
-      await _globalChannel?.sendBroadcastMessage(
-        event: 'call_signal',
-        payload: payload,
-      );
-    } catch (_) {}
+    final myId = _resolveMyId();
+    final targetProfileId = (targetPeerId != null && targetPeerId.trim().isNotEmpty)
+        ? targetPeerId.trim()
+        : (myId.isNotEmpty && YanRoleDataCatalog.isSameParticipant(myId, callerId))
+            ? calleeId
+            : (myId.isNotEmpty && YanRoleDataCatalog.isSameParticipant(myId, calleeId))
+                ? callerId
+                : ((action == 'invite' || action == 'cancel') ? calleeId : callerId);
 
+    // 1. Send directly to target peer's private Realtime inbox (zero fan-out to other users)
+    await _broadcastToPeerInbox(targetProfileId, payload);
+
+    // 2. Also send on active chat room channel if open
     try {
       await roomChannel?.sendBroadcastMessage(
         event: 'call_signal',
@@ -10302,17 +10441,15 @@ class _YanGlobalCallCenter {
       );
     } catch (_) {}
 
-    // Also persist into the target peer's `profiles.public_key` envelope so even if the peer
-    // was on another tab or briefly offline, their device rings within 1.5s!
-    final targetProfileId = (action == 'invite' ||
-            action == 'cancel' ||
-            action == 'hangup')
-        ? calleeId
-        : callerId;
+    // 3. Persist invite/cancel/hangup/decline once in profile envelope for app-resume recovery,
+    //    and trigger FCM push notification on invite when enabled.
     if (targetProfileId.trim().isNotEmpty &&
         action != 'media_state' &&
         !action.startsWith('webrtc_')) {
-      _writeSignalToProfileEnvelope(targetProfileId, payload);
+      await _writeSignalToProfileEnvelope(targetProfileId, payload);
+      if (action == 'invite') {
+        await _triggerFcmPushIfEnabled(targetProfileId, payload);
+      }
     }
   }
 
@@ -10341,7 +10478,8 @@ class _YanGlobalCallCenter {
     } catch (_) {}
   }
 
-  Future<void> _pollMyProfileEnvelopeForIncomingCall() async {
+  /// Lightweight one-shot check (runs ONLY on app launch / foreground resume — never on a timer).
+  Future<void> _checkPendingCallEnvelopeOnce() async {
     final myId = _resolveMyId();
     if (myId.isEmpty) return;
     try {
@@ -10360,9 +10498,25 @@ class _YanGlobalCallCenter {
       final rawSig = env['active_call_signal'];
       if (rawSig is Map) {
         final sig = Map<String, dynamic>.from(rawSig);
-        final ts = DateTime.tryParse(sig['timestamp']?.toString() ?? '');
+        final sigCallId = sig['call_id']?.toString() ?? '';
+        final sigAction = sig['action']?.toString() ?? '';
+        final sigTs = sig['timestamp']?.toString() ?? '';
+        if (sigCallId.isEmpty || sigAction.isEmpty) return;
+
+        final dedupKey = '$sigCallId|$sigAction|$sigTs';
+        if (!_handledEnvelopeSignalKeys.add(dedupKey)) return;
+        if (_handledEnvelopeSignalKeys.length > 256) {
+          _handledEnvelopeSignalKeys.remove(_handledEnvelopeSignalKeys.first);
+        }
+
+        if (sigAction == 'invite' &&
+            (_activeCallId != null || _handledCallIds.contains(sigCallId))) {
+          return;
+        }
+
+        final ts = DateTime.tryParse(sigTs);
         if (ts != null &&
-            DateTime.now().toUtc().difference(ts).inSeconds <= 45) {
+            DateTime.now().toUtc().difference(ts).inSeconds <= 35) {
           handleIncomingSignalPayload(sig, myUserIdOverride: myId);
         }
       }
@@ -10415,7 +10569,7 @@ class _YanGlobalCallCenter {
           payload['room_key']?.toString() ??
           _YanE2eeCryptoEngine.buildCanonicalRoomKey(myId, callerId);
 
-      // Immediately notify caller that our phone is ringing ("Diyorlanmoqda / Chaqirolmoqda...")
+      // Immediately notify caller that our phone is ringing
       dispatchCallSignal(
         callId: callId,
         action: 'ringing',
@@ -10426,6 +10580,7 @@ class _YanGlobalCallCenter {
         calleeName: userProfile.value.displayName,
         roomKey: roomKey,
         isVideo: isVideo,
+        targetPeerId: callerId,
       );
 
       final nav = yanRootNavigatorKey.currentState;
@@ -10509,6 +10664,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
   bool _isFrontCamera = true;
   int _elapsedSeconds = 0;
   bool _closed = false;
+  bool _cleaningUp = false;
 
   // Real WebRTC Audio & Video Streaming State
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
@@ -10525,11 +10681,15 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
   bool _hasRemoteVideoTrack = false;
   MediaStream? _remoteStream;
   bool _ownsRemoteStream = false;
-  late Future<void> _mediaInitialization;
+  Future<void>? _mediaInitFuture;
+
+  Future<void> get _mediaInitialization =>
+      _mediaInitFuture ??= _initHardwareMediaAndPermissions();
 
   Timer? _callClockTimer;
   Timer? _ringtoneLoopTimer;
   Timer? _noAnswerTimeoutTimer;
+  Timer? _peerDisconnectTimer;
   late final AnimationController _pulseController;
   late final List<String> _e2eeEmojis;
 
@@ -10560,9 +10720,9 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     );
 
     _startRingtoneAndVibrationLoop();
-    _mediaInitialization = _initHardwareMediaAndPermissions();
 
     if (widget.isCaller) {
+      _mediaInitFuture = _initHardwareMediaAndPermissions();
       _sendSignal('invite');
       _noAnswerTimeoutTimer = Timer(const Duration(seconds: 45), () {
         if (!_closed && _stage != _TelegramCallStage.connected) {
@@ -10571,6 +10731,8 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
         }
       });
     } else {
+      // Wait until the callee taps "Javob berish" (_acceptIncomingCall)
+      // before opening hardware camera & microphone to prevent permission dialog collisions.
       _noAnswerTimeoutTimer = Timer(const Duration(seconds: 45), () {
         if (!_closed && _stage == _TelegramCallStage.incomingRinging) {
           _finishCallWithOutcome('missed');
@@ -10582,9 +10744,11 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
   /// Requests real OS Microphone & Camera permissions and opens local audio/video tracks
   Future<void> _initHardwareMediaAndPermissions() async {
     try {
-      await _localRenderer.initialize();
-      await _remoteRenderer.initialize();
-      _renderersInitialized = true;
+      if (!_renderersInitialized) {
+        await _localRenderer.initialize();
+        await _remoteRenderer.initialize();
+        _renderersInitialized = true;
+      }
 
       // 1. Request OS runtime permissions for Microphone (and Camera if video call)
       final micStatus = await Permission.microphone.request();
@@ -10603,6 +10767,8 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
       final wantVideo = _isVideoEnabled && (camStatus?.isGranted ?? false);
 
       // 2. Capture real device microphone & camera stream via WebRTC
+      // Uses a hardware-safe 640x480 / 720p cap so both Android Emulators (Pixel 8 Pro)
+      // and physical Samsung Camera2 encoders (S22 Ultra) initialize without native crashes.
       final mediaConstraints = <String, dynamic>{
         'audio': <String, dynamic>{
           'echoCancellation': true,
@@ -10612,9 +10778,9 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
         'video': wantVideo
             ? <String, dynamic>{
                 'facingMode': _isFrontCamera ? 'user' : 'environment',
-                'width': <String, dynamic>{'ideal': 720},
-                'height': <String, dynamic>{'ideal': 1280},
-                'frameRate': <String, dynamic>{'ideal': 30},
+                'width': <String, dynamic>{'ideal': 640, 'max': 1280},
+                'height': <String, dynamic>{'ideal': 480, 'max': 720},
+                'frameRate': <String, dynamic>{'ideal': 24, 'max': 30},
               }
             : false,
       };
@@ -10646,10 +10812,23 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
 
       _localStream = stream;
       _localRenderer.srcObject = stream;
-      await Helper.setSpeakerphoneOn(_isSpeakerOn);
+      for (final t in stream.getAudioTracks()) {
+        t.enabled = !_isMuted;
+      }
+
+      try {
+        if (Platform.isAndroid) {
+          await Helper.setAndroidAudioConfiguration(
+            AndroidAudioConfiguration.communication,
+          );
+        }
+        await Helper.setSpeakerphoneOn(_isSpeakerOn);
+      } catch (e) {
+        debugPrint('Audio routing initialization warning (non-fatal): $e');
+      }
 
       await _ensurePeerConnectionCreated();
-      if (mounted) setState(() {});
+      if (mounted && !_closed) setState(() {});
     } catch (error) {
       _showMediaPermissionMessage(
         'Mikrofon yoki kamerani ishga tushirib bo‘lmadi. Ilova ruxsatlari va qurilma sozlamalarini tekshiring.',
@@ -10670,28 +10849,101 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
       );
   }
 
+  Future<List<Map<String, dynamic>>> _resolveIceServers() async {
+    final servers = <Map<String, dynamic>>[
+      <String, dynamic>{
+        'urls': <String>[
+          'stun:stun.l.google.com:19302',
+          'stun:stun1.l.google.com:19302',
+          'stun:stun.relay.metered.ca:80',
+        ],
+      },
+    ];
+
+    // Option A: Fetch dynamic geo-nearest TURN servers from Metered REST API
+    final apiUrl = yanMeteredTurnApiUrl.trim();
+    if (apiUrl.isNotEmpty) {
+      HttpClient? client;
+      try {
+        client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
+        final request = await client
+            .getUrl(Uri.parse(apiUrl))
+            .timeout(const Duration(seconds: 3));
+        final response = await request.close().timeout(
+          const Duration(seconds: 3),
+        );
+        if (response.statusCode == 200) {
+          final body = await response.transform(utf8.decoder).join();
+          final decoded = jsonDecode(body);
+          if (decoded is List) {
+            for (final entry in decoded) {
+              if (entry is Map) {
+                servers.add(Map<String, dynamic>.from(entry));
+              }
+            }
+            return servers;
+          }
+        }
+      } catch (error) {
+        debugPrint('Metered TURN API fetch skipped (fallback to static/STUN): $error');
+      } finally {
+        client?.close(force: true);
+      }
+    }
+
+    // Option B: Static Metered TURN credentials (UDP 80, TCP 80/443, TLS 443 for 3G/4G/5G)
+    final turnUser = yanStaticTurnUsername.trim();
+    final turnPass = yanStaticTurnCredential.trim();
+    if (turnUser.isNotEmpty && turnPass.isNotEmpty) {
+      servers.addAll(<Map<String, dynamic>>[
+        <String, dynamic>{
+          'urls': 'turn:global.relay.metered.ca:80',
+          'username': turnUser,
+          'credential': turnPass,
+        },
+        <String, dynamic>{
+          'urls': 'turn:global.relay.metered.ca:80?transport=tcp',
+          'username': turnUser,
+          'credential': turnPass,
+        },
+        <String, dynamic>{
+          'urls': 'turn:global.relay.metered.ca:443',
+          'username': turnUser,
+          'credential': turnPass,
+        },
+        <String, dynamic>{
+          'urls': 'turns:global.relay.metered.ca:443?transport=tcp',
+          'username': turnUser,
+          'credential': turnPass,
+        },
+      ]);
+    }
+
+    return servers;
+  }
+
   Future<RTCPeerConnection?> _ensurePeerConnectionCreated() async {
     if (_peerConnection != null) return _peerConnection;
     try {
+      final iceServers = await _resolveIceServers();
       final config = <String, dynamic>{
         'sdpSemantics': 'unified-plan',
-        'iceServers': <Map<String, dynamic>>[
-          <String, dynamic>{
-            'urls': <String>[
-              'stun:stun.l.google.com:19302',
-              'stun:stun1.l.google.com:19302',
-              'stun:stun2.l.google.com:19302',
-            ],
-          },
-        ],
+        'iceTransportPolicy': 'all',
+        'iceServers': iceServers,
       };
 
       final pc = await createPeerConnection(config);
       _peerConnection = pc;
 
       if (_localStream != null) {
+        final existingSenders = await pc.getSenders();
         for (final track in _localStream!.getTracks()) {
-          await pc.addTrack(track, _localStream!);
+          final alreadyAdded = existingSenders.any(
+            (s) => s.track?.id == track.id,
+          );
+          if (!alreadyAdded) {
+            await pc.addTrack(track, _localStream!);
+          }
         }
       }
 
@@ -10711,39 +10963,72 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
         _attachRemoteTrack(event);
       };
 
-      pc.onAddStream = (MediaStream stream) {
+      pc.onConnectionState = (RTCPeerConnectionState state) {
         if (_closed) return;
-        _remoteRenderer.srcObject = stream;
-        if (mounted) {
-          setState(() {
-            _hasRemoteVideoTrack = stream.getVideoTracks().isNotEmpty;
+        if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+          _peerDisconnectTimer?.cancel();
+          _peerDisconnectTimer = null;
+          _applyAudioOutputRouting();
+        } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+          _finishCallWithOutcome(
+            _stage == _TelegramCallStage.connected || _elapsedSeconds > 0
+                ? 'completed'
+                : 'canceled',
+          );
+        } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+            state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+          _peerDisconnectTimer?.cancel();
+          _peerDisconnectTimer = Timer(const Duration(seconds: 3), () {
+            if (!_closed) {
+              _finishCallWithOutcome(
+                _stage == _TelegramCallStage.connected || _elapsedSeconds > 0
+                    ? 'completed'
+                    : 'canceled',
+              );
+            }
           });
         }
       };
 
       return pc;
-    } catch (_) {
+    } catch (error) {
+      debugPrint('Creating RTCPeerConnection failed: $error');
       return null;
     }
   }
 
-  Future<void> _attachRemoteTrack(RTCTrackEvent event) async {
-    if (_closed) return;
+  Future<void> _applyAudioOutputRouting() async {
     try {
-      if (event.streams.isNotEmpty) {
-        _remoteRenderer.srcObject = event.streams.first;
-        _remoteStream = event.streams.first;
-      } else {
-        final stream = _remoteStream ??= await createLocalMediaStream(
-          'remote-${widget.callId}',
+      if (Platform.isAndroid) {
+        await Helper.setAndroidAudioConfiguration(
+          AndroidAudioConfiguration.communication,
         );
-        if (_closed) return;
-        _ownsRemoteStream = true;
-        await stream.addTrack(event.track);
-        _remoteRenderer.srcObject = stream;
       }
-      final hasVideo = _remoteRenderer.srcObject?.getVideoTracks().isNotEmpty ?? false;
-      if (mounted) {
+      await Helper.setSpeakerphoneOn(_isSpeakerOn);
+    } catch (e) {
+      debugPrint('Audio output routing warning: $e');
+    }
+  }
+
+  Future<void> _attachRemoteTrack(RTCTrackEvent event) async {
+    if (_closed || !mounted) return;
+    try {
+      if (event.track.kind == 'audio') {
+        event.track.enabled = true;
+        await _applyAudioOutputRouting();
+      }
+      if (event.streams.isNotEmpty) {
+        final remoteStream = event.streams.first;
+        for (final audioTrack in remoteStream.getAudioTracks()) {
+          audioTrack.enabled = true;
+        }
+        _remoteStream = remoteStream;
+        _remoteRenderer.srcObject = remoteStream;
+      }
+      final hasVideo =
+          event.track.kind == 'video' ||
+          (_remoteRenderer.srcObject?.getVideoTracks().isNotEmpty ?? false);
+      if (mounted && !_closed) {
         setState(() => _hasRemoteVideoTrack = hasVideo);
       }
     } catch (error) {
@@ -10766,8 +11051,10 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
         return;
       }
       final offer = await pc.createOffer(<String, dynamic>{
-        'offerToReceiveAudio': 1,
-        'offerToReceiveVideo': 1,
+        'mandatory': <String, dynamic>{
+          'OfferToReceiveAudio': true,
+          'OfferToReceiveVideo': true,
+        },
       });
       await pc.setLocalDescription(offer);
       _webrtcOfferSent = true;
@@ -10813,8 +11100,10 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
       _queuedRemoteCandidates.clear();
 
       final answer = await pc.createAnswer(<String, dynamic>{
-        'offerToReceiveAudio': 1,
-        'offerToReceiveVideo': 1,
+        'mandatory': <String, dynamic>{
+          'OfferToReceiveAudio': true,
+          'OfferToReceiveVideo': true,
+        },
       });
       await pc.setLocalDescription(answer);
       _sendSignal(
@@ -10927,6 +11216,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
       isMuted: _isMuted,
       webrtcData: webrtcData,
       roomChannel: widget.roomChannel,
+      targetPeerId: widget.peerId,
     );
   }
 
@@ -11070,14 +11360,22 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
         if (existingPeerConnection == null) {
           await _ensurePeerConnectionCreated();
         } else {
-          await existingPeerConnection.addTrack(audioTrack, _localStream!);
+          final senders = await existingPeerConnection.getSenders();
+          final audioSender = senders
+              .where((s) => s.track?.kind == 'audio')
+              .firstOrNull;
+          if (audioSender != null) {
+            await audioSender.replaceTrack(audioTrack);
+          } else {
+            await existingPeerConnection.addTrack(audioTrack, _localStream!);
+          }
         }
 
         if (_stage == _TelegramCallStage.connected) {
           _webrtcOfferSent = false;
           await _startCallerWebRtcOffer();
         }
-        if (mounted) setState(() {});
+        if (mounted && !_closed) setState(() {});
         _sendSignal('media_state');
         return;
       } catch (error) {
@@ -11098,18 +11396,16 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
 
   Future<void> _toggleVideoStream() async {
     HapticFeedback.selectionClick();
+    await _mediaInitialization;
+    if (_closed) return;
+
     final nextVideo = !_isVideoEnabled;
     if (nextVideo) {
       final camStatus = await Permission.camera.request();
       if (!camStatus.isGranted) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Video qo‘ng‘iroq uchun kamera ruxsatini bering.'),
-              backgroundColor: YanColors.destructiveRed,
-            ),
-          );
-        }
+        _showMediaPermissionMessage(
+          'Video qo‘ng‘iroq uchun kamera ruxsatini bering.',
+        );
         return;
       }
       final existingVideoTracks =
@@ -11125,23 +11421,31 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
               'audio': false,
               'video': <String, dynamic>{
                 'facingMode': _isFrontCamera ? 'user' : 'environment',
+                'width': <String, dynamic>{'ideal': 640, 'max': 1280},
+                'height': <String, dynamic>{'ideal': 480, 'max': 720},
+                'frameRate': <String, dynamic>{'ideal': 24, 'max': 30},
               },
             },
           );
           final videoTrack = camStream.getVideoTracks().firstOrNull;
           if (videoTrack != null) {
-            final localStream = _localStream;
-            if (localStream == null) {
-              videoTrack.stop();
-              await camStream.dispose();
-              _showMediaPermissionMessage(
-                'Kamera ishga tushmadi. Qo‘ng‘iroq media ruxsatlarini tekshiring.',
-              );
-              return;
+            if (_localStream == null) {
+              _localStream = camStream;
+              _localRenderer.srcObject = camStream;
+            } else {
+              await _localStream!.addTrack(videoTrack);
+              _localRenderer.srcObject = _localStream;
             }
-            await localStream.addTrack(videoTrack);
             if (_peerConnection != null && _localStream != null) {
-              await _peerConnection!.addTrack(videoTrack, localStream);
+              final senders = await _peerConnection!.getSenders();
+              final videoSender = senders
+                  .where((s) => s.track?.kind == 'video')
+                  .firstOrNull;
+              if (videoSender != null) {
+                await videoSender.replaceTrack(videoTrack);
+              } else {
+                await _peerConnection!.addTrack(videoTrack, _localStream!);
+              }
               _webrtcOfferSent = false;
               await _startCallerWebRtcOffer();
             }
@@ -11161,7 +11465,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
         t.enabled = false;
       }
     }
-    if (mounted) {
+    if (mounted && !_closed) {
       setState(() => _isVideoEnabled = nextVideo);
     }
     _sendSignal('media_state');
@@ -11201,7 +11505,13 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     }
   }
 
-  Future<void> _cleanupWebRtcResources() async {
+  Future<void> _cleanupWebRtcResources({bool disposeRenderers = false}) async {
+    if (_cleaningUp && !disposeRenderers) return;
+    _cleaningUp = true;
+    try {
+      _localRenderer.srcObject = null;
+      _remoteRenderer.srcObject = null;
+    } catch (_) {}
     try {
       final stream = _localStream;
       _localStream = null;
@@ -11216,9 +11526,6 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
       final remoteStream = _remoteStream;
       _remoteStream = null;
       if (_ownsRemoteStream && remoteStream != null) {
-        if (identical(remoteStream, _remoteRenderer.srcObject)) {
-          _remoteRenderer.srcObject = null;
-        }
         await remoteStream.dispose();
       }
       _ownsRemoteStream = false;
@@ -11229,14 +11536,12 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
       await pc?.close();
       await pc?.dispose();
     } catch (_) {}
-    if (_renderersInitialized) {
+    if (disposeRenderers && _renderersInitialized) {
+      _renderersInitialized = false;
       try {
-        _localRenderer.srcObject = null;
-        _remoteRenderer.srcObject = null;
         await _localRenderer.dispose();
         await _remoteRenderer.dispose();
       } catch (_) {}
-      _renderersInitialized = false;
     }
   }
 
@@ -11246,8 +11551,9 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     _ringtoneLoopTimer?.cancel();
     _noAnswerTimeoutTimer?.cancel();
     _callClockTimer?.cancel();
+    _peerDisconnectTimer?.cancel();
     _YanGlobalCallCenter.instance.clearActiveCall(widget.callId);
-    _cleanupWebRtcResources();
+    _cleanupWebRtcResources(disposeRenderers: false);
 
     if (!mounted) return;
     Navigator.of(context).pop(
@@ -11266,11 +11572,12 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     _ringtoneLoopTimer?.cancel();
     _noAnswerTimeoutTimer?.cancel();
     _callClockTimer?.cancel();
+    _peerDisconnectTimer?.cancel();
     _YanGlobalCallCenter.instance.latestSignalNotifier.removeListener(
       _onGlobalCallSignal,
     );
     _YanGlobalCallCenter.instance.clearActiveCall(widget.callId);
-    _cleanupWebRtcResources();
+    _cleanupWebRtcResources(disposeRenderers: true);
     _pulseController.dispose();
     super.dispose();
   }
@@ -11303,8 +11610,10 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     final isRinging = _stage == _TelegramCallStage.incomingRinging ||
         _stage == _TelegramCallStage.outgoingCalling ||
         _stage == _TelegramCallStage.outgoingRinging;
-    final showFullRemoteVideo = _stage == _TelegramCallStage.connected &&
-        (_isPeerVideoEnabled || _hasRemoteVideoTrack) &&
+    final showFullRemoteVideo = !_closed &&
+        _stage == _TelegramCallStage.connected &&
+        _isPeerVideoEnabled &&
+        _hasRemoteVideoTrack &&
         _renderersInitialized &&
         _remoteRenderer.srcObject != null;
 
@@ -11606,7 +11915,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
                 ),
 
               // 3. Picture-in-Picture Local Camera Preview (Real Live Camera Feed via RTCVideoView!)
-              if (_isVideoEnabled && _renderersInitialized)
+              if (!_closed && _isVideoEnabled && _renderersInitialized)
                 Positioned(
                   right: 16,
                   top: 64,
