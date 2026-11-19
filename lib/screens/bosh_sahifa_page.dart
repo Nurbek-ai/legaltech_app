@@ -8,6 +8,7 @@ import '../services/family_claim_document_service.dart';
 import '../shared/profile_widgets.dart';
 import '../shared/user_profile.dart';
 import 'services/advokat_yollash_page.dart';
+import 'services/consultation_booking_page.dart';
 import 'services/alimony_claim_page.dart';
 import 'services/family_claim_page.dart';
 import 'services/lawyer_draft_request_page.dart';
@@ -317,10 +318,7 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
     if (service.title == 'Konsultatsiya') {
       Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => AdvokatYollashPage(
-            initialRepresentation: false,
-            onSubmit: _handleLawyerOrConsultSubmit,
-          ),
+          builder: (_) => const ConsultationBookingPage(),
         ),
       );
       return;

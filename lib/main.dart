@@ -17,7 +17,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'screens/advocate_calendar_page.dart';
 import 'screens/bosh_sahifa_page.dart';
+import 'services/consultation_service.dart';
 import 'screens/profil_page.dart';
 import 'screens/services/alimony_claim_page.dart';
 import 'services/alimony_claim_document_service.dart';
@@ -2798,6 +2800,7 @@ class _MainDashboardState extends State<MainDashboard> {
     GeneratedDocumentRepository.instance.reload();
     ActivityHistoryRepository.instance.ensureInitialized();
     _YanGlobalCallCenter.instance.startGlobalListening();
+    ConsultationRepository.instance.ensureInitialized();
   }
 
   List<DashboardNavData> _navItemsForRole(UserRole role) {
@@ -3770,6 +3773,92 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
                 ),
               ],
             ),
+          ),
+        ),
+
+        SliverToBoxAdapter(
+          child: ValueListenableBuilder<List<ConsultationBooking>>(
+            valueListenable: ConsultationRepository.instance.consultations,
+            builder: (context, allBookings, _) {
+              final authId = Supabase.instance.client.auth.currentUser?.id ?? '';
+              final myId = authId.isNotEmpty ? authId : userProfile.value.clientId;
+              final activeBookings = allBookings
+                  .where((b) =>
+                      YanRoleDataCatalog.isSameParticipant(b.clientId, myId) &&
+                      b.isActiveStatus &&
+                      !b.isExpired())
+                  .toList()
+                ..sort((a, b) => a.slotStart.compareTo(b.slotStart));
+              if (activeBookings.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const Row(
+                      children: <Widget>[
+                        Icon(Icons.push_pin_rounded, size: 15, color: YanColors.primaryBlue),
+                        SizedBox(width: 6),
+                        Text(
+                          'BAND QILINGAN KONSULTATSIYALARINGIZ',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.6,
+                            color: YanColors.primaryBlue,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ...activeBookings.map((booking) {
+                      return _PinnedConsultationBannerCard(
+                        booking: booking,
+                        isAdvocateView: false,
+                        onOpenChat: () {
+                          final matchedAdv = YanRoleDataCatalog.registeredLawyers.value
+                              .where((a) => YanRoleDataCatalog.isSameParticipant(a.id, booking.advocateId))
+                              .firstOrNull;
+                          final peer = matchedAdv ??
+                              LawyerDirectoryProfile(
+                                id: booking.advocateId,
+                                fullName: booking.advocateName,
+                                title: booking.advocateTitle.isEmpty
+                                    ? 'Rasmiy Advokat'
+                                    : booking.advocateTitle,
+                                region: 'Toshkent shahri',
+                                specialization: booking.advocateSpecialization.isEmpty
+                                    ? 'Yuridik konsultatsiya'
+                                    : booking.advocateSpecialization,
+                                experienceYears: 5,
+                                rating: 5.0,
+                                feedbackCount: 1,
+                                wonCasesCount: 10,
+                                consultationPriceUzs: 99000,
+                                contractMonthlyNote: 'YAN360 Advokati',
+                                licenseNumber: 'Tasdiqlangan',
+                                phone: '+998',
+                                assistantName: '-',
+                                assistantRole: '',
+                                assistantPhone: '',
+                                bio: 'YAN360 rasmiy advokati.',
+                                feedbacks: const <LawyerFeedbackItem>[],
+                              );
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => AdvocateClientChatPage(
+                                lawyer: peer,
+                                profile: userProfile.value,
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    }),
+                  ],
+                ),
+              );
+            },
           ),
         ),
 
@@ -6116,6 +6205,101 @@ class AdvocateClientChatPage extends StatefulWidget {
       myRoomMessages: mergedList,
       isOnline: true,
     );
+
+    if (!context.mounted) return;
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => AdvocateClientChatPage(
+          lawyer: advocate,
+          profile: clientProfile,
+        ),
+      ),
+    );
+  }
+
+  static Future<void> sendConsultationBookingAndOpenChat({
+    required BuildContext context,
+    required LawyerDirectoryProfile advocate,
+    required UserProfileData clientProfile,
+    required ConsultationBooking booking,
+  }) async {
+    final authUser = Supabase.instance.client.auth.currentUser;
+    final myUserId = (authUser?.id != null && authUser!.id.isNotEmpty)
+        ? authUser.id
+        : clientProfile.clientId;
+    final peerUserId = advocate.id.trim().isNotEmpty
+        ? advocate.id.trim()
+        : booking.advocateId;
+    final roomKey = _YanE2eeCryptoEngine.buildCanonicalRoomKey(
+      myUserId,
+      peerUserId,
+    );
+
+    final now = DateTime.now();
+    final notificationText =
+        '📅 RASMIY VIDEO KONSULTATSIYA BAND QILINDI (${booking.id})\n'
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+        '• Advokat: ${advocate.fullName}\n'
+        '• Mijoz: ${clientProfile.displayName}\n'
+        '• Sana: ${booking.friendlyDateLabel}\n'
+        '• Vaqt oralig‘i: ${booking.timeRangeLabel} (Toshkent vaqti)\n'
+        '• Davomiyligi: 19 daqiqa (+1 daqiqa tanaffus)\n\n'
+        '⏱ Diqqat: “Video qo‘ng‘iroqni boshlash” tugmasi faqat belgilangan ${booking.timeRangeLabel} oralig‘ida faol bo‘ladi. '
+        'Muddat tugashi (00:00) bilan video qo‘ng‘iroq har ikki tomon uchun avtomatik yakunlanadi.';
+
+    final bookingMsg = _ChatMessageItem(
+      id: 'KNS-MSG-${now.microsecondsSinceEpoch}',
+      senderId: myUserId,
+      receiverId: peerUserId,
+      senderName: clientProfile.displayName,
+      text: notificationText,
+      encryptedCiphertext: _YanE2eeCryptoEngine.encrypt(
+        notificationText,
+        roomKey,
+      ),
+      sentAt: now,
+      isSeen: false,
+      seenAt: null,
+      mediaType: _ChatMediaType.document,
+      mediaMeta: booking.encodeChatMeta(),
+    );
+
+    final cacheFile = File(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}yan360_$roomKey.json',
+    );
+    final existingById = <String, Map<String, dynamic>>{};
+    try {
+      if (await cacheFile.exists()) {
+        final raw = await cacheFile.readAsString();
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final item in decoded) {
+            if (item is Map && item['id'] != null) {
+              existingById[item['id'].toString()] = Map<String, dynamic>.from(
+                item,
+              );
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    final serverMap = bookingMsg.toServerJson(roomKey);
+    existingById[bookingMsg.id] = serverMap;
+    final mergedList = existingById.values.toList();
+    try {
+      await cacheFile.writeAsString(jsonEncode(mergedList), flush: true);
+    } catch (_) {}
+
+    await _YanE2eeCryptoEngine.updateMyProfileE2eeEnvelope(
+      roomKey: roomKey,
+      myRoomMessages: mergedList,
+      isOnline: true,
+    );
+
+    try {
+      await Supabase.instance.client.from('messages').insert(serverMap);
+    } catch (_) {}
 
     if (!context.mounted) return;
     await Navigator.of(context).pushReplacement(
@@ -8710,9 +8894,15 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     required bool isVideo,
     bool isAnswering = false,
     String? existingCallId,
+    String? consultationId,
+    DateTime? consultationDeadlineAt,
   }) async {
     final callId = existingCallId ??
         'CALL-${DateTime.now().millisecondsSinceEpoch}-${_myUserId.hashCode.abs()}';
+
+    if (consultationId != null) {
+      ConsultationRepository.instance.markStatus(consultationId, 'in_progress');
+    }
 
     if (!mounted) return;
     final outcome = await Navigator.of(context).push<_TelegramCallOutcome>(
@@ -8722,23 +8912,26 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
           peerId: _peerUserId,
           peerName: widget.lawyer.fullName,
           peerInitials: widget.lawyer.initials,
-          peerSubtitle: widget.lawyer.specialization,
+          peerSubtitle: consultationId != null
+              ? 'Rasmiy 19 daqiqalik E2EE Konsultatsiya'
+              : widget.lawyer.specialization,
           myUserId: _myUserId,
           myUserName: widget.profile.displayName,
           roomKey: _roomKey,
           roomChannel: _roomChannel,
           isInitialVideo: isVideo,
           isCaller: !isAnswering,
+          consultationId: consultationId,
+          consultationDeadlineAt: consultationDeadlineAt,
         ),
       ),
     );
 
     if (outcome != null && mounted && !isAnswering) {
-      // Only the caller dispatches the Telegram-style call log message so it is logged once with exact status & duration!
       final callMeta = _TelegramCallLogMeta(
         callId: callId,
         callType: outcome.wasVideo ? 'video' : 'audio',
-        status: outcome.status, // 'completed', 'missed', 'declined', 'canceled'
+        status: outcome.status,
         durationSeconds: outcome.durationSeconds,
         callerId: _myUserId,
       ).encode();
@@ -8749,6 +8942,383 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
         mediaMeta: callMeta,
       );
     }
+
+    // After a consultation call ends, automatically prompt the client with 5-star rating!
+    final isClientRole =
+        widget.profile.roleType == UserRole.oddiy ||
+        widget.profile.roleType == UserRole.mijoz;
+    if (consultationId != null && mounted && isClientRole) {
+      await _showConsultationRatingDialog(
+        consultationId: consultationId,
+        advocateName: widget.lawyer.fullName,
+      );
+    }
+  }
+
+  Future<void> _showConsultationRatingDialog({
+    required String consultationId,
+    required String advocateName,
+  }) async {
+    var selectedStars = 5;
+    final commentCtrl = TextEditingController();
+    final submitted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dlgCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDlgState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(26),
+                side: const BorderSide(color: Color(0xFFDCEBFF)),
+              ),
+              title: const Row(
+                children: <Widget>[
+                  Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 26),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Konsultatsiyani baholang',
+                      style: TextStyle(
+                        fontSize: 17.5,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0B1F3A),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    '$advocateName bilan o‘tkazilgan video konsultatsiya sifatini 1 dan 5 gacha yulduz bilan baholang:',
+                    style: const TextStyle(
+                      fontSize: 12.8,
+                      color: Color(0xFF64748B),
+                      height: 1.42,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List<Widget>.generate(5, (i) {
+                      final starNum = i + 1;
+                      final active = starNum <= selectedStars;
+                      return GestureDetector(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setDlgState(() => selectedStars = starNum);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Icon(
+                            active ? Icons.star_rounded : Icons.star_outline_rounded,
+                            size: 38,
+                            color: active
+                                ? const Color(0xFFF59E0B)
+                                : const Color(0xFFCBD5E1),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: commentCtrl,
+                    maxLines: 2,
+                    style: const TextStyle(color: Color(0xFF0B1F3A), fontSize: 13.5),
+                    decoration: InputDecoration(
+                      hintText: 'Qisqa izohingiz (ixtiyoriy)...',
+                      hintStyle: const TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 12.8,
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF0F7FF),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0xFFDCEBFF)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0xFF1677FF)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.pop(dlgCtx, false),
+                  child: const Text(
+                    'Keyinroq',
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1677FF),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(dlgCtx, true),
+                  child: const Text(
+                    'Bahoni saqlash',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (submitted == true) {
+      await ConsultationRepository.instance.submitConsultationRating(
+        consultationId: consultationId,
+        stars: selectedStars,
+        comment: commentCtrl.text,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Rahmat! Konsultatsiya $selectedStars yulduz bilan baholandi.'),
+            backgroundColor: YanColors.successGreen,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+    commentCtrl.dispose();
+  }
+
+  Widget _buildConsultationBookingCard(_ChatMessageItem m, Map<String, dynamic> meta) {
+    final now = DateTime.now();
+    final cId = meta['id']?.toString() ?? '';
+    final advName = meta['advocate_name']?.toString() ?? widget.lawyer.fullName;
+    final clientName = meta['client_name']?.toString() ?? 'Mijoz';
+    final dateKey = meta['date_key']?.toString() ?? '';
+    final hour = (meta['hour'] as num?)?.toInt() ?? 0;
+    final slot = (meta['slot'] as num?)?.toInt() ?? 0;
+    final start = DateTime.tryParse(meta['start_iso']?.toString() ?? '')?.toLocal() ??
+        ConsultationSlotMath.slotStartDateTime(dateKey, hour, slot);
+    final end = DateTime.tryParse(meta['end_iso']?.toString() ?? '')?.toLocal() ??
+        start.add(const Duration(minutes: 19));
+
+    final repoBooking = ConsultationRepository.instance.consultations.value
+        .where((c) => c.id == cId)
+        .firstOrNull;
+    final isLiveNow = !now.isBefore(start) && now.isBefore(end);
+    final isBeforeStart = now.isBefore(start);
+    final isAfterEnd = !now.isBefore(end);
+    final ratedStars = repoBooking?.ratingStars ?? 0;
+    final isClientRole =
+        widget.profile.roleType == UserRole.oddiy ||
+        widget.profile.roleType == UserRole.mijoz;
+
+    final timeWindow = ConsultationSlotMath.formatSlotRange(hour, slot);
+    final dateLabel = ConsultationSlotMath.formatFriendlyDate(
+      ConsultationSlotMath.parseDateKey(dateKey),
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[Color(0xFFFFFFFF), Color(0xFFF3F8FF)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isLiveNow
+              ? const Color(0xFF10B981)
+              : const Color(0xFFDCEBFF),
+          width: isLiveNow ? 1.7 : 1.1,
+        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: const Color(0xFF1677FF).withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isLiveNow
+                      ? const Color(0xFFECFDF5)
+                      : const Color(0xFFEBF4FF),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  isLiveNow
+                      ? '● HOZIR FAOL • ${ConsultationSlotMath.formatCountdown(end.difference(now))}'
+                      : isBeforeStart
+                      ? 'KONSULTATSIYA BAND QILINDI'
+                      : 'KONSULTATSIYA YAKUNLANDI',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: isLiveNow
+                        ? const Color(0xFF059669)
+                        : const Color(0xFF1677FF),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                cId,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '$dateLabel • $timeWindow',
+            style: const TextStyle(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0B1F3A),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Advokat: $advName • Mijoz: $clientName',
+            style: const TextStyle(
+              fontSize: 12.2,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF64748B),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F7FF),
+              borderRadius: BorderRadius.circular(13),
+              border: Border.all(color: const Color(0xFFDCEBFF)),
+            ),
+            child: Text(
+              '⏱ Video qo‘ng‘iroq faqat $timeWindow oralig‘ida (19 daq) faol bo‘ladi va taymer 00:00 ga yetganda har ikki tomon uchun avtomatik yakunlanadi.',
+              style: const TextStyle(
+                fontSize: 11.4,
+                height: 1.4,
+                color: Color(0xFF1E3A5F),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: isLiveNow
+                  ? () => _startE2eeCall(
+                        isVideo: true,
+                        consultationId: cId,
+                        consultationDeadlineAt: end,
+                      )
+                  : null,
+              icon: Icon(
+                isLiveNow
+                    ? Icons.videocam_rounded
+                    : isBeforeStart
+                    ? Icons.lock_clock_rounded
+                    : Icons.check_circle_outline_rounded,
+                size: 18,
+              ),
+              label: Text(
+                isLiveNow
+                    ? 'Video qo‘ng‘iroqni boshlash (${ConsultationSlotMath.formatCountdown(end.difference(now))})'
+                    : isBeforeStart
+                    ? 'Boshlanishigacha: ${ConsultationSlotMath.formatCountdown(start.difference(now))}'
+                    : 'Konsultatsiya muddati yakunlandi',
+                style: const TextStyle(
+                  fontSize: 12.6,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1677FF),
+                disabledBackgroundColor: const Color(0xFFE2E8F0),
+                foregroundColor: Colors.white,
+                disabledForegroundColor: const Color(0xFF64748B),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+          if (isAfterEnd && isClientRole) ...<Widget>[
+            const SizedBox(height: 8),
+            if (ratedStars > 0)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  const Icon(Icons.star_rounded, size: 17, color: Color(0xFFF59E0B)),
+                  const SizedBox(width: 5),
+                  Text(
+                    'Sizning bahoingiz: $ratedStars / 5 yulduz',
+                    style: const TextStyle(
+                      fontSize: 12.2,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFB45309),
+                    ),
+                  ),
+                ],
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _showConsultationRatingDialog(
+                    consultationId: cId,
+                    advocateName: advName,
+                  ),
+                  icon: const Icon(Icons.star_outline_rounded, size: 17, color: Color(0xFFF59E0B)),
+                  label: const Text(
+                    'Konsultatsiyani baholash (5 yulduz)',
+                    style: TextStyle(
+                      fontSize: 12.2,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFB45309),
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFFFBEB),
+                    side: const BorderSide(color: Color(0xFFFCD34D)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
   }
 
   void _showMessageDetailsSheet(_ChatMessageItem msg) {
@@ -9858,6 +10428,11 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                             ),
                           ),
                           const SizedBox(height: 7),
+                        ] else if (ConsultationBooking.tryDecodeChatMeta(m.mediaMeta) != null) ...<Widget>[
+                          _buildConsultationBookingCard(
+                            m,
+                            ConsultationBooking.tryDecodeChatMeta(m.mediaMeta)!,
+                          ),
                         ] else if (m.mediaType == _ChatMediaType.callLog) ...<Widget>[
                           _buildTelegramCallLogCard(m, mine),
                         ] else if (m.mediaType != _ChatMediaType.text &&
@@ -9896,6 +10471,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                           const SizedBox(height: 4),
                         ],
                         if (m.mediaType != _ChatMediaType.callLog &&
+                            ConsultationBooking.tryDecodeChatMeta(m.mediaMeta) == null &&
                             (chatFileMeta == null ||
                                 (m.text.trim().isNotEmpty &&
                                     m.text.trim() !=
@@ -10403,6 +10979,8 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
     Map<String, dynamic>? webrtcData,
     RealtimeChannel? roomChannel,
     String? targetPeerId,
+    String? consultationId,
+    DateTime? consultationDeadlineAt,
   }) async {
     final nowIso = DateTime.now().toUtc().toIso8601String();
     final payload = <String, dynamic>{
@@ -10418,6 +10996,9 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
       'duration': durationSeconds,
       'is_muted': isMuted,
       if (webrtcData != null) 'webrtc': webrtcData,
+      if (consultationId != null) 'consultation_id': consultationId,
+      if (consultationDeadlineAt != null)
+        'consultation_deadline_iso': consultationDeadlineAt.toUtc().toIso8601String(),
       'timestamp': nowIso,
     };
 
@@ -10603,6 +11184,10 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
                   roomChannel: null,
                   isInitialVideo: isVideo,
                   isCaller: false,
+                  consultationId: payload['consultation_id']?.toString(),
+                  consultationDeadlineAt: DateTime.tryParse(
+                    payload['consultation_deadline_iso']?.toString() ?? '',
+                  )?.toLocal(),
                 ),
               ),
             )
@@ -10626,6 +11211,8 @@ class _E2eeLiveCallScreen extends StatefulWidget {
   final RealtimeChannel? roomChannel;
   final bool isInitialVideo;
   final bool isCaller;
+  final String? consultationId;
+  final DateTime? consultationDeadlineAt;
 
   const _E2eeLiveCallScreen({
     required this.callId,
@@ -10639,6 +11226,8 @@ class _E2eeLiveCallScreen extends StatefulWidget {
     required this.roomChannel,
     required this.isInitialVideo,
     required this.isCaller,
+    this.consultationId,
+    this.consultationDeadlineAt,
   });
 
   @override
@@ -11217,6 +11806,8 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
       webrtcData: webrtcData,
       roomChannel: widget.roomChannel,
       targetPeerId: widget.peerId,
+      consultationId: widget.consultationId,
+      consultationDeadlineAt: widget.consultationDeadlineAt,
     );
   }
 
@@ -11310,6 +11901,18 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
     _callClockTimer?.cancel();
     _callClockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_closed || !mounted) return;
+      final deadline = widget.consultationDeadlineAt;
+      if (deadline != null && !DateTime.now().isBefore(deadline)) {
+        if (widget.consultationId != null) {
+          ConsultationRepository.instance.markStatus(
+            widget.consultationId!,
+            'completed',
+          );
+        }
+        _sendSignal('hangup');
+        _finishCallWithOutcome('completed');
+        return;
+      }
       setState(() => _elapsedSeconds++);
     });
   }
@@ -11583,6 +12186,11 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
   }
 
   String get _formattedDuration {
+    final deadline = widget.consultationDeadlineAt;
+    if (deadline != null) {
+      final remaining = deadline.difference(DateTime.now());
+      return '⏱ ${ConsultationSlotMath.formatCountdown(remaining)} qoldi';
+    }
     final mins = (_elapsedSeconds ~/ 60).toString().padLeft(2, '0');
     final secs = (_elapsedSeconds % 60).toString().padLeft(2, '0');
     return '$mins:$secs';
@@ -13012,6 +13620,135 @@ class _AdvokatHomeRoleView extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 14),
+        // ADVOCATE CALENDAR YACHEYKA CARD (Track & Control Availability + Upcoming Consultations)
+        ValueListenableBuilder<List<ConsultationBooking>>(
+          valueListenable: ConsultationRepository.instance.consultations,
+          builder: (context, allBookings, _) {
+            return ValueListenableBuilder<List<AdvocateBlockedSlot>>(
+              valueListenable: ConsultationRepository.instance.blockedSlots,
+              builder: (context, allBlocked, _) {
+                final authId = Supabase.instance.client.auth.currentUser?.id ?? '';
+                final advId = authId.isNotEmpty ? authId : profile.clientId;
+                final activeConsults = allBookings
+                    .where((b) =>
+                        YanRoleDataCatalog.isSameParticipant(b.advocateId, advId) &&
+                        b.isActiveStatus &&
+                        !b.isExpired())
+                    .toList()
+                  ..sort((a, b) => a.slotStart.compareTo(b.slotStart));
+                final blockedCount = allBlocked
+                    .where((b) => YanRoleDataCatalog.isSameParticipant(b.advocateId, advId))
+                    .length;
+
+                return Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: const Color(0xFFDCEBFF)),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: const Color(0xFF1677FF).withValues(alpha: 0.07),
+                        blurRadius: 22,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Container(
+                            width: 46,
+                            height: 46,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEBF4FF),
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            child: const Icon(
+                              Icons.calendar_month_rounded,
+                              color: Color(0xFF1677FF),
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                const Text(
+                                  'Kalendarim va Konsultatsiyalar',
+                                  style: TextStyle(
+                                    fontSize: 16.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF0B1F3A),
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  '${activeConsults.length} ta faol uchrashuv • $blockedCount ta yopilgan vaqt',
+                                  style: const TextStyle(
+                                    fontSize: 12.2,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF1677FF),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Kelgusi 7 kunlik 24 soatlik jadvalingizni boshqaring: band kun yoki aniq soatlarni yoping va istalgan vaqtda qayta oching.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          height: 1.42,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => AdvocateCalendarPage(
+                                  profile: profile,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                          label: const Text(
+                            'Kalendarni boshqarish',
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1677FF),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ),
       ],
     );
   }
@@ -13112,6 +13849,7 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
 
   static const List<String> _categoryTabs = <String>[
     'Barchasi',
+    'Konsultatsiya',
     'Ariza yozdirish',
     'Shartnomali',
   ];
@@ -13291,6 +14029,75 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
           ),
         ),
         const SizedBox(height: 14),
+
+        // 0. PINNED BOOKED CONSULTATIONS FOR ADVOCATE (LIVE 19-MIN SCHEDULE TRACKER)
+        if (_selectedCategoryFilter == 'Barchasi' ||
+            _selectedCategoryFilter == 'Konsultatsiya')
+          ValueListenableBuilder<List<ConsultationBooking>>(
+            valueListenable: ConsultationRepository.instance.consultations,
+            builder: (context, allBookings, _) {
+              final myConsults = allBookings
+                  .where((b) =>
+                      ((authId.isNotEmpty &&
+                              YanRoleDataCatalog.isSameParticipant(b.advocateId, authId)) ||
+                          (profileId.isNotEmpty &&
+                              YanRoleDataCatalog.isSameParticipant(b.advocateId, profileId))) &&
+                      b.isActiveStatus &&
+                      !b.isExpired(now))
+                  .toList()
+                ..sort((a, b) => a.slotStart.compareTo(b.slotStart));
+              if (myConsults.isEmpty) return const SizedBox.shrink();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'BAND QILINGAN VIDEO KONSULTATSIYALAR (19 DAQ)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.6,
+                        color: YanColors.primaryBlue,
+                      ),
+                    ),
+                  ),
+                  ...myConsults.map((booking) {
+                    return _PinnedConsultationBannerCard(
+                      booking: booking,
+                      isAdvocateView: true,
+                      onOpenChat: () {
+                        final peer = LawyerDirectoryProfile(
+                          id: booking.clientId,
+                          fullName: booking.clientName,
+                          title: 'Konsultatsiya Mijozi',
+                          region: booking.clientRegion.isEmpty
+                              ? 'O‘zbekiston'
+                              : booking.clientRegion,
+                          specialization: '${booking.friendlyDateLabel} • ${booking.timeRangeLabel}',
+                          experienceYears: 1,
+                          rating: 5.0,
+                          feedbackCount: 1,
+                          wonCasesCount: 0,
+                          consultationPriceUzs: 0,
+                          contractMonthlyNote: 'Konsultatsiya',
+                          licenseNumber: booking.id,
+                          phone: booking.clientPhone,
+                          assistantName: '-',
+                          assistantRole: '',
+                          assistantPhone: '',
+                          bio: 'Video konsultatsiya band qilgan mijoz.',
+                          feedbacks: const <LawyerFeedbackItem>[],
+                        );
+                        _openClientChat(context, peer);
+                      },
+                    );
+                  }),
+                  const SizedBox(height: 12),
+                ],
+              );
+            },
+          ),
 
         // 1. ARIZA YOZDIRISH CLIENTS (WITH LIVE 30-MINUTE REAL-TIME COUNTDOWN)
         if (showArizaSection && arizaOrders.isNotEmpty) ...<Widget>[
@@ -13976,6 +14783,132 @@ class _SolidSecondaryButton extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PinnedConsultationBannerCard extends StatelessWidget {
+  final ConsultationBooking booking;
+  final bool isAdvocateView;
+  final VoidCallback onOpenChat;
+
+  const _PinnedConsultationBannerCard({
+    required this.booking,
+    required this.isAdvocateView,
+    required this.onOpenChat,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final isLive = booking.isWithinLiveWindow(now);
+    final isUpcoming = booking.isUpcoming(now);
+    final peerLabel = isAdvocateView ? booking.clientName : booking.advocateName;
+    final rolePrefix = isAdvocateView ? 'Mijoz' : 'Advokat';
+
+    return GestureDetector(
+      onTap: onOpenChat,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: isLive
+                ? const Color(0xFF10B981)
+                : const Color(0xFFDCEBFF),
+            width: isLive ? 1.6 : 1.1,
+          ),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: const Color(0xFF1677FF).withValues(alpha: 0.07),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: <Widget>[
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: isLive
+                    ? const Color(0xFFECFDF5)
+                    : const Color(0xFFEBF4FF),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                isLive ? Icons.videocam_rounded : Icons.event_available_rounded,
+                color: isLive
+                    ? const Color(0xFF10B981)
+                    : const Color(0xFF1677FF),
+                size: 23,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    isLive
+                        ? '● HOZIR FAOL • ${ConsultationSlotMath.formatCountdown(booking.remainingUntilEnd(now))} qoldi'
+                        : isUpcoming
+                        ? 'Boshlanishigacha: ${ConsultationSlotMath.formatCountdown(booking.remainingUntilStart(now))}'
+                        : 'Yakunlandi',
+                    style: TextStyle(
+                      fontSize: 10.8,
+                      fontWeight: FontWeight.w900,
+                      color: isLive
+                          ? const Color(0xFF059669)
+                          : const Color(0xFF1677FF),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '$rolePrefix: $peerLabel',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF0B1F3A),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${booking.friendlyDateLabel} • ${booking.timeRangeLabel}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isLive
+                    ? const Color(0xFF10B981)
+                    : const Color(0xFF1677FF),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Text(
+                isLive ? 'Kirish' : 'Chat',
+                style: const TextStyle(
+                  fontSize: 11.8,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
                 ),
               ),
             ),
