@@ -117,15 +117,18 @@ class _ProfilPageState extends State<ProfilPage> {
     final nameCtrl = TextEditingController(text: profile.displayName);
     final phoneCtrl = TextEditingController(text: profile.phone);
     final emailCtrl = TextEditingController(text: profile.email);
-    final regionCtrl = TextEditingController(text: profile.region);
+    String selectedRegion = profile.region.trim();
     final districtCtrl = TextEditingController(text: profile.district);
     final streetCtrl = TextEditingController(text: profile.streetAddress);
     final pinflCtrl = TextEditingController(
       text: profile.passportOrPinfl.trim(),
     );
-    final specCtrl = TextEditingController(
-      text: profile.lawyerSpecialization.trim(),
-    );
+    final initialSpecs = profile.lawyerSpecialization
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final selectedSpecs = <String>{...initialSpecs};
     final licenseCtrl = TextEditingController(
       text: profile.lawyerLicenseNumber.trim(),
     );
@@ -199,10 +202,53 @@ class _ProfilPageState extends State<ProfilPage> {
                         keyboardType: TextInputType.phone,
                       ),
                       const SizedBox(height: 9),
-                      _ProfileInputField(
-                        label: 'Viloyat / Shahar (Hudud)',
-                        controller: regionCtrl,
-                        placeholder: 'Masalan: Toshkent shahri',
+                      const Text(
+                        'Viloyat / Hudud',
+                        style: TextStyle(
+                          color: YanColors.mutedText,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: YanRoleDataCatalog.selectableRegions.map((reg) {
+                          final active = selectedRegion == reg;
+                          return GestureDetector(
+                            onTap: () => setModalState(
+                              () => selectedRegion = active ? '' : reg,
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: active
+                                    ? YanColors.primaryBlue
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: active
+                                      ? YanColors.primaryBlue
+                                      : YanColors.border,
+                                ),
+                              ),
+                              child: Text(
+                                reg,
+                                style: TextStyle(
+                                  color: active
+                                      ? Colors.white
+                                      : YanColors.primaryNavy,
+                                  fontSize: 11.8,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
                       ),
                       if (isAdvocate) ...<Widget>[
                         const SizedBox(height: 14),
@@ -235,10 +281,70 @@ class _ProfilPageState extends State<ProfilPage> {
                                 ],
                               ),
                               const SizedBox(height: 10),
-                              _ProfileInputField(
-                                label: 'Mutaxassisligi',
-                                controller: specCtrl,
-                                placeholder: 'Masalan: Oila va fuqarolik huquqi',
+                              const Text(
+                                'Mutaxassisligi (bir yoki bir nechta tanlang)',
+                                style: TextStyle(
+                                  color: YanColors.mutedText,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: YanRoleDataCatalog
+                                    .advocateSpecializations
+                                    .map((spec) {
+                                  final active = selectedSpecs.contains(spec);
+                                  return GestureDetector(
+                                    onTap: () => setModalState(() {
+                                      if (spec == 'Barcha sohalar') {
+                                        if (active) {
+                                          selectedSpecs.remove(spec);
+                                        } else {
+                                          selectedSpecs
+                                            ..clear()
+                                            ..add('Barcha sohalar');
+                                        }
+                                      } else {
+                                        selectedSpecs.remove('Barcha sohalar');
+                                        if (active) {
+                                          selectedSpecs.remove(spec);
+                                        } else {
+                                          selectedSpecs.add(spec);
+                                        }
+                                      }
+                                    }),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 7,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: active
+                                            ? YanColors.primaryBlue
+                                            : Colors.white,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: active
+                                              ? YanColors.primaryBlue
+                                              : YanColors.border,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        spec,
+                                        style: TextStyle(
+                                          color: active
+                                              ? Colors.white
+                                              : YanColors.primaryNavy,
+                                          fontSize: 11.8,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
                               ),
                               const SizedBox(height: 9),
                               _ProfileInputField(
@@ -384,12 +490,12 @@ class _ProfilPageState extends State<ProfilPage> {
                                   displayName: nameCtrl.text.trim(),
                                   phone: phoneCtrl.text.trim(),
                                   email: emailCtrl.text.trim(),
-                                  region: regionCtrl.text.trim(),
+                                  region: selectedRegion,
                                   district: districtCtrl.text.trim(),
                                   streetAddress: streetCtrl.text.trim(),
                                   passportOrPinfl: pinflCtrl.text.trim(),
                                   lawyerSpecialization: isAdvocate
-                                      ? specCtrl.text.trim()
+                                      ? selectedSpecs.join(', ')
                                       : profile.lawyerSpecialization,
                                   lawyerLicenseNumber: isAdvocate
                                       ? licenseCtrl.text.trim()
@@ -897,7 +1003,7 @@ class _YanPassportIdCard extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: const Text(
-                                  'ADVOCATE',
+                                  'ADVOKAT',
                                   style: TextStyle(
                                     color: Color(0xFF93C5FD),
                                     fontSize: 8.8,

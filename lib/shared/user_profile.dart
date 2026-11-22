@@ -979,21 +979,44 @@ class YanRoleDataCatalog {
     'Barchasi',
     'Toshkent shahri',
     'Toshkent viloyati',
-    'Samarqand viloyati',
-    'Farg‘ona viloyati',
-    'Buxoro viloyati',
     'Andijon viloyati',
+    'Buxoro viloyati',
+    'Farg‘ona viloyati',
+    'Jizzax viloyati',
+    'Xorazm viloyati',
     'Namangan viloyati',
+    'Navoiy viloyati',
     'Qashqadaryo viloyati',
+    'Qoraqalpog‘iston Respublikasi',
+    'Samarqand viloyati',
+    'Sirdaryo viloyati',
+    'Surxondaryo viloyati',
   ];
 
   static const List<String> specializations = <String>[
     'Barchasi',
-    'Oila va aliment huquqi',
-    'Fuqarolik va mulk huquqi',
-    'Mehnat va shartnoma huquqi',
-    'Biznes va korporativ huquq',
-    'Jinoyat va ma’muriy himoya',
+    'Fuqarolik huquqi',
+    'Jinoyat huquqi',
+    'Ma’muriy huquq',
+    'Iqtisodiy huquq',
+    'Oila huquqi',
+    'Mehnat huquqi',
+    'Korporativ va biznes huquqi',
+    'Mulk va uy-joy huquqi',
+    'Soliq va bojxona huquqi',
+    'Yer va qurilish huquqi',
+    'Meros huquqi',
+    'Bank va moliya huquqi',
+    'Intellektual mulk huquqi',
+    'Migratsiya huquqi',
+  ];
+
+  static List<String> get selectableRegions =>
+      regions.where((r) => r != 'Barchasi').toList();
+
+  static List<String> get advocateSpecializations => <String>[
+    'Barcha sohalar',
+    ...specializations.where((s) => s != 'Barchasi'),
   ];
 
   /// Live list of real advocates fetched directly from Supabase `public.profiles`

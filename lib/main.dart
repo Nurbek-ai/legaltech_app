@@ -2217,10 +2217,10 @@ class _AccountPasswordSetupScreenState
       );
 
       await ActivityHistoryRepository.instance.record(
-        title: 'Supabase hisobi yaratildi (${widget.uiRole.label})',
+        title: 'Hisob yaratildi (${widget.uiRole.label})',
         description: uploadedLicenseRef != null
-            ? 'Advokat: ${widget.fullName} • Litsenziya, Guvohnoma va STIR Supabase bazasiga yuklandi'
-            : 'F.I.Sh.: ${widget.fullName} • Auth: $dummyEmail',
+            ? 'Advokat: ${widget.fullName} • Hujjatlar tasdiqlash uchun yuklandi'
+            : 'F.I.Sh.: ${widget.fullName} • Tel: ${widget.phoneNumber}',
         category: ActivityCategory.profile,
         statusLabel: 'Faol',
       );
@@ -2237,7 +2237,7 @@ class _AccountPasswordSetupScreenState
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      _showErrorDialog('Supabase Auth xatoligi:\n${e.message}');
+      _showErrorDialog('Kirishda xatolik:\n${e.message}');
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
@@ -3319,7 +3319,7 @@ class _AdvokatxonaDirectoryPage extends StatefulWidget {
 
 class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
   String _selectedRegion = 'Barchasi';
-  String _selectedSpecialization = 'Barchasi';
+  final Set<String> _selectedSpecializations = <String>{};
   int _minExperienceYears = 0;
   _LawyerSortMode _sortMode = _LawyerSortMode.recommended;
   bool _isLoadingAdvocates = true;
@@ -3479,18 +3479,64 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
   int get _activeFilterCount {
     var count = 0;
     if (_selectedRegion != 'Barchasi') count++;
-    if (_selectedSpecialization != 'Barchasi') count++;
+    if (_selectedSpecializations.isNotEmpty) count += _selectedSpecializations.length;
     if (_minExperienceYears > 0) count++;
     return count;
   }
 
+  String _normFilterText(String raw) {
+    return raw
+        .trim()
+        .toLowerCase()
+        .replaceAll('‘', "'")
+        .replaceAll('’', "'")
+        .replaceAll('`', "'")
+        .replaceAll('ʻ', "'");
+  }
+
+  bool _isAllFieldsAdvocate(String normalizedSpec) {
+    return normalizedSpec.contains('barcha sohalar') ||
+        normalizedSpec.contains('barchasi') ||
+        normalizedSpec == 'barcha' ||
+        normalizedSpec.split(',').any((part) => part.trim() == 'barcha');
+  }
+
+  int _specializationMatchScore(LawyerDirectoryProfile lawyer) {
+    if (_selectedSpecializations.isEmpty) return 0;
+    final advSpec = _normFilterText(lawyer.specialization);
+    if (_isAllFieldsAdvocate(advSpec)) {
+      return _selectedSpecializations.length;
+    }
+    var matches = 0;
+    for (final selected in _selectedSpecializations) {
+      final normSel = _normFilterText(selected);
+      if (normSel.isNotEmpty && advSpec.contains(normSel)) {
+        matches++;
+      }
+    }
+    return matches;
+  }
+
   List<LawyerDirectoryProfile> get _sortedLawyers {
+    final normRegion = _normFilterText(_selectedRegion);
+
     final list = YanRoleDataCatalog.registeredLawyers.value.where((lawyer) {
+      final advRegion = _normFilterText(lawyer.region);
+      final advSpec = _normFilterText(lawyer.specialization);
+
       final regionOk =
-          _selectedRegion == 'Barchasi' || lawyer.region == _selectedRegion;
+          _selectedRegion == 'Barchasi' ||
+          advRegion == normRegion ||
+          advRegion.contains(normRegion);
+
       final specOk =
-          _selectedSpecialization == 'Barchasi' ||
-          lawyer.specialization == _selectedSpecialization;
+          _selectedSpecializations.isEmpty ||
+          _isAllFieldsAdvocate(advSpec) ||
+          _selectedSpecializations.any((selected) {
+            final normSel = _normFilterText(selected);
+            return normSel.isNotEmpty && advSpec.contains(normSel);
+          });
+
       final expOk = lawyer.experienceYears >= _minExperienceYears;
       return regionOk && specOk && expOk;
     }).toList();
@@ -3507,173 +3553,361 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
   }
 
   void _openCollapsedFilterSheet() {
+    final regionSearchCtrl = TextEditingController();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      barrierColor: const Color(0x660B1F3A),
       builder: (sheetContext) {
         return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
-              decoration: BoxDecoration(
-                color: YanColors.background,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
+          builder: (modalContext, setModalState) {
+            final query = _normFilterText(regionSearchCtrl.text);
+            final visibleRegions = query.isEmpty
+                ? YanRoleDataCatalog.regions
+                : YanRoleDataCatalog.regions
+                      .where((r) => _normFilterText(r).contains(query))
+                      .toList();
+
+            final regionBadge = _selectedRegion == 'Barchasi'
+                ? 'Barchasi'
+                : '1 ta tanlangan';
+            final specBadge = _selectedSpecializations.isEmpty
+                ? 'Barchasi'
+                : '${_selectedSpecializations.length} ta tanlangan';
+            final expBadge = _minExperienceYears == 0
+                ? 'Barchasi'
+                : '$_minExperienceYears+ yil';
+            final bottomInset = MediaQuery.viewInsetsOf(sheetContext).bottom;
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: bottomInset),
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.88,
                 ),
-                border: Border.all(color: YanColors.border),
-              ),
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Center(
-                      child: Container(
-                        width: 42,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: YanColors.border,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: <Widget>[
-                        const Icon(
-                          CupertinoIcons.slider_horizontal_3,
-                          color: YanColors.primaryBlue,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        const Expanded(
-                          child: Text(
-                            'Advokatlarni Saralash Filtrlari',
-                            style: TextStyle(
-                              color: YanColors.primaryNavy,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFAFBFD),
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(28),
+                  ),
+                ),
+                    child: SafeArea(
+                      top: false,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          // Top Drag Handle + Header
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+                            child: Column(
+                              children: <Widget>[
+                                Container(
+                                  width: 40,
+                                  height: 4,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFD2DFEE),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: <Widget>[
+                                    Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1677D2),
+                                        borderRadius: BorderRadius.circular(13),
+                                        boxShadow: <BoxShadow>[
+                                          BoxShadow(
+                                            color: const Color(
+                                              0xFF1677D2,
+                                            ).withValues(alpha: 0.24),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        CupertinoIcons.slider_horizontal_3,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: <Widget>[
+                                          Text(
+                                            'Advokatlarni Saralash Filtrlari',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: Color(0xFF102B50),
+                                              fontSize: 16.8,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: -0.2,
+                                            ),
+                                          ),
+                                          SizedBox(height: 2),
+                                          Text(
+                                            'Kerakli mezonlar bo‘yicha advokatlarni toping',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: Color(0xFF64748B),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: () {
+                                        regionSearchCtrl.clear();
+                                        setModalState(() {
+                                          _selectedRegion = 'Barchasi';
+                                          _selectedSpecializations.clear();
+                                          _minExperienceYears = 0;
+                                        });
+                                        setState(() {});
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 11,
+                                          vertical: 7,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
+                                          border: Border.all(
+                                            color: const Color(0xFFDCE6F2),
+                                          ),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: <Widget>[
+                                            Icon(
+                                              Icons.refresh_rounded,
+                                              size: 14,
+                                              color: Color(0xFF1677D2),
+                                            ),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Tozalash',
+                                              style: TextStyle(
+                                                color: Color(0xFF1677D2),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            setModalState(() {
-                              _selectedRegion = 'Barchasi';
-                              _selectedSpecialization = 'Barchasi';
-                              _minExperienceYears = 0;
-                            });
-                            setState(() {});
-                          },
-                          child: const Text(
-                            'Tozalash',
-                            style: TextStyle(
-                              color: YanColors.primaryBlue,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
+                          const Divider(height: 1, color: Color(0xFFE9F0F8)),
+
+                          // Scrollable Filter Sections
+                          Flexible(
+                            child: SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                16,
+                                20,
+                                20,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  // A. Viloyat / hudud
+                                  _FilterSectionHeader(
+                                    icon: Icons.location_on_outlined,
+                                    title: 'Viloyat / hudud',
+                                    subtitle:
+                                        'Advokat joylashgan hududni tanlang',
+                                    badgeText: regionBadge,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _FilterSearchField(
+                                    controller: regionSearchCtrl,
+                                    hintText: 'Hududni qidirish...',
+                                    onChanged: (_) => setModalState(() {}),
+                                    onClear: () {
+                                      regionSearchCtrl.clear();
+                                      setModalState(() {});
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  if (visibleRegions.isEmpty)
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 8,
+                                      ),
+                                      child: Text(
+                                        'Hudud topilmadi',
+                                        style: TextStyle(
+                                          color: Color(0xFF64748B),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: visibleRegions.map((region) {
+                                        final active =
+                                            _selectedRegion == region;
+                                        return _FilterChipPill(
+                                          label: region,
+                                          active: active,
+                                          onTap: () {
+                                            setModalState(
+                                              () => _selectedRegion = region,
+                                            );
+                                            setState(() {});
+                                          },
+                                        );
+                                      }).toList(),
+                                    ),
+                                  const SizedBox(height: 20),
+                                  const Divider(
+                                    height: 1,
+                                    color: Color(0xFFE9F0F8),
+                                  ),
+                                  const SizedBox(height: 18),
+
+                                  // B. Mutaxassisligi (Multi-select + Barcha sohalar smart match)
+                                  _FilterSectionHeader(
+                                    icon: Icons.balance_rounded,
+                                    title: 'Mutaxassisligi',
+                                    subtitle:
+                                        'Advokatning ixtisoslashgan sohasini tanlang',
+                                    badgeText: specBadge,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: YanRoleDataCatalog.specializations
+                                        .map((spec) {
+                                          final isAll = spec == 'Barchasi';
+                                          final active = isAll
+                                              ? _selectedSpecializations.isEmpty
+                                              : _selectedSpecializations
+                                                    .contains(spec);
+                                          return _FilterChipPill(
+                                            label: spec,
+                                            active: active,
+                                            onTap: () {
+                                              setModalState(() {
+                                                if (isAll) {
+                                                  _selectedSpecializations
+                                                      .clear();
+                                                } else if (_selectedSpecializations
+                                                    .contains(spec)) {
+                                                  _selectedSpecializations
+                                                      .remove(spec);
+                                                } else {
+                                                  _selectedSpecializations.add(
+                                                    spec,
+                                                  );
+                                                }
+                                              });
+                                              setState(() {});
+                                            },
+                                          );
+                                        })
+                                        .toList(),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  const Divider(
+                                    height: 1,
+                                    color: Color(0xFFE9F0F8),
+                                  ),
+                                  const SizedBox(height: 18),
+
+                                  // C. Ish tajribasi
+                                  _FilterSectionHeader(
+                                    icon: Icons.work_outline_rounded,
+                                    title: 'Ish tajribasi',
+                                    subtitle:
+                                        'Advokatning ish stajini tanlang',
+                                    badgeText: expBadge,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: <int>[0, 1, 3, 5, 10].map((years) {
+                                      final active =
+                                          _minExperienceYears == years;
+                                      return _FilterChipPill(
+                                        label: years == 0
+                                            ? 'Barchasi'
+                                            : '$years+ yil',
+                                        active: active,
+                                        onTap: () {
+                                          setModalState(
+                                            () => _minExperienceYears = years,
+                                          );
+                                          setState(() {});
+                                        },
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'VILOYAT / HUDUD:',
-                      style: TextStyle(
-                        color: YanColors.mutedText,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
+
+                          // Fixed Bottom Action Bar
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              border: Border(
+                                top: BorderSide(color: Color(0xFFE9F0F8)),
+                              ),
+                            ),
+                            child: _FilterBottomAction(
+                              resultCount: _sortedLawyers.length,
+                              onPressed: () {
+                                FocusScope.of(sheetContext).unfocus();
+                                Navigator.pop(sheetContext);
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 7,
-                      runSpacing: 7,
-                      children: YanRoleDataCatalog.regions.map((region) {
-                        final active = _selectedRegion == region;
-                        return _FilterChipPill(
-                          label: region,
-                          active: active,
-                          onTap: () {
-                            setModalState(() => _selectedRegion = region);
-                            setState(() {});
-                          },
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'MUTAXASSISLIGI:',
-                      style: TextStyle(
-                        color: YanColors.mutedText,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 7,
-                      runSpacing: 7,
-                      children: YanRoleDataCatalog.specializations.map((spec) {
-                        final active = _selectedSpecialization == spec;
-                        return _FilterChipPill(
-                          label: spec,
-                          active: active,
-                          onTap: () {
-                            setModalState(() => _selectedSpecialization = spec);
-                            setState(() {});
-                          },
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'ISH TAJRIBASI:',
-                      style: TextStyle(
-                        color: YanColors.mutedText,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: <int>[0, 5, 8, 10].map((years) {
-                        final active = _minExperienceYears == years;
-                        return _FilterChipPill(
-                          label: years == 0 ? 'Barchasi' : '$years+ yil',
-                          active: active,
-                          onTap: () {
-                            setModalState(() => _minExperienceYears = years);
-                            setState(() {});
-                          },
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: double.infinity,
-                      child: LiquidActionButton(
-                        label:
-                            'Natijalarni ko‘rsatish (${_sortedLawyers.length} advokat)',
-                        icon: CupertinoIcons.checkmark_alt,
-                        onPressed: () => Navigator.pop(sheetContext),
-                      ),
-                    ),
-                  ],
-                ),
               ),
             );
           },
         );
       },
-    );
+    ).whenComplete(() {
+      if (mounted) setState(() {});
+      Future<void>.delayed(
+        const Duration(milliseconds: 450),
+        regionSearchCtrl.dispose,
+      );
+    });
   }
 
   void _openLawyerProfilePage(LawyerDirectoryProfile lawyer) {
@@ -4213,6 +4447,161 @@ class _SortTabPill extends StatelessWidget {
   }
 }
 
+class _FilterSectionHeader extends StatelessWidget {
+  const _FilterSectionHeader({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.badgeText,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String badgeText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        Container(
+          width: 34,
+          height: 34,
+          decoration: const BoxDecoration(
+            color: Color(0xFFEAF3FC),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 17, color: const Color(0xFF1677D2)),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Color(0xFF102B50),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.15,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 11.8,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        _SelectedCountBadge(label: badgeText),
+      ],
+    );
+  }
+}
+
+class _SelectedCountBadge extends StatelessWidget {
+  const _SelectedCountBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF3FC),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xFF1677D2),
+          fontSize: 11.2,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterSearchField extends StatelessWidget {
+  const _FilterSearchField({
+    required this.controller,
+    required this.hintText,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        cursorColor: const Color(0xFF1677D2),
+        style: const TextStyle(
+          color: Color(0xFF102B50),
+          fontSize: 13.8,
+          fontWeight: FontWeight.w500,
+        ),
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: const Color(0xFFF3F6FA),
+          hintText: hintText,
+          hintStyle: const TextStyle(
+            color: Color(0xFF8A9AB0),
+            fontSize: 13.5,
+            fontWeight: FontWeight.w400,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 10,
+          ),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            size: 19,
+            color: Color(0xFF64748B),
+          ),
+          suffixIcon: controller.text.isNotEmpty
+              ? IconButton(
+                  onPressed: onClear,
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    size: 17,
+                    color: Color(0xFF64748B),
+                  ),
+                )
+              : null,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFFDCE6F2), width: 1),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFF1677D2), width: 1.4),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FilterChipPill extends StatelessWidget {
   final String label;
   final bool active;
@@ -4229,22 +4618,116 @@ class _FilterChipPill extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8.5),
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9.5),
         decoration: BoxDecoration(
-          color: active ? YanColors.primaryBlue : YanColors.white,
-          borderRadius: BorderRadius.circular(999),
+          color: active ? const Color(0xFF1677D2) : Colors.white,
+          borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color: active ? YanColors.primaryBlue : YanColors.border,
+            color: active ? const Color(0xFF1677D2) : const Color(0xFFDCE6F2),
+            width: 1,
           ),
+          boxShadow: active
+              ? <BoxShadow>[
+                  BoxShadow(
+                    color: const Color(0xFF1677D2).withValues(alpha: 0.20),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : const <BoxShadow>[],
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: active ? Colors.white : YanColors.primaryNavy,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.8,
+                  fontWeight: FontWeight.w600,
+                  color: active ? Colors.white : const Color(0xFF102B50),
+                ),
+              ),
+            ),
+            if (active) ...<Widget>[
+              const SizedBox(width: 6),
+              const Icon(
+                Icons.check_rounded,
+                size: 15,
+                color: Colors.white,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterBottomAction extends StatelessWidget {
+  const _FilterBottomAction({
+    required this.resultCount,
+    required this.onPressed,
+  });
+
+  final int resultCount;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF1677D2),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
           ),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+        ),
+        child: Row(
+          children: <Widget>[
+            const SizedBox(width: 20),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  const Icon(
+                    Icons.groups_rounded,
+                    size: 20,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 9),
+                  Flexible(
+                    child: Text(
+                      'Natijalarni ko‘rsatish ($resultCount advokat)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14.8,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_rounded,
+              size: 20,
+              color: Colors.white,
+            ),
+          ],
         ),
       ),
     );
@@ -4426,41 +4909,19 @@ class _PinnedAdvocateBannerCard extends StatelessWidget {
           Row(
             children: <Widget>[
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      lawyer.consultationPriceUzs > 0
-                          ? '${lawyer.consultationPriceUzs} so‘m'
-                          : 'Bepul dastlabki maslahat',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                        color: YanColors.primaryNavy,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'Javob vaqti: ~10 daqiqada',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: YanColors.mutedText,
-                      ),
-                    ),
-                  ],
+                child: _CardPillButton(
+                  label: 'Profil',
+                  isPrimary: false,
+                  onTap: onProfileTap,
                 ),
               ),
-              _CardPillButton(
-                label: 'Profil',
-                isPrimary: false,
-                onTap: onProfileTap,
-              ),
-              const SizedBox(width: 8),
-              _CardPillButton(
-                label: 'Xabar',
-                isPrimary: true,
-                onTap: onMessageTap,
+              const SizedBox(width: 10),
+              Expanded(
+                child: _CardPillButton(
+                  label: 'Xabar',
+                  isPrimary: true,
+                  onTap: onMessageTap,
+                ),
               ),
             ],
           ),
@@ -4640,41 +5101,19 @@ class _AdvocateDirectoryCard extends StatelessWidget {
           Row(
             children: <Widget>[
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      lawyer.consultationPriceUzs > 0
-                          ? '${lawyer.consultationPriceUzs} so‘m'
-                          : 'Bepul maslahat',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                        color: YanColors.primaryNavy,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'Javob beradi: ~15 daqiqa',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: YanColors.mutedText,
-                      ),
-                    ),
-                  ],
+                child: _CardPillButton(
+                  label: 'Profil',
+                  isPrimary: false,
+                  onTap: onProfileTap,
                 ),
               ),
-              _CardPillButton(
-                label: 'Profil',
-                isPrimary: false,
-                onTap: onProfileTap,
-              ),
-              const SizedBox(width: 8),
-              _CardPillButton(
-                label: 'Xabar',
-                isPrimary: true,
-                onTap: onMessageTap,
+              const SizedBox(width: 10),
+              Expanded(
+                child: _CardPillButton(
+                  label: 'Xabar',
+                  isPrimary: true,
+                  onTap: onMessageTap,
+                ),
               ),
             ],
           ),
@@ -5509,7 +5948,7 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             const Text(
-                              'Supabase bazasida tekshirilgan hujjatlar',
+                              'Tasdiqlangan hujjatlar',
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w800,
@@ -5526,7 +5965,7 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
                             const SizedBox(height: 8),
                             const _VerifiedDocRow(
                               title: '2. Advokatlik guvohnomasi (Old va Orqa)',
-                              subtitle: 'Supabase Storage orqali yuklangan',
+                              subtitle: 'Rasmiy tasdiqlangan',
                             ),
                             const SizedBox(height: 8),
                             const _VerifiedDocRow(
@@ -6600,7 +7039,7 @@ class AdvocateClientChatPage extends StatefulWidget {
     for (var i = 0; i < attachmentNames.length; i++) {
       final docTime = now.add(Duration(milliseconds: 12 * (i + 1)));
       final docText =
-          '📎 E2EE Hujjat #${i + 1}: ${attachmentNames[i]} ($referenceCode)';
+          '📎 Hujjat #${i + 1}: ${attachmentNames[i]} ($referenceCode)';
       newMessages.add(
         _ChatMessageItem(
           id: 'ARZ-DOC-${docTime.microsecondsSinceEpoch}-$i',
@@ -6613,7 +7052,7 @@ class AdvocateClientChatPage extends StatefulWidget {
           isSeen: false,
           seenAt: null,
           mediaType: _ChatMediaType.image,
-          mediaMeta: 'E2EE Hujjat #${i + 1} • ${attachmentNames[i]}',
+          mediaMeta: 'Hujjat #${i + 1} • ${attachmentNames[i]}',
         ),
       );
     }
@@ -7509,7 +7948,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
 
     if (byId.isEmpty) {
       final welcomeText =
-          'Assalomu alaykum, ${widget.profile.displayName}! Men ${widget.lawyer.fullName}. YAN360 E2EE himoyalangan chat orqali savolingiz va hujjatlaringizni yuborishingiz mumkin.';
+          'Assalomu alaykum, ${widget.profile.displayName}! Men ${widget.lawyer.fullName}. YAN360 himoyalangan chat orqali savolingiz va hujjatlaringizni yuborishingiz mumkin.';
       final welcomeTime = DateTime.now();
       final welcomeId = 'WELCOME-$_roomKey';
       byId[welcomeId] = _ChatMessageItem(
@@ -8306,7 +8745,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                               : const Icon(Icons.send_rounded, size: 18),
                           label: Text(
                             isUploading
-                                ? 'Supabase bazasiga saqlanmoqda...'
+                                ? 'Saqlanmoqda...'
                                 : '#ariza FAYLINI MIJOZGA YUBORISH',
                             style: const TextStyle(
                               fontSize: 13.5,
@@ -9306,7 +9745,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                         const SizedBox(height: 2),
                         Text(
                           _isPeerOnline
-                              ? 'Online • E2EE Shifrlangan Qo‘ng‘iroq'
+                              ? 'Onlayn • Himoyalangan qo‘ng‘iroq'
                               : 'Offline • Qo‘ng‘iroq bildirishnomasi yuboriladi',
                           style: TextStyle(
                             fontSize: 12,
@@ -9364,7 +9803,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                             ),
                             SizedBox(height: 2),
                             Text(
-                              'SRTP / E2EE himoyalangan tez ovozli aloqa',
+                              'Himoyalangan ovozli aloqa',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: YanColors.mutedText,
@@ -9425,7 +9864,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                             ),
                             SizedBox(height: 2),
                             Text(
-                              'Yuzma-yuz E2EE shifrlangan video maslahat',
+                              'Yuzma-yuz video maslahat',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: YanColors.mutedText,
@@ -9473,7 +9912,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
           peerName: widget.lawyer.fullName,
           peerInitials: widget.lawyer.initials,
           peerSubtitle: consultationId != null
-              ? 'Rasmiy 19 daqiqalik E2EE Konsultatsiya'
+              ? 'Rasmiy 19 daqiqalik konsultatsiya'
               : widget.lawyer.specialization,
           myUserId: _myUserId,
           myUserName: widget.profile.displayName,
@@ -10519,7 +10958,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                   ),
                   SizedBox(width: 8),
                   Text(
-                    'Xabar tafsilotlari va E2EE holati',
+                    'Xabar tafsilotlari',
                     style: TextStyle(
                       fontSize: 16.5,
                       fontWeight: FontWeight.w800,
@@ -10561,7 +11000,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                       ),
                     const Divider(height: 16, color: Color(0xFFDCE9F7)),
                     const Text(
-                      'Serverda saqlangan E2EE shifrlangan ko‘rinishi:',
+                      'Himoyalangan xabar holati:',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -10604,7 +11043,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               const Text(
-                'E2EE Himoyalangan fayl va #ariza yuborish',
+                'Hujjat va fayl yuborish',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
@@ -10640,7 +11079,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
 
   String get _peerPresenceSubtitle {
     if (_isPeerOnline && _isMyAppInForeground) {
-      return 'Online (Ilovada) • E2EE 0.00s aloqa';
+      return 'Onlayn (Ilovada)';
     }
     final h = _peerLastSeen.hour.toString().padLeft(2, '0');
     final m = _peerLastSeen.minute.toString().padLeft(2, '0');
@@ -10692,7 +11131,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     }
 
     final subtitleText = parsed.status == 'completed'
-        ? '${parsed.formattedDuration} • Zero-Knowledge E2EE'
+        ? '${parsed.formattedDuration} • Himoyalangan'
         : (isVideo ? 'HD Video • Javob berilmadi' : 'Ovozli aloqa • Javob berilmadi');
 
     final arrowIcon = isOutgoing
@@ -11410,7 +11849,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
               const SizedBox(width: 6),
               const Flexible(
                 child: Text(
-                  'Zero-Knowledge E2EE • #ariza hujjatlari Qabul qilish va 5 yulduz baholash bilan',
+                  'Himoyalangan yozishma va rasmiy hujjat almashinuvi',
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 10.3,
@@ -11682,7 +12121,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                               const SizedBox(width: 6),
                               Flexible(
                                 child: Text(
-                                  m.mediaMeta ?? 'E2EE Fayl',
+                                  m.mediaMeta ?? 'Fayl',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w800,
@@ -11881,7 +12320,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                   onSubmitted: (_) => _sendMessage(),
                   decoration: InputDecoration(
                     hintText:
-                        'E2EE xabar yozing (yoki #ariza bilan topshiring)...',
+                        'Xabar yozing...',
                     hintStyle: const TextStyle(
                       fontSize: 12.8,
                       color: YanColors.mutedText,
@@ -12429,8 +12868,8 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
                     peerName: callerName,
                     peerInitials: callerInitials,
                     peerSubtitle: isVideo
-                        ? 'Kiruvchi HD E2EE Video qo‘ng‘iroq'
-                        : 'Kiruvchi E2EE Audio qo‘ng‘iroq',
+                        ? 'Kiruvchi video qo‘ng‘iroq'
+                        : 'Kiruvchi ovozli qo‘ng‘iroq',
                     myUserId: myId,
                     myUserName: userProfile.value.displayName,
                     roomKey: roomKey,
@@ -13453,8 +13892,8 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
         return 'Chaqirilmoqda... (Telefon jiringlamoqda)';
       case _TelegramCallStage.incomingRinging:
         return _isVideoEnabled
-            ? 'Kiruvchi E2EE Video qo‘ng‘iroq...'
-            : 'Kiruvchi E2EE Audio qo‘ng‘iroq...';
+            ? 'Kiruvchi video qo‘ng‘iroq...'
+            : 'Kiruvchi ovozli qo‘ng‘iroq...';
       case _TelegramCallStage.connected:
         return _formattedDuration;
       case _TelegramCallStage.ended:
@@ -13531,7 +13970,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
                           ),
                           SizedBox(width: 5),
                           Text(
-                            'E2EE WebRTC',
+                            'Himoyalangan aloqa',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
@@ -14274,7 +14713,7 @@ class _ArizalarimRoleViewState extends State<_ArizalarimRoleView> {
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: const Text(
-                      '#ARIZA • E2EE TASDIQLANGAN HUJJAT',
+                      'RASMIY TASDIQLANGAN HUJJAT',
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w900,
@@ -14509,7 +14948,7 @@ class _ArizalarimRoleViewState extends State<_ArizalarimRoleView> {
                           const SizedBox(width: 4),
                           const Expanded(
                             child: Text(
-                              'E2EE orqali himoyalangan',
+                              'Himoyalangan aloqa',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
@@ -15165,13 +15604,13 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
               avatarUrl: clientAvatarUrl,
               title: 'YAN360 Mijozi',
               region: map['region']?.toString() ?? 'Toshkent shahri',
-              specialization: 'E2EE Himoyalangan Mijoz',
+              specialization: 'Mijoz',
               experienceYears: 1,
               rating: 5.0,
               feedbackCount: 1,
               wonCasesCount: 0,
               consultationPriceUzs: 0,
-              contractMonthlyNote: 'E2EE Shifrlangan Muloqot',
+              contractMonthlyNote: 'Himoyalangan muloqot',
               licenseNumber: 'Tasdiqlangan',
               phone: map['phone']?.toString() ?? '+998',
               assistantName: '-',
@@ -15249,7 +15688,7 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
                   ),
                   const SizedBox(height: 3),
                   const Text(
-                    'Turkumlangan mijozlar • 30 daqiqalik real-vaqt taymeri • E2EE',
+                    'Mijozlar va murojaatlar',
                     style: TextStyle(fontSize: 12.0, color: YanColors.mutedText),
                   ),
                 ],
@@ -15855,8 +16294,8 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
                           const SizedBox(height: 3),
                           Text(
                             clientPeer.isVerifiedPartner
-                                ? 'Online • E2EE himoyalangan mijoz'
-                                : 'Offline • E2EE himoyalangan mijoz',
+                                ? 'Onlayn • Mijoz'
+                                : 'Oflayn • Mijoz',
                             style: TextStyle(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w600,
