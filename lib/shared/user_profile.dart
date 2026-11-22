@@ -124,13 +124,13 @@ enum UserRole {
 
 class UserProfileData {
   const UserProfileData({
-    this.clientId = 'YAN-2026-8492',
-    this.displayName = 'Nurbek Otamurodov',
-    this.phone = '+998 90 123 45 67',
-    this.email = 'nurbek.otamurodov@yan360.uz',
-    this.region = 'Toshkent shahri',
-    this.district = 'Yunusobod tumani',
-    this.streetAddress = 'Mustaqillik MFY, 12-uy',
+    this.clientId = '',
+    this.displayName = '',
+    this.phone = '',
+    this.email = '',
+    this.region = '',
+    this.district = '',
+    this.streetAddress = '',
     this.passportOrPinfl = '',
     this.role = 'Raqamli huquqiy profil',
     this.memberSince = '2026',
@@ -141,15 +141,17 @@ class UserProfileData {
     this.notificationsEnabled = true,
     this.pinCode,
     this.avatarFile,
+    this.avatarBase64 = '',
     this.roleType = UserRole.oddiy,
     this.contractedLawyerId,
     this.contractNumber,
     this.contractSignedAt,
     this.lawyerSubscriptionTier = 2,
     this.assignedLawyerName = 'Biriktirilmagan',
-    this.lawyerLicenseNumber = 'Tasdiqlangan',
-    this.lawyerSpecialization = 'Oila, mulk va fuqarolik huquqi',
-    this.lawyerExperienceYears = 5,
+    this.lawyerLicenseNumber = '',
+    this.lawyerSpecialization = '',
+    this.lawyerExperienceYears = 0,
+    this.lawyerBio = '',
   });
 
   final String clientId;
@@ -175,6 +177,7 @@ class UserProfileData {
 
   /// Local avatar file chosen by the user.
   final File? avatarFile;
+  final String avatarBase64;
 
   /// 4-Role Architecture fields.
   final UserRole roleType;
@@ -188,6 +191,7 @@ class UserProfileData {
   final String lawyerLicenseNumber;
   final String lawyerSpecialization;
   final int lawyerExperienceYears;
+  final String lawyerBio;
 
   bool get hasPinCode => pinCode != null && pinCode!.trim().length >= 4;
 
@@ -321,6 +325,7 @@ class UserProfileData {
     String? pinCode,
     bool clearPinCode = false,
     File? avatarFile,
+    String? avatarBase64,
     bool clearAvatar = false,
     UserRole? roleType,
     String? contractedLawyerId,
@@ -332,6 +337,7 @@ class UserProfileData {
     String? lawyerLicenseNumber,
     String? lawyerSpecialization,
     int? lawyerExperienceYears,
+    String? lawyerBio,
   }) {
     final nextRoleType = roleType ?? this.roleType;
     return UserProfileData(
@@ -352,6 +358,7 @@ class UserProfileData {
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
       pinCode: clearPinCode ? null : (pinCode ?? this.pinCode),
       avatarFile: clearAvatar ? null : (avatarFile ?? this.avatarFile),
+      avatarBase64: clearAvatar ? '' : (avatarBase64 ?? this.avatarBase64),
       roleType: nextRoleType,
       contractedLawyerId: clearContractedLawyer
           ? null
@@ -367,6 +374,7 @@ class UserProfileData {
       lawyerSpecialization: lawyerSpecialization ?? this.lawyerSpecialization,
       lawyerExperienceYears:
           lawyerExperienceYears ?? this.lawyerExperienceYears,
+      lawyerBio: lawyerBio ?? this.lawyerBio,
     );
   }
 
@@ -388,6 +396,7 @@ class UserProfileData {
     'notificationsEnabled': notificationsEnabled,
     'pinCode': pinCode,
     'avatarPath': avatarFile?.path,
+    'avatarBase64': avatarBase64,
     'roleType': roleType.id,
     'contractedLawyerId': contractedLawyerId,
     'contractNumber': contractNumber,
@@ -397,6 +406,7 @@ class UserProfileData {
     'lawyerLicenseNumber': lawyerLicenseNumber,
     'lawyerSpecialization': lawyerSpecialization,
     'lawyerExperienceYears': lawyerExperienceYears,
+    'lawyerBio': lawyerBio,
   };
 
   factory UserProfileData.fromJson(Map<String, dynamic> json) {
@@ -409,16 +419,31 @@ class UserProfileData {
       }
     }
     final parsedRole = UserRole.fromId(json['roleType']?.toString());
+    var loadedRegion = (json['region']?.toString() ?? '').trim();
+    var loadedDistrict = (json['district']?.toString() ?? '').trim();
+    var loadedStreet = (json['streetAddress']?.toString() ?? '').trim();
+    var loadedPassport = (json['passportOrPinfl']?.toString() ?? '').trim();
+
+    // Purge legacy hardcoded demo defaults saved in old local user_profile.json files
+    if (loadedStreet == 'Mustaqillik MFY, 12-uy') {
+      loadedStreet = '';
+      if (loadedDistrict == 'Yunusobod tumani') loadedDistrict = '';
+      if (loadedRegion == 'Toshkent shahri') loadedRegion = '';
+    }
+    if (loadedPassport == 'AA 4829104' ||
+        loadedPassport == 'AA 4829104 (Tasdiqlangan)') {
+      loadedPassport = '';
+    }
+
     return UserProfileData(
-      clientId: json['clientId']?.toString() ?? 'YAN-2026-8492',
-      displayName: json['displayName']?.toString() ?? 'Nurbek Otamurodov',
-      phone: json['phone']?.toString() ?? '+998 90 123 45 67',
-      email: json['email']?.toString() ?? 'nurbek.otamurodov@yan360.uz',
-      region: json['region']?.toString() ?? 'Toshkent shahri',
-      district: json['district']?.toString() ?? 'Yunusobod tumani',
-      streetAddress:
-          json['streetAddress']?.toString() ?? 'Mustaqillik MFY, 12-uy',
-      passportOrPinfl: json['passportOrPinfl']?.toString() ?? '',
+      clientId: json['clientId']?.toString() ?? '',
+      displayName: json['displayName']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      region: loadedRegion,
+      district: loadedDistrict,
+      streetAddress: loadedStreet,
+      passportOrPinfl: loadedPassport,
       role: json['role']?.toString() ?? parsedRole.label,
       memberSince: json['memberSince']?.toString() ?? '2026',
       isVerified: json['isVerified'] != false,
@@ -428,6 +453,7 @@ class UserProfileData {
       notificationsEnabled: json['notificationsEnabled'] != false,
       pinCode: json['pinCode']?.toString(),
       avatarFile: avatar,
+      avatarBase64: json['avatarBase64']?.toString() ?? '',
       roleType: parsedRole,
       contractedLawyerId: (json['contractedLawyerId']?.toString().startsWith('LAW-') ?? true)
           ? null
@@ -441,12 +467,12 @@ class UserProfileData {
       assignedLawyerName:
           json['assignedLawyerName']?.toString() ?? 'Biriktirilmagan',
       lawyerLicenseNumber:
-          json['lawyerLicenseNumber']?.toString() ?? 'Tasdiqlangan',
+          json['lawyerLicenseNumber']?.toString() ?? '',
       lawyerSpecialization:
-          json['lawyerSpecialization']?.toString() ??
-          'Oila, mulk va fuqarolik huquqi',
+          json['lawyerSpecialization']?.toString() ?? '',
       lawyerExperienceYears:
-          (json['lawyerExperienceYears'] as num?)?.toInt() ?? 5,
+          (json['lawyerExperienceYears'] as num?)?.toInt() ?? 0,
+      lawyerBio: json['lawyerBio']?.toString() ?? '',
     );
   }
 }
@@ -565,6 +591,8 @@ class LawyerDirectoryProfile {
     required this.bio,
     required this.feedbacks,
     this.isVerifiedPartner = true,
+    this.avatarBase64 = '',
+    this.avatarUrl = '',
   });
 
   final String id;
@@ -586,6 +614,8 @@ class LawyerDirectoryProfile {
   final String bio;
   final List<LawyerFeedbackItem> feedbacks;
   final bool isVerifiedPartner;
+  final String avatarBase64;
+  final String avatarUrl;
 
   double get rankingScore => rating * 20.0 + (feedbackCount * 0.35);
 
@@ -604,6 +634,8 @@ class LawyerDirectoryProfile {
     int? feedbackCount,
     int? wonCasesCount,
     List<LawyerFeedbackItem>? feedbacks,
+    String? avatarBase64,
+    String? avatarUrl,
   }) {
     return LawyerDirectoryProfile(
       id: id,
@@ -625,35 +657,53 @@ class LawyerDirectoryProfile {
       bio: bio,
       feedbacks: feedbacks ?? this.feedbacks,
       isVerifiedPartner: isVerifiedPartner,
+      avatarBase64: avatarBase64 ?? this.avatarBase64,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
     );
   }
 
   factory LawyerDirectoryProfile.fromSupabaseMap(Map<String, dynamic> row) {
-    final name = (row['full_name']?.toString() ?? '').trim();
+    String cleanText(dynamic value) {
+      final v = (value?.toString() ?? '').trim();
+      return v;
+    }
+
+    String cleanPhone(dynamic value) {
+      final v = (value?.toString() ?? '').trim();
+      if (v.isEmpty || v == '+998' || v == '998') return '';
+      return v;
+    }
+
+    int parseExp(dynamic value) {
+      if (value is num) return value.toInt() > 0 ? value.toInt() : 0;
+      final parsed = int.tryParse((value?.toString() ?? '').trim()) ?? 0;
+      return parsed > 0 ? parsed : 0;
+    }
+
+    final name = cleanText(row['full_name']);
     return LawyerDirectoryProfile(
-      id: row['id']?.toString() ?? '',
-      fullName: name.isEmpty ? 'Rasmiy Advokat' : name,
+      id: cleanText(row['id']),
+      fullName: name.isEmpty ? 'Advokat' : name,
       title: 'Litsenziyali advokat • YAN360',
-      region: row['region']?.toString() ?? 'Toshkent shahri',
-      specialization:
-          row['specialization']?.toString() ?? 'Oila va fuqarolik huquqi',
-      experienceYears: (row['experience_years'] as num?)?.toInt() ?? 5,
-      rating: (row['rating'] as num?)?.toDouble() ?? 5.0,
-      feedbackCount: (row['feedback_count'] as num?)?.toInt() ?? 1,
-      wonCasesCount: (row['won_cases_count'] as num?)?.toInt() ?? 10,
+      region: cleanText(row['region']),
+      specialization: cleanText(row['specialization']),
+      experienceYears: parseExp(row['experience_years']),
+      rating: (row['rating'] as num?)?.toDouble() ?? 0.0,
+      feedbackCount: (row['feedback_count'] as num?)?.toInt() ?? 0,
+      wonCasesCount: (row['won_cases_count'] as num?)?.toInt() ?? 0,
       consultationPriceUzs:
-          (row['consultation_price_uzs'] as num?)?.toInt() ?? 200000,
+          (row['consultation_price_uzs'] as num?)?.toInt() ?? 0,
       contractMonthlyNote: '3 oy bepul ilova obunasi • 30%–50% imtiyoz',
-      licenseNumber: row['license_number']?.toString() ?? 'Tasdiqlangan',
-      phone: row['phone']?.toString() ?? '+998',
-      assistantName: 'Yordamchi biriktirilmagan',
-      assistantRole: 'Advokat yordamchisi',
+      licenseNumber: cleanText(row['license_number']),
+      phone: cleanPhone(row['phone']),
+      assistantName: '',
+      assistantRole: '',
       assistantPhone: '',
-      bio:
-          row['bio']?.toString() ??
-          'YAN360 platformasida rasmiy ro‘yxatdan o‘tgan va litsenziyasi tasdiqlangan advokat.',
+      bio: cleanText(row['bio']),
       feedbacks: const <LawyerFeedbackItem>[],
-      isVerifiedPartner: true,
+      isVerifiedPartner: row['is_verified'] != false,
+      avatarBase64: cleanText(row['avatar_base64']),
+      avatarUrl: cleanText(row['avatar_url']),
     );
   }
 }

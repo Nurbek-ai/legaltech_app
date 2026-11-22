@@ -20,6 +20,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/advocate_calendar_page.dart';
 import 'screens/bosh_sahifa_page.dart';
 import 'services/consultation_service.dart';
+import 'services/contract_link_service.dart';
 import 'screens/profil_page.dart';
 import 'screens/services/alimony_claim_page.dart';
 import 'services/alimony_claim_document_service.dart';
@@ -39,8 +40,8 @@ import 'shared/user_profile.dart';
 // Option B: Or paste static username & credential from Metered Dashboard below.
 // ═══════════════════════════════════════════════════════════════════════════
 const String yanMeteredTurnApiUrl = '';
-const String yanStaticTurnUsername = 'a563ad5fa22790872c877d8a';
-const String yanStaticTurnCredential = 'Tz+qYirv3gOulwmK';
+const String yanStaticTurnUsername = '';
+const String yanStaticTurnCredential = '';
 
 // Set to true once you deploy your Supabase Edge Function `send-call-push` + Firebase Cloud Messaging (FCM)
 const bool yanEnableFcmCallPush = false;
@@ -141,8 +142,14 @@ class _AppLaunchGate extends StatelessWidget {
           activeSession = null;
         }
 
-        if (profile.hasPinCode || activeSession != null) {
+        if (activeSession != null && profile.hasPinCode) {
           return AppPinLockScreen(profile: profile);
+        }
+        if (activeSession != null && !profile.hasPinCode) {
+          return LocalPhonePinSetupScreen(
+            fullName: profile.displayName,
+            phoneNumber: profile.phone,
+          );
         }
         return const IntroScreen();
       },
@@ -380,15 +387,13 @@ class _IntroScreenState extends State<IntroScreen>
 
   late final AnimationController _entranceController;
 
-  final TextEditingController _signInPhoneController =
-      TextEditingController(text: '+998 ');
+  final TextEditingController _signInPhoneController = TextEditingController();
   final TextEditingController _signInPasswordController =
       TextEditingController();
 
   final TextEditingController _regFirstNameController = TextEditingController();
   final TextEditingController _regSurnameController = TextEditingController();
-  final TextEditingController _regPhoneController =
-      TextEditingController(text: '+998 ');
+  final TextEditingController _regPhoneController = TextEditingController();
   final TextEditingController _regStirController = TextEditingController();
   final TextEditingController _regLinkedAdvocateUuidController =
       TextEditingController();
@@ -424,9 +429,17 @@ class _IntroScreenState extends State<IntroScreen>
     super.dispose();
   }
 
+  String _normalizeUzbekPhone(String raw) {
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return '';
+    if (digits.startsWith('998')) return '+$digits';
+    return '+998$digits';
+  }
+
   bool _hasUzbekPhone(String value) {
     final digits = value.replaceAll(RegExp(r'\D'), '');
-    return digits.length >= 12 && digits.startsWith('998');
+    return (digits.length == 9) ||
+        (digits.length >= 12 && digits.startsWith('998'));
   }
 
   String get _selectedDbRole {
@@ -538,7 +551,7 @@ class _IntroScreenState extends State<IntroScreen>
   void _proceedToMockOtpScreen() {
     final first = _regFirstNameController.text.trim();
     final last = _regSurnameController.text.trim();
-    final phone = _regPhoneController.text.trim();
+    final phone = _normalizeUzbekPhone(_regPhoneController.text);
     final stir = _regStirController.text.replaceAll(RegExp(r'\D'), '');
 
     if (first.isEmpty || last.isEmpty) {
@@ -598,7 +611,7 @@ class _IntroScreenState extends State<IntroScreen>
   }
 
   Future<void> _signInWithPhoneAndPassword() async {
-    final phone = _signInPhoneController.text.trim();
+    final phone = _normalizeUzbekPhone(_signInPhoneController.text);
     final password = _signInPasswordController.text;
 
     if (!_hasUzbekPhone(phone)) {
@@ -629,6 +642,16 @@ class _IntroScreenState extends State<IntroScreen>
         user?.userMetadata?['role']?.toString(),
       );
 
+      String savedRegion = '';
+      String savedDistrict = '';
+      String savedStreet = '';
+      String savedPassport = '';
+      String savedSpec = '';
+      String savedLicense = '';
+      int savedExp = 0;
+      String savedBio = '';
+      String savedAvatarB64 = '';
+
       if (user != null) {
         try {
           final profileRow = await Supabase.instance.client
@@ -642,17 +665,52 @@ class _IntroScreenState extends State<IntroScreen>
             resolvedRole = mapDbRoleToUserRole(
               profileRow['role']?.toString(),
             );
+            final env = _YanE2eeCryptoEngine.decodeProfileEnvelope(
+              profileRow['public_key']?.toString(),
+            );
+            final advMeta = env['advocate_profile'] is Map
+                ? Map<String, dynamic>.from(env['advocate_profile'] as Map)
+                : const <String, dynamic>{};
+            String pickStr(String key) {
+              final fromEnv = (advMeta[key]?.toString() ?? '').trim();
+              if (fromEnv.isNotEmpty) return fromEnv;
+              return (profileRow[key]?.toString() ?? '').trim();
+            }
+            savedRegion = pickStr('region');
+            savedDistrict = pickStr('district');
+            savedStreet = pickStr('street_address');
+            savedPassport = pickStr('passport_or_pinfl');
+            savedSpec = pickStr('specialization');
+            savedLicense = pickStr('license_number');
+            savedBio = pickStr('bio');
+            savedAvatarB64 = pickStr('avatar_base64');
+            final expRaw = advMeta['experience_years'] ?? profileRow['experience_years'];
+            if (expRaw is num && expRaw.toInt() > 0) {
+              savedExp = expRaw.toInt();
+            } else {
+              final parsedExp = int.tryParse((expRaw?.toString() ?? '').trim()) ?? 0;
+              if (parsedExp > 0) savedExp = parsedExp;
+            }
           }
         } catch (_) {}
       }
 
-      userProfile.value = userProfile.value.copyWith(
-        clientId: user?.id ?? userProfile.value.clientId,
+      userProfile.value = UserProfileData(
+        clientId: user?.id ?? '',
         displayName: resolvedName,
         phone: phone,
         email: dummyEmail,
+        region: savedRegion,
+        district: savedDistrict,
+        streetAddress: savedStreet,
+        passportOrPinfl: savedPassport,
         roleType: resolvedRole,
         role: resolvedRole.label,
+        lawyerSpecialization: savedSpec,
+        lawyerLicenseNumber: savedLicense,
+        lawyerExperienceYears: savedExp,
+        lawyerBio: savedBio,
+        avatarBase64: savedAvatarB64,
       );
 
       if (!mounted) return;
@@ -705,28 +763,35 @@ class _IntroScreenState extends State<IntroScreen>
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Scaffold(
-      backgroundColor: YanColors.background,
+      backgroundColor: const Color(0xFFF7F9FC),
       resizeToAvoidBottomInset: true,
-      body: Stack(
-        fit: StackFit.expand,
-        children: <Widget>[
-          const DashboardBackground(),
-          SafeArea(
-            child: SingleChildScrollView(
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(20, 20, 20, 24 + bottomInset),
-              child: Column(
-                children: <Widget>[
-                  _buildBrand(),
-                  const SizedBox(height: 20),
-                  _buildOnboardingCard(),
-                  const SizedBox(height: 18),
-                  _buildFooter(),
-                ],
+              padding: EdgeInsets.fromLTRB(20, 24, 20, 20 + bottomInset),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: (constraints.maxHeight - 44).clamp(0.0, double.infinity),
+                ),
+                child: IntrinsicHeight(
+                  child: Column(
+                    children: <Widget>[
+                      const SizedBox(height: 4),
+                      _buildBrand(),
+                      const SizedBox(height: 22),
+                      _buildOnboardingCard(),
+                      const Spacer(),
+                      const SizedBox(height: 24),
+                      _buildFooter(),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -742,8 +807,8 @@ class _IntroScreenState extends State<IntroScreen>
       child: Column(
         children: <Widget>[
           SizedBox(
-            width: 82,
-            height: 82,
+            width: 112,
+            height: 112,
             child: Image.asset(
               'assets/logo.png',
               fit: BoxFit.contain,
@@ -751,8 +816,8 @@ class _IntroScreenState extends State<IntroScreen>
               isAntiAlias: true,
               errorBuilder: (_, __, ___) => const Icon(
                 CupertinoIcons.shield_lefthalf_fill,
-                size: 64,
-                color: YanColors.primaryBlue,
+                size: 84,
+                color: Color(0xFF1675D1),
               ),
             ),
           ),
@@ -763,34 +828,35 @@ class _IntroScreenState extends State<IntroScreen>
                 TextSpan(
                   text: 'YAN',
                   style: TextStyle(
-                    color: YanColors.primaryNavy,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 3.2,
-                    height: 1.0,
+                    color: Color(0xFF12356B),
+                    fontSize: 33,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    height: 1.05,
                   ),
                 ),
                 TextSpan(
                   text: '360',
                   style: TextStyle(
-                    color: YanColors.primaryBlue,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 3.2,
-                    height: 1.0,
+                    color: Color(0xFF1675D1),
+                    fontSize: 33,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    height: 1.05,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           const Text(
-            'E2EE Himoyalangan Huquqiy Platforma • Supabase EU',
+            'Huquqiy xizmatlar — yagona raqamli platformada',
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 12.2,
-              fontWeight: FontWeight.w600,
-              color: YanColors.mutedText,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF64748B),
+              height: 1.35,
             ),
           ),
         ],
@@ -799,54 +865,42 @@ class _IntroScreenState extends State<IntroScreen>
   }
 
   Widget _buildOnboardingCard() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(26),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.94),
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(color: YanColors.border, width: 1.2),
-            boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: YanColors.primaryNavy.withValues(alpha: 0.065),
-                blurRadius: 24,
-                offset: const Offset(0, 10),
-              ),
-            ],
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFFFF),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE6EDF6), width: 1),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: const Color(0xFF12356B).withValues(alpha: 0.055),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            child: switch (_mode) {
-              OnboardingMode.signIn => _buildSignInView(),
-              OnboardingMode.pinQuickUnlock => _buildPinQuickUnlockView(),
-              OnboardingMode.rolePicker => _buildRolePickerView(),
-              OnboardingMode.clientRegister => _buildRegistrationFormView(
-                title: 'Mijoz sifatida ro‘yxatdan o‘tish',
-                subtitle:
-                    '1. SMS kod • 2. 6+ belgili Supabase parol • 3. 4 xonali telefon PIN-kodi',
-                roleBadge: 'CLIENT (MIJOZ)',
-              ),
-              OnboardingMode.advocateRegister => _buildRegistrationFormView(
-                title: 'Advokat sifatida ro‘yxatdan o‘tish',
-                subtitle:
-                    'Ism-familiya, telefon raqami, tuzilma STIR raqami, litsenziya va guvohnoma (old/orqa) nusxalarini yuklang.',
-                roleBadge: 'ADVOCATE',
-                showLicenseUpload: true,
-              ),
-              OnboardingMode.assistantRegister => _buildRegistrationFormView(
-                title: 'Advokat yordamchisi ro‘yxati',
-                subtitle:
-                    'Biriktirilgan advokat UUID raqamini kiriting (RLS orqali advokat shartnomalariga ulanadi).',
-                roleBadge: 'ASSISTANT',
-                showLinkedAdvocateField: true,
-              ),
-            },
+        ],
+      ),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: switch (_mode) {
+          OnboardingMode.signIn => _buildSignInView(),
+          OnboardingMode.pinQuickUnlock => _buildPinQuickUnlockView(),
+          OnboardingMode.rolePicker => _buildRolePickerView(),
+          OnboardingMode.clientRegister => _buildRegistrationFormView(
+            title: 'Mijoz sifatida ro‘yxatdan o‘tish',
+            roleBadge: 'MIJOZ',
           ),
-        ),
+          OnboardingMode.advocateRegister => _buildRegistrationFormView(
+            title: 'Advokat sifatida ro‘yxatdan o‘tish',
+            roleBadge: 'ADVOKAT',
+            showLicenseUpload: true,
+          ),
+          OnboardingMode.assistantRegister => _buildRegistrationFormView(
+            title: 'Advokat yordamchisi',
+            roleBadge: 'YORDAMCHI',
+            showLinkedAdvocateField: true,
+          ),
+        },
       ),
     );
   }
@@ -856,101 +910,96 @@ class _IntroScreenState extends State<IntroScreen>
       key: const ValueKey<String>('mode-signin'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Row(
-          children: <Widget>[
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    'Hisobga kirish',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: YanColors.primaryNavy,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Telefon raqamingiz va 6+ belgili hisob parolingizni kiriting',
-                    style: TextStyle(
-                      fontSize: 12.4,
-                      color: YanColors.mutedText,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-              decoration: BoxDecoration(
-                color: YanColors.lightBlue,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Icon(
-                    CupertinoIcons.lock_shield_fill,
-                    size: 13,
-                    color: YanColors.primaryBlue,
-                  ),
-                  SizedBox(width: 4),
-                  Text(
-                    'SUPABASE',
-                    style: TextStyle(
-                      color: YanColors.primaryBlue,
-                      fontSize: 10.0,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        const Text(
+          'Hisobga kirish',
+          style: TextStyle(
+            fontSize: 21,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF12356B),
+            letterSpacing: -0.3,
+            height: 1.2,
+          ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 6),
+        const Text(
+          'Telefon raqamingiz va parolingizni kiriting',
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w400,
+            color: Color(0xFF64748B),
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'TELEFON RAQAMI',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.7,
+            color: Color(0xFF64748B),
+          ),
+        ),
+        const SizedBox(height: 8),
         _UzbekPhoneField(controller: _signInPhoneController),
-        const SizedBox(height: 11),
+        const SizedBox(height: 16),
+        const Text(
+          'HISOB PAROLI',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.7,
+            color: Color(0xFF64748B),
+          ),
+        ),
+        const SizedBox(height: 8),
         _PasswordTextField(
           controller: _signInPasswordController,
-          hintText: 'Hisob paroli (harf, raqam yoki belgi)',
+          hintText: 'Parolingizni kiriting',
           obscureText: _obscureSignInPassword,
           onToggleObscure: () => setState(
             () => _obscureSignInPassword = !_obscureSignInPassword,
           ),
         ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: () {
+              _showMessage(
+                'Parolni tiklash uchun YAN360 qo‘llab-quvvatlash xizmatiga murojaat qiling yoki ro‘yxatdan o‘tgan telefon raqamingiz orqali qayta tasdiqlang.',
+              );
+            },
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              foregroundColor: const Color(0xFF1675D1),
+            ),
+            child: const Text(
+              'Parolni unutdingizmi?',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1675D1),
+              ),
+            ),
+          ),
+        ),
         const SizedBox(height: 16),
         _SolidPrimaryButton(
-          label: _isSigningIn ? 'Tekshirilmoqda...' : 'Tizimga kirish',
-          icon: CupertinoIcons.arrow_right,
-          onPressed: _isSigningIn ? () {} : _signInWithPhoneAndPassword,
+          label: 'Tizimga kirish',
+          icon: Icons.arrow_forward_rounded,
+          isLoading: _isSigningIn,
+          onPressed: _isSigningIn ? null : _signInWithPhoneAndPassword,
         ),
         const SizedBox(height: 12),
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: _SolidSecondaryButton(
-                icon: CupertinoIcons.person_add_solid,
-                label: 'Ro‘yxatdan o‘tish',
-                active: false,
-                onPressed: () =>
-                    setState(() => _mode = OnboardingMode.rolePicker),
-              ),
-            ),
-            const SizedBox(width: 9),
-            Expanded(
-              child: _SolidSecondaryButton(
-                icon: CupertinoIcons.circle_grid_3x3_fill,
-                label: 'PIN-kod orqali',
-                active: false,
-                onPressed: () => setState(() {
-                  _enteredQuickPin = '';
-                  _mode = OnboardingMode.pinQuickUnlock;
-                }),
-              ),
-            ),
-          ],
+        _SolidSecondaryButton(
+          icon: Icons.person_add_alt_1_outlined,
+          label: 'Ro‘yxatdan o‘tish',
+          active: false,
+          onPressed: () =>
+              setState(() => _mode = OnboardingMode.rolePicker),
         ),
       ],
     );
@@ -1069,30 +1118,21 @@ class _IntroScreenState extends State<IntroScreen>
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         const Text(
           'Kim sifatida ro‘yxatdan o‘tasiz?',
           style: TextStyle(
-            color: YanColors.primaryNavy,
+            color: Color(0xFF12356B),
             fontSize: 21,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
           ),
         ),
-        const SizedBox(height: 4),
-        const Text(
-          'Supabase bazasida profilingiz va RLS huquqlaringiz tanlangan rolga qarab yaratiladi:',
-          style: TextStyle(
-            color: YanColors.mutedText,
-            fontSize: 12.4,
-          ),
-        ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
         _RoleOnboardingChoiceCard(
           icon: CupertinoIcons.person_crop_circle_fill,
           title: 'Mijoz (Foydalanuvchi)',
-          badge: 'ASOSIY',
-          subtitle:
-              'Huquqiy yordam, ariza yozish va litsenziyali advokat topish uchun',
+          badge: 'MIJOZ',
           isHighlighted: true,
           onTap: () => setState(() => _mode = OnboardingMode.clientRegister),
         ),
@@ -1100,9 +1140,7 @@ class _IntroScreenState extends State<IntroScreen>
         _RoleOnboardingChoiceCard(
           icon: CupertinoIcons.briefcase_fill,
           title: 'Litsenziyali Advokat',
-          badge: 'ADVOCATE',
-          subtitle:
-              'Litsenziya, Guvohnoma (old/orqa) va STIR yuklash orqali rasmiy ro‘yxatdan o‘tish',
+          badge: 'ADVOKAT',
           isHighlighted: false,
           onTap: () => setState(() => _mode = OnboardingMode.advocateRegister),
         ),
@@ -1110,9 +1148,7 @@ class _IntroScreenState extends State<IntroScreen>
         _RoleOnboardingChoiceCard(
           icon: CupertinoIcons.person_2_fill,
           title: 'Advokat Yordamchisi',
-          badge: 'ASSISTANT',
-          subtitle:
-              'Advokatga biriktirilgan shaxsiy yordamchi (associated_advocate_id orqali)',
+          badge: 'YORDAMCHI',
           isHighlighted: false,
           onTap: () => setState(() => _mode = OnboardingMode.assistantRegister),
         ),
@@ -1122,7 +1158,7 @@ class _IntroScreenState extends State<IntroScreen>
 
   Widget _buildRegistrationFormView({
     required String title,
-    required String subtitle,
+    String subtitle = '',
     required String roleBadge,
     bool showLicenseUpload = false,
     bool showLinkedAdvocateField = false,
@@ -1183,28 +1219,30 @@ class _IntroScreenState extends State<IntroScreen>
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: const TextStyle(
-            color: YanColors.mutedText,
-            fontSize: 12.2,
-            height: 1.32,
+        if (subtitle.trim().isNotEmpty) ...<Widget>[
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 13,
+              height: 1.35,
+            ),
           ),
-        ),
-        const SizedBox(height: 15),
+        ],
+        const SizedBox(height: 16),
         _CleanTextField(
           controller: _regFirstNameController,
-          hintText: 'Ismingiz (masalan: Nurbek)',
+          hintText: 'Ismingiz',
           keyboardType: TextInputType.name,
-          icon: CupertinoIcons.person_fill,
+          icon: Icons.person_outline_rounded,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         _CleanTextField(
           controller: _regSurnameController,
-          hintText: 'Familiyangiz (masalan: Otamurodov)',
+          hintText: 'Familiyangiz',
           keyboardType: TextInputType.name,
-          icon: CupertinoIcons.person_fill,
+          icon: Icons.person_outline_rounded,
         ),
         const SizedBox(height: 10),
         _UzbekPhoneField(controller: _regPhoneController),
@@ -1265,14 +1303,14 @@ class _IntroScreenState extends State<IntroScreen>
           const SizedBox(height: 10),
           _CleanTextField(
             controller: _regLinkedAdvocateUuidController,
-            hintText: 'Advokat UUID raqami (associated_advocate_id)',
+            hintText: 'Advokat ID raqami',
             keyboardType: TextInputType.text,
             icon: CupertinoIcons.link,
           ),
         ],
         const SizedBox(height: 16),
         _SolidPrimaryButton(
-          label: 'SMS kodni olish (1/3-qadam)',
+          label: 'Davom etish',
           icon: CupertinoIcons.paperplane_fill,
           onPressed: _proceedToMockOtpScreen,
         ),
@@ -1281,25 +1319,82 @@ class _IntroScreenState extends State<IntroScreen>
   }
 
   Widget _buildFooter() {
-    return const Column(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Text(
-          'YAN LEGAL FIRM MCHJ',
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2.6,
-            color: YanColors.mutedText,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Container(
+              width: 24,
+              height: 1,
+              color: const Color(0xFFD6E0EE),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'YAN LEGAL FIRM MChJ',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              width: 24,
+              height: 1,
+              color: const Color(0xFFD6E0EE),
+            ),
+          ],
         ),
-        SizedBox(height: 4),
-        Text(
-          'Zero-Knowledge E2EE • Supabase PostgreSQL RLS',
-          style: TextStyle(
-            fontSize: 10,
-            letterSpacing: 0.5,
-            color: YanColors.subtleText,
-          ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            GestureDetector(
+              onTap: () => _showMessage(
+                'YAN LEGAL FIRM MChJ foydalanuvchilarning shaxsiy va yuridik ma’lumotlarini maxfiylik standartlariga muvofiq himoya qiladi.',
+              ),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Text(
+                  'Maxfiylik siyosati',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF1675D1),
+                  ),
+                ),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6),
+              child: Text(
+                '|',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFFCBD5E1),
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _showMessage(
+                'YAN360 platformasidan foydalanish orqali siz YAN LEGAL FIRM MChJ xizmat ko‘rsatish shartlariga rozilik bildirasiz.',
+              ),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Text(
+                  'Foydalanish shartlari',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF1675D1),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -1443,7 +1538,7 @@ class _RoleOnboardingChoiceCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.badge,
-    required this.subtitle,
+    this.subtitle = '',
     required this.isHighlighted,
     required this.onTap,
   });
@@ -1524,15 +1619,17 @@ class _RoleOnboardingChoiceCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      color: YanColors.mutedText,
-                      fontSize: 11.6,
-                      height: 1.28,
+                  if (subtitle.trim().isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 11.6,
+                        height: 1.28,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -1804,8 +1901,7 @@ class _MockOtpVerificationScreenState extends State<MockOtpVerificationScreen> {
                               focusNode: _otpFocusNode,
                               keyboardType: TextInputType.number,
                               maxLength: 6,
-                              autofocus: true,
-                              onChanged: (val) {
+                                        onChanged: (val) {
                                 setState(() {});
                                 if (val.trim().length == 6) {
                                   _verifyMockOtp();
@@ -2108,16 +2204,16 @@ class _AccountPasswordSetupScreenState
           ? createdUser.id.substring(0, 8).toUpperCase()
           : '8492';
 
-      userProfile.value = userProfile.value.copyWith(
+      userProfile.value = UserProfileData(
         clientId: 'YAN-$shortUuid',
         displayName: widget.fullName,
         phone: widget.phoneNumber,
         email: dummyEmail,
         roleType: widget.uiRole,
         role: widget.uiRole.label,
-        lawyerLicenseNumber: uploadedLicenseRef != null
-            ? 'STIR: ${widget.stirNumber ?? "Tasdiqlangan"}'
-            : userProfile.value.lawyerLicenseNumber,
+        lawyerLicenseNumber: (widget.stirNumber?.trim().isNotEmpty ?? false)
+            ? 'STIR: ${widget.stirNumber!.trim()}'
+            : '',
       );
 
       await ActivityHistoryRepository.instance.record(
@@ -2170,7 +2266,6 @@ class _AccountPasswordSetupScreenState
 
   @override
   Widget build(BuildContext context) {
-    final dummyEmailPreview = formatPhoneAsDummyEmail(widget.phoneNumber);
 
     return Scaffold(
       backgroundColor: YanColors.background,
@@ -2206,7 +2301,7 @@ class _AccountPasswordSetupScreenState
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
-                          '2/3-Qadam • Hisob Parolini Yaratish',
+                          'Parol yaratish',
                           style: TextStyle(
                             color: YanColors.primaryNavy,
                             fontSize: 16,
@@ -2245,16 +2340,7 @@ class _AccountPasswordSetupScreenState
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Kamida 6 ta belgidan iborat parol kiriting (harf, raqam yoki maxsus belgilar qatnashishi mumkin). Ushbu parol Supabase bazasida asosiy parolingiz sifatida saqlanadi.',
-                          style: TextStyle(
-                            color: YanColors.mutedText,
-                            fontSize: 12.8,
-                            height: 1.36,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 18),
 
                         _PasswordTextField(
                           controller: _passwordController,
@@ -2284,59 +2370,14 @@ class _AccountPasswordSetupScreenState
                           passed: _passwordsMatch,
                           text: 'Ikkala parol bir-biriga mos',
                         ),
-                        const SizedBox(height: 14),
-
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(11),
-                          decoration: BoxDecoration(
-                            color: YanColors.lightBlue,
-                            borderRadius: BorderRadius.circular(13),
-                            border: Border.all(color: YanColors.border),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                'Supabase Login: $dummyEmailPreview',
-                                style: const TextStyle(
-                                  color: YanColors.primaryNavy,
-                                  fontSize: 11.4,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Metadata: { role: "${widget.dbRole}", full_name: "${widget.fullName}" }',
-                                style: const TextStyle(
-                                  color: YanColors.primaryBlue,
-                                  fontSize: 11.0,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              if (widget.advocateLicenseFile != null) ...<Widget>[
-                                const SizedBox(height: 3),
-                                const Text(
-                                  'Litsenziya + Guvohnoma (Oldi/Orqasi) + STIR: Supabase bazasiga yuklanadi ✓',
-                                  style: TextStyle(
-                                    color: Color(0xFF098562),
-                                    fontSize: 10.8,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 20),
 
                         _SolidPrimaryButton(
-                          label: _isSubmitting
-                              ? 'Supabase bazasiga saqlanmoqda...'
-                              : 'Parolni saqlash va PIN o‘rnatish (3/3)',
-                          icon: CupertinoIcons.arrow_right,
+                          label: 'Parolni saqlash',
+                          icon: Icons.arrow_forward_rounded,
+                          isLoading: _isSubmitting,
                           onPressed: _isSubmitting
-                              ? () {}
+                              ? null
                               : _registerRealAccountInSupabase,
                         ),
                       ],
@@ -2400,46 +2441,57 @@ class _PasswordTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoTextField(
-      controller: controller,
-      obscureText: obscureText,
-      keyboardType: TextInputType.visiblePassword,
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15.5),
-      style: const TextStyle(
-        color: YanColors.primaryNavy,
-        fontSize: 15,
-        fontWeight: FontWeight.w600,
-      ),
-      placeholder: hintText,
-      placeholderStyle: const TextStyle(
-        color: YanColors.subtleText,
-        fontSize: 14.2,
-      ),
-      prefix: const Padding(
-        padding: EdgeInsets.only(left: 15, right: 9),
-        child: Icon(
-          CupertinoIcons.lock_fill,
-          size: 18,
-          color: YanColors.primaryBlue,
+    return SizedBox(
+      height: 52,
+      child: TextField(
+        controller: controller,
+        obscureText: obscureText,
+        keyboardType: TextInputType.visiblePassword,
+        cursorColor: const Color(0xFF1675D1),
+        style: const TextStyle(
+          color: Color(0xFF172B4D),
+          fontSize: 14.5,
+          fontWeight: FontWeight.w600,
         ),
-      ),
-      suffix: GestureDetector(
-        onTap: onToggleObscure,
-        child: Padding(
-          padding: const EdgeInsets.only(right: 14),
-          child: Icon(
-            obscureText ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: const Color(0xFFF8FAFD),
+          hintText: hintText,
+          hintStyle: const TextStyle(
+            color: Color(0xFF94A3B8),
+            fontSize: 14.2,
+            fontWeight: FontWeight.w400,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
+          prefixIcon: const Icon(
+            Icons.lock_outline_rounded,
             size: 19,
-            color: YanColors.mutedText,
+            color: Color(0xFF1675D1),
+          ),
+          suffixIcon: IconButton(
+            onPressed: onToggleObscure,
+            splashRadius: 20,
+            icon: Icon(
+              obscureText
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              size: 20,
+              color: const Color(0xFF64748B),
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFFDCE5F2), width: 1),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFF1675D1), width: 1.5),
           ),
         ),
       ),
-      decoration: BoxDecoration(
-        color: YanColors.lightBlue.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: YanColors.border),
-      ),
-      cursorColor: YanColors.primaryBlue,
     );
   }
 }
@@ -2801,6 +2853,7 @@ class _MainDashboardState extends State<MainDashboard> {
     ActivityHistoryRepository.instance.ensureInitialized();
     _YanGlobalCallCenter.instance.startGlobalListening();
     ConsultationRepository.instance.ensureInitialized();
+    ContractLinkRepository.instance.ensureInitialized();
   }
 
   List<DashboardNavData> _navItemsForRole(UserRole role) {
@@ -2815,16 +2868,8 @@ class _MainDashboardState extends State<MainDashboard> {
       case UserRole.mijoz:
         return const <DashboardNavData>[
           DashboardNavData(CupertinoIcons.house_fill, 'Bosh sahifa'),
-          DashboardNavData(
-            CupertinoIcons.doc_text_fill,
-            'Arizalarim',
-            badge: '-50%',
-          ),
-          DashboardNavData(
-            CupertinoIcons.shield_fill,
-            'Advokatim',
-            badge: 'VIP',
-          ),
+          DashboardNavData(CupertinoIcons.doc_text_fill, 'Arizalarim'),
+          DashboardNavData(CupertinoIcons.building_2_fill, 'Advokatxona'),
           DashboardNavData(CupertinoIcons.person_crop_circle, 'Profil'),
         ];
       case UserRole.advokat:
@@ -2858,35 +2903,23 @@ class _MainDashboardState extends State<MainDashboard> {
 
     switch (role) {
       case UserRole.oddiy:
-        if (_selectedTab == 0) {
-          return const BoshSahifaPage(key: ValueKey<String>('oddiy-home'));
-        }
-        if (_selectedTab == 1) {
-          return _ArizalarimRoleView(
-            key: const ValueKey<String>('oddiy-arizalarim'),
-            profile: profile,
-          );
-        }
-        return _AdvokatxonaDirectoryPage(
-          key: const ValueKey<String>('oddiy-advokatxona'),
-          profile: profile,
-          isMijozMode: false,
-        );
-
       case UserRole.mijoz:
         if (_selectedTab == 0) {
-          return const BoshSahifaPage(key: ValueKey<String>('mijoz-home'));
+          return BoshSahifaPage(
+            key: const ValueKey<String>('client-home'),
+            onOpenAdvokatxona: () => setState(() => _selectedTab = 2),
+          );
         }
         if (_selectedTab == 1) {
           return _ArizalarimRoleView(
-            key: const ValueKey<String>('mijoz-arizalarim'),
+            key: const ValueKey<String>('client-arizalarim'),
             profile: profile,
           );
         }
         return _AdvokatxonaDirectoryPage(
-          key: const ValueKey<String>('mijoz-advokatim'),
+          key: const ValueKey<String>('client-advokatxona'),
           profile: profile,
-          isMijozMode: true,
+          isMijozMode: false,
         );
 
       case UserRole.advokat:
@@ -3003,7 +3036,7 @@ class _MainDashboardState extends State<MainDashboard> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                ...UserRole.values.map((role) {
+                ...UserRole.values.where((r) => r != UserRole.mijoz).map((role) {
                   final active = profile.roleType == role;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
@@ -3301,6 +3334,7 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
   /// (`role = 'advocate'`). Zero fake accounts!
   Future<void> _fetchRealAdvocatesFromSupabase() async {
     if (mounted) setState(() => _isLoadingAdvocates = true);
+    ContractLinkRepository.instance.refreshAll();
     try {
       final byId = <String, Map<String, dynamic>>{};
 
@@ -3313,13 +3347,42 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
           final map = Map<String, dynamic>.from(item as Map);
           final id = map['id']?.toString() ?? '';
           final role = map['role']?.toString().trim().toLowerCase() ?? '';
+          final pubKey = map['public_key']?.toString();
+          Map<String, dynamic>? decodedEnv;
+          if (pubKey != null &&
+              pubKey.contains(_YanE2eeCryptoEngine._envelopeSeparator)) {
+            decodedEnv = _YanE2eeCryptoEngine.decodeProfileEnvelope(pubKey);
+            final advMeta = decodedEnv['advocate_profile'];
+            if (advMeta is Map) {
+              for (final k in const <String>[
+                'full_name',
+                'phone',
+                'region',
+                'specialization',
+                'license_number',
+                'bio',
+                'avatar_base64',
+                'avatar_url',
+              ]) {
+                final val = (advMeta[k]?.toString() ?? '').trim();
+                if (val.isNotEmpty) {
+                  map[k] = val;
+                }
+              }
+              final expRaw = advMeta['experience_years'];
+              if (expRaw is num && expRaw.toInt() > 0) {
+                map['experience_years'] = expRaw.toInt();
+              } else {
+                final parsedExp = int.tryParse((expRaw?.toString() ?? '').trim()) ?? 0;
+                if (parsedExp > 0) map['experience_years'] = parsedExp;
+              }
+            }
+          }
           if (id.isNotEmpty && (role == 'advocate' || role == 'advokat')) {
             byId[id] = map;
           }
-          final pubKey = map['public_key']?.toString();
-          if (pubKey != null &&
-              pubKey.contains(_YanE2eeCryptoEngine._envelopeSeparator)) {
-            final env = _YanE2eeCryptoEngine.decodeProfileEnvelope(pubKey);
+          if (decodedEnv != null) {
+            final env = decodedEnv;
             final rawRatings = env['advocate_ratings'];
             if (rawRatings is List) {
               for (final r in rawRatings) {
@@ -3777,6 +3840,105 @@ class _AdvokatxonaDirectoryPageState extends State<_AdvokatxonaDirectoryPage> {
         ),
 
         SliverToBoxAdapter(
+          child: ValueListenableBuilder<List<AdvocateClientLink>>(
+            valueListenable: ContractLinkRepository.instance.links,
+            builder: (context, allLinks, _) {
+              final authId = Supabase.instance.client.auth.currentUser?.id ?? '';
+              final profileId = userProfile.value.clientId;
+              final myNameNorm = userProfile.value.displayName.trim().toLowerCase();
+              final myLinkedAdvocates = allLinks.where((l) {
+                if (!l.isActive) return false;
+                return (authId.isNotEmpty &&
+                        YanRoleDataCatalog.isSameParticipant(l.clientId, authId)) ||
+                    (profileId.isNotEmpty &&
+                        YanRoleDataCatalog.isSameParticipant(l.clientId, profileId)) ||
+                    (myNameNorm.isNotEmpty &&
+                        l.clientName.trim().toLowerCase() == myNameNorm);
+              }).toList();
+              if (myLinkedAdvocates.isEmpty) return const SizedBox.shrink();
+
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const Row(
+                      children: <Widget>[
+                        Icon(Icons.verified_user_rounded, size: 15, color: Color(0xFF059669)),
+                        SizedBox(width: 6),
+                        Text(
+                          'SHAXSIY ADVOKATIM (RASMIY SHARTNOMA FAOL)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.6,
+                            color: Color(0xFF059669),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ...myLinkedAdvocates.map((link) {
+                      final matchedAdv = YanRoleDataCatalog.registeredLawyers.value
+                          .where((a) => YanRoleDataCatalog.isSameParticipant(a.id, link.advocateId))
+                          .firstOrNull;
+                      final advPeer = matchedAdv ??
+                          LawyerDirectoryProfile(
+                            id: link.advocateId,
+                            fullName: link.advocateName.isEmpty
+                                ? 'Shaxsiy Advokat'
+                                : link.advocateName,
+                            title: 'Shaxsiy Advokat • Shartnoma faol',
+                            region: 'Toshkent shahri',
+                            specialization: 'Shaxsiy huquqiy himoya',
+                            experienceYears: 5,
+                            rating: 5.0,
+                            feedbackCount: 1,
+                            wonCasesCount: 12,
+                            consultationPriceUzs: 99000,
+                            contractMonthlyNote: 'Shartnoma tasdiqlangan',
+                            licenseNumber: 'Tasdiqlangan',
+                            phone: '+998',
+                            assistantName: '-',
+                            assistantRole: '',
+                            assistantPhone: '',
+                            bio: 'Siz bilan rasmiy shartnoma orqali bog‘langan shaxsiy advokat.',
+                            feedbacks: const <LawyerFeedbackItem>[],
+                          );
+                      return _LinkedContractCard(
+                        link: link,
+                        isAdvocateView: false,
+                        onOpenChat: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => AdvocateClientChatPage(
+                                lawyer: advPeer,
+                                profile: userProfile.value,
+                              ),
+                            ),
+                          );
+                        },
+                        onStartCall: (isVideo) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => AdvocateClientChatPage(
+                                lawyer: advPeer,
+                                profile: userProfile.value,
+                                initialCallMode: isVideo ? 'video' : 'audio',
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    }),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+
+        SliverToBoxAdapter(
           child: ValueListenableBuilder<List<ConsultationBooking>>(
             valueListenable: ConsultationRepository.instance.consultations,
             builder: (context, allBookings, _) {
@@ -4184,6 +4346,8 @@ class _PinnedAdvocateBannerCard extends StatelessWidget {
             children: <Widget>[
               _LawyerAvatarPortrait(
                 initials: lawyer.initials,
+                avatarBase64: lawyer.avatarBase64,
+                avatarUrl: lawyer.avatarUrl,
                 isOnline: lawyer.isVerifiedPartner,
                 size: 58,
               ),
@@ -4213,37 +4377,51 @@ class _PinnedAdvocateBannerCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '${lawyer.title} • ${lawyer.specialization}',
+                      lawyer.specialization.trim().isNotEmpty
+                          ? '${lawyer.title} • ${lawyer.specialization.trim()}'
+                          : lawyer.title,
                       style: const TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
                         color: YanColors.primaryBlue,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Litsenziya: ${lawyer.licenseNumber} • ${lawyer.region}',
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: YanColors.mutedText,
+                    if (lawyer.licenseNumber.trim().isNotEmpty ||
+                        lawyer.region.trim().isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 4),
+                      Text(
+                        <String>[
+                          if (lawyer.licenseNumber.trim().isNotEmpty)
+                            'Litsenziya: ${lawyer.licenseNumber.trim()}',
+                          if (lawyer.region.trim().isNotEmpty)
+                            lawyer.region.trim(),
+                        ].join(' • '),
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: YanColors.mutedText,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            lawyer.bio,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w500,
-              color: YanColors.primaryNavy,
-              height: 1.4,
+          if (lawyer.bio.trim().isNotEmpty) ...<Widget>[
+            const SizedBox(height: 12),
+            Text(
+              lawyer.bio.trim(),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+                color: YanColors.primaryNavy,
+                height: 1.4,
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 14),
           Row(
             children: <Widget>[
@@ -4331,6 +4509,8 @@ class _AdvocateDirectoryCard extends StatelessWidget {
             children: <Widget>[
               _LawyerAvatarPortrait(
                 initials: lawyer.initials,
+                avatarBase64: lawyer.avatarBase64,
+                avatarUrl: lawyer.avatarUrl,
                 isOnline: lawyer.isVerifiedPartner,
                 size: 54,
               ),
@@ -4358,24 +4538,34 @@ class _AdvocateDirectoryCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      lawyer.specialization,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: YanColors.primaryNavy,
+                    if (lawyer.specialization.trim().isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 3),
+                      Text(
+                        lawyer.specialization.trim(),
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: YanColors.primaryNavy,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'Litsenziya: ${lawyer.licenseNumber} • ${lawyer.region}',
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: YanColors.mutedText,
+                    ],
+                    if (lawyer.licenseNumber.trim().isNotEmpty ||
+                        lawyer.region.trim().isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 3),
+                      Text(
+                        <String>[
+                          if (lawyer.licenseNumber.trim().isNotEmpty)
+                            'Litsenziya: ${lawyer.licenseNumber.trim()}',
+                          if (lawyer.region.trim().isNotEmpty)
+                            lawyer.region.trim(),
+                        ].join(' • '),
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: YanColors.mutedText,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -4415,24 +4605,29 @@ class _AdvocateDirectoryCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 11),
-          Text(
-            lawyer.bio,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w500,
-              color: YanColors.mutedText,
-              height: 1.4,
+          if (lawyer.bio.trim().isNotEmpty) ...<Widget>[
+            const SizedBox(height: 11),
+            Text(
+              lawyer.bio.trim(),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+                color: YanColors.mutedText,
+                height: 1.4,
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 10),
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: <Widget>[
-              _SpecialtyTagPill(label: lawyer.specialization),
-              if (lawyer.phone.isNotEmpty)
-                _SpecialtyTagPill(label: lawyer.phone),
+              if (lawyer.specialization.trim().isNotEmpty)
+                _SpecialtyTagPill(label: lawyer.specialization.trim()),
+              if (lawyer.phone.trim().isNotEmpty && lawyer.phone.trim() != '+998')
+                _SpecialtyTagPill(label: lawyer.phone.trim()),
               _SpecialtyTagPill(
                 label: lawyer.isVerifiedPartner
                     ? 'Tasdiqlangan (Online)'
@@ -4563,15 +4758,79 @@ class _LawyerAvatarPortrait extends StatelessWidget {
   final String initials;
   final bool isOnline;
   final double size;
+  final String? avatarBase64;
+  final String? avatarUrl;
 
   const _LawyerAvatarPortrait({
     required this.initials,
     required this.isOnline,
     this.size = 54,
+    this.avatarBase64,
+    this.avatarUrl,
   });
+
+  static final Map<String, Uint8List> _decodedCache = <String, Uint8List>{};
+
+  static Uint8List? _decodeAvatarBytes(String? raw) {
+    final trimmed = (raw ?? '').trim();
+    if (trimmed.isEmpty) return null;
+    final cached = _decodedCache[trimmed];
+    if (cached != null) return cached;
+    try {
+      final bytes = base64Decode(trimmed);
+      if (bytes.isEmpty) return null;
+      if (_decodedCache.length > 60) {
+        _decodedCache.clear();
+      }
+      _decodedCache[trimmed] = bytes;
+      return bytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _buildInitials() {
+    return Center(
+      child: Text(
+        initials,
+        style: TextStyle(
+          fontSize: size * 0.34,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final bytes = _decodeAvatarBytes(avatarBase64);
+    final cleanUrl = (avatarUrl ?? '').trim();
+
+    Widget inner;
+    if (bytes != null) {
+      inner = Image.memory(
+        bytes,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (_, __, ___) => _buildInitials(),
+      );
+    } else if (cleanUrl.isNotEmpty) {
+      inner = Image.network(
+        cleanUrl,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (_, __, ___) => _buildInitials(),
+      );
+    } else {
+      inner = _buildInitials();
+    }
+
     return Stack(
       children: <Widget>[
         Container(
@@ -4585,15 +4844,7 @@ class _LawyerAvatarPortrait extends StatelessWidget {
               width: 2,
             ),
           ),
-          alignment: Alignment.center,
-          child: Text(
-            initials,
-            style: TextStyle(
-              fontSize: size * 0.34,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-            ),
-          ),
+          child: ClipOval(child: inner),
         ),
         Positioned(
           right: 1,
@@ -4648,107 +4899,213 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
 
   Future<void> _bookOrSignContract(BuildContext context) async {
     if (_isSigningContract) return;
-    setState(() => _isSigningContract = true);
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    final myId = (currentUser?.id != null && currentUser!.id.isNotEmpty)
+        ? currentUser.id
+        : userProfile.value.clientId;
 
-    try {
-      final client = Supabase.instance.client;
-      final currentUser = client.auth.currentUser;
-      final currentProfile = userProfile.value;
-
-      if (currentUser != null) {
-        await client.from('contracts').insert(<String, dynamic>{
-          'client_id': currentUser.id,
-          'advocate_id': widget.lawyer.id,
-          'client_name': currentProfile.displayName,
-          'advocate_name': widget.lawyer.fullName,
-          'case_category': widget.lawyer.specialization,
-          'status': 'active',
-        });
-      }
-    } catch (_) {
-      // Continues local state assignment if table RLS or schema differs
+    if (ContractLinkRepository.instance.isLinked(myId, widget.lawyer.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Siz allaqachon ${widget.lawyer.fullName} bilan rasmiy shartnoma orqali bog‘langansiz.',
+          ),
+          backgroundColor: YanColors.successGreen,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _openChat(context);
+      return;
     }
 
-    await userProfile.switchRole(
-      UserRole.mijoz,
-      lawyerId: widget.lawyer.id,
-    );
-
-    if (!mounted) return;
-    setState(() => _isSigningContract = false);
-
-    showDialog<void>(
+    final caseController = TextEditingController();
+    final submittedCase = await showModalBottomSheet<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: YanColors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: <Widget>[
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: YanColors.successGreen.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.verified_rounded,
-                color: YanColors.successGreen,
-              ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
+          ),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
             ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text(
-                'Shartnoma biriktirildi',
-                style: TextStyle(
-                  fontSize: 16.5,
-                  fontWeight: FontWeight.w800,
-                  color: YanColors.primaryNavy,
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDCEBFF),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: <Widget>[
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.handshake_rounded,
+                          color: Color(0xFF059669),
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Text(
+                              'Shartnoma taklifi yuborish',
+                              style: TextStyle(
+                                fontSize: 17.5,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF0B1F3A),
+                              ),
+                            ),
+                            Text(
+                              'Advokat: ${widget.lawyer.fullName}',
+                              style: const TextStyle(
+                                fontSize: 12.2,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1677FF),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Nega bu advokatga tayanmoqchisiz? Aynan qaysi masalada murojaat qilayotganingizni bayon eta olasizmi?',
+                    style: TextStyle(
+                      fontSize: 13.2,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0B1F3A),
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: caseController,
+                    maxLines: 4,
+                    style: const TextStyle(
+                      fontSize: 13.8,
+                      color: Color(0xFF0B1F3A),
+                    ),
+                    decoration: InputDecoration(
+                      hintText:
+                          'Masalan: Oila/mulk masalasida huquqiy himoya kerak, sudda ishtirok etish va hujjatlarni tayyorlash bo‘yicha...',
+                      hintStyle: const TextStyle(
+                        fontSize: 12.5,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF0F7FF),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFFDCEBFF)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF10B981),
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        final txt = caseController.text.trim();
+                        if (txt.length < 6) {
+                          ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Iltimos, masalangiz haqida qisqacha ma’lumot kiriting.',
+                              ),
+                              backgroundColor: Color(0xFFE11D48),
+                            ),
+                          );
+                          return;
+                        }
+                        Navigator.pop(sheetCtx, txt);
+                      },
+                      icon: const Icon(Icons.send_rounded, size: 18),
+                      label: const Text(
+                        'Shartnoma taklifini yuborish',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 ),
               ),
             ),
-          ],
-        ),
-        content: Text(
-          '${widget.lawyer.fullName} sizning shaxsiy advokatingiz sifatida biriktirildi va Mijoz (-50% VIP) maqomi faollashtirildi.',
-          style: const TextStyle(
-            fontSize: 13,
-            color: YanColors.mutedText,
-            height: 1.45,
           ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Yopish',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: YanColors.mutedText,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: YanColors.primaryBlue,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _openChat(context);
-            },
-            child: const Text(
-              'Chatga o‘tish',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
+    Future<void>.delayed(const Duration(milliseconds: 400), caseController.dispose);
+
+    if (submittedCase == null || submittedCase.isEmpty || !mounted) return;
+    setState(() => _isSigningContract = true);
+
+    try {
+      final inv = await ContractLinkRepository.instance.createInvitation(
+        senderId: myId,
+        senderRole: 'client',
+        senderName: userProfile.value.displayName,
+        clientId: myId,
+        clientName: userProfile.value.displayName,
+        advocateId: widget.lawyer.id,
+        advocateName: widget.lawyer.fullName,
+        caseSummary: submittedCase,
+      );
+      if (inv != null && mounted) {
+        await AdvocateClientChatPage.sendContractInvitationAndOpenChat(
+          context: context,
+          peer: widget.lawyer,
+          myProfile: userProfile.value,
+          invitation: inv,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSigningContract = false);
+    }
   }
 
   @override
@@ -4835,6 +5192,8 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
                         children: <Widget>[
                           _LawyerAvatarPortrait(
                             initials: lawyer.initials,
+                avatarBase64: lawyer.avatarBase64,
+                avatarUrl: lawyer.avatarUrl,
                             isOnline: lawyer.isVerifiedPartner,
                             size: 86,
                           ),
@@ -4863,7 +5222,9 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
                           ),
                           const SizedBox(height: 5),
                           Text(
-                            '${lawyer.title} • ${lawyer.specialization}',
+                            lawyer.specialization.trim().isNotEmpty
+                                ? 'Litsenziyali advokat • ${lawyer.specialization.trim()}'
+                                : lawyer.title,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontSize: 13,
@@ -4871,15 +5232,24 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
                               color: YanColors.primaryBlue,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Litsenziya: ${lawyer.licenseNumber} • ${lawyer.region}',
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: YanColors.mutedText,
+                          if (lawyer.licenseNumber.trim().isNotEmpty ||
+                              lawyer.region.trim().isNotEmpty) ...<Widget>[
+                            const SizedBox(height: 4),
+                            Text(
+                              <String>[
+                                if (lawyer.licenseNumber.trim().isNotEmpty)
+                                  'Litsenziya: ${lawyer.licenseNumber.trim()}',
+                                if (lawyer.region.trim().isNotEmpty)
+                                  lawyer.region.trim(),
+                              ].join(' • '),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: YanColors.mutedText,
+                              ),
                             ),
-                          ),
+                          ],
                           const SizedBox(height: 18),
 
                           Row(
@@ -4891,25 +5261,50 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
                                 isPrimary: true,
                                 onTap: () => _openChat(context),
                               ),
-                              _CircleProfileActionButton(
-                                icon: Icons.phone_in_talk_rounded,
-                                label: 'Qo‘ng‘iroq',
-                                onTap: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'E2EE Audio qo‘ng‘iroq: ${lawyer.phone.isNotEmpty ? lawyer.phone : lawyer.fullName}',
-                                      ),
-                                      backgroundColor: YanColors.primaryNavy,
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                },
-                              ),
-                              _CircleProfileActionButton(
-                                icon: Icons.assignment_turned_in_rounded,
-                                label: 'Shartnoma',
+                              GestureDetector(
                                 onTap: () => _bookOrSignContract(context),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    Container(
+                                      width: 54,
+                                      height: 54,
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: <Color>[
+                                            Color(0xFF10B981),
+                                            Color(0xFF059669),
+                                          ],
+                                        ),
+                                        shape: BoxShape.circle,
+                                        boxShadow: <BoxShadow>[
+                                          BoxShadow(
+                                            color: const Color(0xFF10B981)
+                                                .withValues(alpha: 0.35),
+                                            blurRadius: 14,
+                                            offset: const Offset(0, 5),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.handshake_rounded,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    const Text(
+                                      'Shartnoma',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF059669),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
@@ -4922,8 +5317,12 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
                             children: <Widget>[
                               Expanded(
                                 child: _LawyerDetailStatCol(
-                                  value: '${lawyer.rating}',
-                                  label: 'Reyting (${lawyer.feedbackCount})',
+                                  value: lawyer.feedbackCount > 0
+                                      ? lawyer.rating.toStringAsFixed(1)
+                                      : 'Yangi',
+                                  label: lawyer.feedbackCount > 0
+                                      ? 'Reyting (${lawyer.feedbackCount})'
+                                      : 'Reyting',
                                   icon: Icons.star_rounded,
                                   iconColor: const Color(0xFFF59E0B),
                                 ),
@@ -4943,19 +5342,21 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
                                   iconColor: YanColors.successGreen,
                                 ),
                               ),
-                              Container(
-                                width: 1,
-                                height: 34,
-                                color: const Color(0xFFE7EFFA),
-                              ),
-                              Expanded(
-                                child: _LawyerDetailStatCol(
-                                  value: '${lawyer.experienceYears} yil',
-                                  label: 'Ish tajribasi',
-                                  icon: Icons.business_rounded,
-                                  iconColor: YanColors.primaryBlue,
+                              if (lawyer.experienceYears > 0) ...<Widget>[
+                                Container(
+                                  width: 1,
+                                  height: 34,
+                                  color: const Color(0xFFE7EFFA),
                                 ),
-                              ),
+                                Expanded(
+                                  child: _LawyerDetailStatCol(
+                                    value: '${lawyer.experienceYears} yil',
+                                    label: 'Ish tajribasi',
+                                    icon: Icons.business_rounded,
+                                    iconColor: YanColors.primaryBlue,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ],
@@ -4995,55 +5396,105 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
                     const SizedBox(height: 14),
 
                     if (_selectedDetailTab == 0)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: YanColors.white,
-                          borderRadius: BorderRadius.circular(22),
-                          border: Border.all(color: YanColors.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            const Text(
-                              'Advokat haqida ma’lumot',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                color: YanColors.primaryNavy,
-                              ),
+                      Builder(
+                        builder: (_) {
+                          final cleanBio = lawyer.bio.trim();
+                          final cleanPhone =
+                              lawyer.phone.trim().isNotEmpty &&
+                                      lawyer.phone.trim() != '+998'
+                                  ? lawyer.phone.trim()
+                                  : '';
+                          final cleanLicense = lawyer.licenseNumber.trim();
+                          final cleanSpec = lawyer.specialization.trim();
+                          final cleanRegion = lawyer.region.trim();
+                          final hasAnyDetails = cleanBio.isNotEmpty ||
+                              cleanPhone.isNotEmpty ||
+                              cleanLicense.isNotEmpty ||
+                              cleanSpec.isNotEmpty ||
+                              cleanRegion.isNotEmpty ||
+                              lawyer.experienceYears > 0;
+
+                          return Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: YanColors.white,
+                              borderRadius: BorderRadius.circular(22),
+                              border: Border.all(color: YanColors.border),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              lawyer.bio,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: YanColors.mutedText,
-                                height: 1.5,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                const Text(
+                                  'Advokat haqida ma’lumot',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    color: YanColors.primaryNavy,
+                                  ),
+                                ),
+                                if (!hasAnyDetails) ...<Widget>[
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                    'Advokat hali qo‘shimcha ma’lumotlarni kiritmagan.',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: YanColors.mutedText,
+                                      fontStyle: FontStyle.italic,
+                                      height: 1.45,
+                                    ),
+                                  ),
+                                ] else ...<Widget>[
+                                  if (cleanBio.isNotEmpty) ...<Widget>[
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      cleanBio,
+                                      style: const TextStyle(
+                                        fontSize: 13.2,
+                                        color: YanColors.mutedText,
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                  ],
+                                  if (cleanPhone.isNotEmpty ||
+                                      cleanLicense.isNotEmpty ||
+                                      cleanSpec.isNotEmpty ||
+                                      cleanRegion.isNotEmpty ||
+                                      lawyer.experienceYears > 0) ...<Widget>[
+                                    SizedBox(
+                                      height: cleanBio.isNotEmpty ? 14 : 10,
+                                    ),
+                                    if (cleanPhone.isNotEmpty)
+                                      _DetailInfoRow(
+                                        label: 'Telefon raqami',
+                                        value: cleanPhone,
+                                      ),
+                                    if (cleanLicense.isNotEmpty)
+                                      _DetailInfoRow(
+                                        label: 'Litsenziya raqami',
+                                        value: cleanLicense,
+                                      ),
+                                    if (cleanSpec.isNotEmpty)
+                                      _DetailInfoRow(
+                                        label: 'Mutaxassisligi',
+                                        value: cleanSpec,
+                                      ),
+                                    if (cleanRegion.isNotEmpty)
+                                      _DetailInfoRow(
+                                        label: 'Hudud',
+                                        value: cleanRegion,
+                                      ),
+                                    if (lawyer.experienceYears > 0)
+                                      _DetailInfoRow(
+                                        label: 'Ish tajribasi',
+                                        value: '${lawyer.experienceYears} yil',
+                                      ),
+                                  ],
+                                ],
+                              ],
                             ),
-                            const SizedBox(height: 14),
-                            _DetailInfoRow(
-                              label: 'Telefon raqami',
-                              value: lawyer.phone.isNotEmpty
-                                  ? lawyer.phone
-                                  : 'E2EE orqali bog‘lanish',
-                            ),
-                            _DetailInfoRow(
-                              label: 'Litsenziya raqami',
-                              value: lawyer.licenseNumber,
-                            ),
-                            _DetailInfoRow(
-                              label: 'Mutaxassisligi',
-                              value: lawyer.specialization,
-                            ),
-                            _DetailInfoRow(
-                              label: 'Hudud',
-                              value: lawyer.region,
-                            ),
-                          ],
-                        ),
+                          );
+                        },
                       )
                     else
                       Container(
@@ -5068,7 +5519,9 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
                             const SizedBox(height: 12),
                             _VerifiedDocRow(
                               title: '1. Advokatlik litsenziyasi',
-                              subtitle: 'Raqami: ${lawyer.licenseNumber}',
+                              subtitle: lawyer.licenseNumber.trim().isNotEmpty
+                                  ? 'Raqami: ${lawyer.licenseNumber.trim()}'
+                                  : 'Rasmiy ro‘yxatdan o‘tgan',
                             ),
                             const SizedBox(height: 8),
                             const _VerifiedDocRow(
@@ -5097,10 +5550,26 @@ class _LawyerDetailProfilePageState extends State<LawyerDetailProfilePage> {
               child: Row(
                 children: <Widget>[
                   Expanded(
-                    child: _SolidSecondaryButton(
-                      label: 'Shartnoma tuzish',
-                      icon: Icons.verified_user_rounded,
+                    child: ElevatedButton.icon(
                       onPressed: () => _bookOrSignContract(context),
+                      icon: const Icon(Icons.handshake_rounded, size: 18),
+                      label: const Text(
+                        'Shartnoma tuzish',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        elevation: 2,
+                        shadowColor: const Color(0xFF10B981).withValues(alpha: 0.4),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -6307,6 +6776,95 @@ class AdvocateClientChatPage extends StatefulWidget {
         builder: (_) => AdvocateClientChatPage(
           lawyer: advocate,
           profile: clientProfile,
+        ),
+      ),
+    );
+  }
+
+  static Future<void> sendContractInvitationAndOpenChat({
+    required BuildContext context,
+    required LawyerDirectoryProfile peer,
+    required UserProfileData myProfile,
+    required ContractInvitation invitation,
+  }) async {
+    final authUser = Supabase.instance.client.auth.currentUser;
+    final myUserId = (authUser?.id != null && authUser!.id.isNotEmpty)
+        ? authUser.id
+        : myProfile.clientId;
+    final peerUserId = peer.id.trim().isNotEmpty
+        ? peer.id.trim()
+        : (invitation.senderRole == 'client'
+              ? invitation.advocateId
+              : invitation.clientId);
+    final roomKey = _YanE2eeCryptoEngine.buildCanonicalRoomKey(
+      myUserId,
+      peerUserId,
+    );
+
+    final now = DateTime.now();
+    final msgText =
+        '🤝 RASMIY SHARTNOMA TAKLIFI (${invitation.id})\n'
+        'Advokat: ${invitation.advocateName} (ID: ${invitation.advocateId})\n'
+        'Mijoz: ${invitation.clientName} (ID: ${invitation.clientId})\n'
+        'Izoh: ${invitation.caseSummary}';
+
+    final inviteMsg = _ChatMessageItem(
+      id: 'INV-MSG-${now.microsecondsSinceEpoch}',
+      senderId: myUserId,
+      receiverId: peerUserId,
+      senderName: myProfile.displayName,
+      text: msgText,
+      encryptedCiphertext: _YanE2eeCryptoEngine.encrypt(msgText, roomKey),
+      sentAt: now,
+      isSeen: false,
+      seenAt: null,
+      mediaType: _ChatMediaType.document,
+      mediaMeta: invitation.encodeChatMeta(),
+    );
+
+    final cacheFile = File(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}yan360_$roomKey.json',
+    );
+    final existingById = <String, Map<String, dynamic>>{};
+    try {
+      if (await cacheFile.exists()) {
+        final raw = await cacheFile.readAsString();
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final item in decoded) {
+            if (item is Map && item['id'] != null) {
+              existingById[item['id'].toString()] = Map<String, dynamic>.from(
+                item,
+              );
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    final serverMap = inviteMsg.toServerJson(roomKey);
+    existingById[inviteMsg.id] = serverMap;
+    final mergedList = existingById.values.toList();
+    try {
+      await cacheFile.writeAsString(jsonEncode(mergedList), flush: true);
+    } catch (_) {}
+
+    await _YanE2eeCryptoEngine.updateMyProfileE2eeEnvelope(
+      roomKey: roomKey,
+      myRoomMessages: mergedList,
+      isOnline: true,
+    );
+
+    try {
+      await Supabase.instance.client.from('messages').insert(serverMap);
+    } catch (_) {}
+
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AdvocateClientChatPage(
+          lawyer: peer,
+          profile: myProfile,
         ),
       ),
     );
@@ -8727,6 +9285,8 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                 children: <Widget>[
                   _LawyerAvatarPortrait(
                     initials: widget.lawyer.initials,
+                avatarBase64: widget.lawyer.avatarBase64,
+                avatarUrl: widget.lawyer.avatarUrl,
                     isOnline: _isPeerOnline,
                     size: 44,
                   ),
@@ -9318,6 +9878,609 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
           ],
         ],
       ),
+    );
+  }
+
+  Future<void> _openInChatContractInvitationSheet() async {
+    final isAdvocate =
+        widget.profile.roleType == UserRole.advokat ||
+        widget.profile.roleType == UserRole.yordamchi;
+    final ctrl = TextEditingController();
+
+    final summary = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
+          ),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDCEBFF),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: <Widget>[
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.handshake_rounded,
+                          color: Color(0xFF059669),
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              isAdvocate
+                                  ? 'Mijozga shartnoma taklifi yuborish'
+                                  : 'Advokatga shartnoma taklifi yuborish',
+                              style: const TextStyle(
+                                fontSize: 16.5,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF0B1F3A),
+                              ),
+                            ),
+                            Text(
+                              widget.lawyer.fullName,
+                              style: const TextStyle(
+                                fontSize: 12.2,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1677FF),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    isAdvocate
+                        ? 'Mijozni shaxsiy mijozingiz sifatida biriktirish uchun qisqa rasmiy taklif matnini kiriting:'
+                        : 'Nega bu advokatga tayanmoqchisiz? Aynan qaysi masalada murojaat qilayotganingizni bayon eta olasizmi?',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0B1F3A),
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: ctrl,
+                    maxLines: 4,
+                    style: const TextStyle(
+                      fontSize: 13.6,
+                      color: Color(0xFF0B1F3A),
+                    ),
+                    decoration: InputDecoration(
+                      hintText: isAdvocate
+                          ? 'Masalan: Sizning huquqiy masalangiz bo‘yicha shaxsiy advokatingiz sifatida hamkorlik qilishni taklif qilaman.'
+                          : 'Masalan: Oila/mulk masalasida huquqiy himoya kerak...',
+                      hintStyle: const TextStyle(
+                        fontSize: 12.4,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF0F7FF),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFFDCEBFF)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF10B981),
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        final txt = ctrl.text.trim();
+                        if (txt.length < 5) {
+                          ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                            const SnackBar(
+                              content: Text('Iltimos, qisqa izoh kiriting.'),
+                              backgroundColor: Color(0xFFE11D48),
+                            ),
+                          );
+                          return;
+                        }
+                        Navigator.pop(sheetCtx, txt);
+                      },
+                      icon: const Icon(Icons.send_rounded, size: 18),
+                      label: const Text(
+                        'Taklifni chatga yuborish',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    Future<void>.delayed(const Duration(milliseconds: 400), ctrl.dispose);
+
+    if (summary == null || summary.isEmpty || !mounted) return;
+    final inv = await ContractLinkRepository.instance.createInvitation(
+      senderId: _myUserId,
+      senderRole: isAdvocate ? 'advocate' : 'client',
+      senderName: widget.profile.displayName,
+      clientId: isAdvocate ? _peerUserId : _myUserId,
+      clientName: isAdvocate ? widget.lawyer.fullName : widget.profile.displayName,
+      advocateId: isAdvocate ? _myUserId : _peerUserId,
+      advocateName: isAdvocate ? widget.profile.displayName : widget.lawyer.fullName,
+      caseSummary: summary,
+    );
+    if (inv == null || !mounted) return;
+    _dispatchInstantEncryptedMessage(
+      text: '🤝 Rasmiy shartnoma taklifi (${inv.id})',
+      mediaType: _ChatMediaType.document,
+      mediaMeta: inv.encodeChatMeta(),
+    );
+  }
+
+  Future<void> _handleRejectContractInvitation(ContractInvitation inv) async {
+    final reasonCtrl = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: Color(0xFFDCEBFF)),
+        ),
+        title: const Row(
+          children: <Widget>[
+            Icon(Icons.cancel_outlined, color: Color(0xFFE11D48), size: 24),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Taklifni rad etish sababi',
+                style: TextStyle(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0B1F3A),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Text(
+              'Iltimos, shartnoma taklifini rad etish sababini yozib qoldiring (ikkinchi tomonga ko‘rinadi):',
+              style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonCtrl,
+              maxLines: 3,
+              style: const TextStyle(fontSize: 13.5, color: Color(0xFF0B1F3A)),
+              decoration: InputDecoration(
+                hintText: 'Sababini yozing...',
+                filled: true,
+                fillColor: const Color(0xFFFFF1F2),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Color(0xFFFECDD3)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Color(0xFFE11D48)),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dlgCtx),
+            child: const Text('Bekor qilish', style: TextStyle(color: Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE11D48),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () {
+              final r = reasonCtrl.text.trim();
+              if (r.length < 3) return;
+              Navigator.pop(dlgCtx, r);
+            },
+            child: const Text('Rad etish', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+    Future<void>.delayed(const Duration(milliseconds: 400), reasonCtrl.dispose);
+    if (reason == null || reason.isEmpty) return;
+
+    await ContractLinkRepository.instance.rejectInvitation(
+      inv: inv,
+      reason: reason,
+    );
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Shartnoma taklifi rad etildi va sababi yuborildi.'),
+          backgroundColor: Color(0xFFE11D48),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Widget _buildContractInvitationCard(ContractInvitation embeddedInv) {
+    return ValueListenableBuilder<List<ContractInvitation>>(
+      valueListenable: ContractLinkRepository.instance.invitations,
+      builder: (context, _, __) {
+        final inv =
+            ContractLinkRepository.instance.findInvitationById(embeddedInv.id) ??
+            embeddedInv;
+        final iAmSender = YanRoleDataCatalog.isSameParticipant(
+          inv.senderId,
+          _myUserId,
+        );
+        final canRespond = !iAmSender && inv.isPending;
+
+        final statusColor = inv.isAccepted
+            ? const Color(0xFF059669)
+            : inv.isRejected
+            ? const Color(0xFFE11D48)
+            : const Color(0xFF1677FF);
+        final statusBg = inv.isAccepted
+            ? const Color(0xFFECFDF5)
+            : inv.isRejected
+            ? const Color(0xFFFFF1F2)
+            : const Color(0xFFEBF4FF);
+        final statusLabel = inv.isAccepted
+            ? '✓ TASDIQLANDI • ID LAR ULANDI'
+            : inv.isRejected
+            ? '✕ RAD ETILDI'
+            : '● RASMIY SHARTNOMA TAKLIFI';
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[Color(0xFFFFFFFF), Color(0xFFF3F8FF)],
+            ),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: inv.isAccepted
+                  ? const Color(0xFF10B981)
+                  : inv.isRejected
+                  ? const Color(0xFFFDA4AF)
+                  : const Color(0xFF93C5FD),
+              width: 1.5,
+            ),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: statusColor.withValues(alpha: 0.1),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusBg,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    inv.id,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                inv.senderRole == 'advocate'
+                    ? 'Advokatdan shaxsiy hamkorlik taklifi'
+                    : 'Mijozdan shaxsiy advokat shartnoma so‘rovi',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0B1F3A),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Mutual Visible IDs Box (Both Advocate ID & Client ID visible to both!)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FBFF),
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(color: const Color(0xFFDCEBFF)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Advokat: ${inv.advocateName}  •  ID: ${ContractLinkRepository.instance.shortDisplayId(inv.advocateId)}',
+                      style: const TextStyle(
+                        fontSize: 11.4,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0B1F3A),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Mijoz: ${inv.clientName}  •  ID: ${ContractLinkRepository.instance.shortDisplayId(inv.clientId)}',
+                      style: const TextStyle(
+                        fontSize: 11.4,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1677FF),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 9),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0F7FF),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const Text(
+                      'Murojaat / Masala bayoni:',
+                      style: TextStyle(
+                        fontSize: 10.8,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      inv.caseSummary,
+                      style: const TextStyle(
+                        fontSize: 12.6,
+                        height: 1.42,
+                        color: Color(0xFF0B1F3A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (inv.isAccepted) ...<Widget>[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: const Row(
+                    children: <Widget>[
+                      Icon(
+                        Icons.verified_rounded,
+                        size: 17,
+                        color: Color(0xFF059669),
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Shartnoma tasdiqlandi! ID lar o‘zaro ulandi — audio va video qo‘ng‘iroqlar endi ochiq.',
+                          style: TextStyle(
+                            fontSize: 11.6,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF059669),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (inv.isRejected) ...<Widget>[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF1F2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFECDD3)),
+                  ),
+                  child: Text(
+                    'Rad etish sababi: ${inv.rejectionReason.isEmpty ? "Ko‘rsatilmagan" : inv.rejectionReason}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFE11D48),
+                    ),
+                  ),
+                ),
+              ] else if (canRespond) ...<Widget>[
+                const SizedBox(height: 12),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _handleRejectContractInvitation(inv),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          size: 16,
+                          color: Color(0xFFE11D48),
+                        ),
+                        label: const Text(
+                          'Rad etish',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFFE11D48),
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFFF1F2),
+                          side: const BorderSide(color: Color(0xFFFDA4AF)),
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(13),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          HapticFeedback.mediumImpact();
+                          await ContractLinkRepository.instance
+                              .acceptInvitation(inv);
+                          if (mounted) {
+                            setState(() {});
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Shartnoma tasdiqlandi! Endi audio va video qo‘ng‘iroqlar faol.',
+                                ),
+                                backgroundColor: Color(0xFF10B981),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.check_rounded, size: 16),
+                        label: const Text(
+                          'Qabul qilish',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(13),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...<Widget>[
+                const SizedBox(height: 10),
+                const Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.hourglass_top_rounded,
+                      size: 14,
+                      color: Color(0xFF1677FF),
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      'Ikkinchi tomon javobi kutilmoqda...',
+                      style: TextStyle(
+                        fontSize: 11.6,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1677FF),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -10070,6 +11233,8 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                 },
                 child: _LawyerAvatarPortrait(
                   initials: widget.lawyer.initials,
+                avatarBase64: widget.lawyer.avatarBase64,
+                avatarUrl: widget.lawyer.avatarUrl,
                   isOnline: _isPeerOnline && _isMyAppInForeground,
                   size: 42,
                 ),
@@ -10133,40 +11298,97 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                 ),
               ),
               const SizedBox(width: 6),
-              GestureDetector(
-                onTap: () => _startE2eeCall(isVideo: false),
-                onLongPress: _openCallOptionsSheet,
-                child: Container(
-                  width: 39,
-                  height: 39,
-                  decoration: BoxDecoration(
-                    color: YanColors.lightBlue,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: YanColors.border),
-                  ),
-                  child: const Icon(
-                    Icons.call_rounded,
-                    size: 19,
-                    color: YanColors.primaryBlue,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              GestureDetector(
-                onTap: () => _startE2eeCall(isVideo: true),
-                child: Container(
-                  width: 39,
-                  height: 39,
-                  decoration: const BoxDecoration(
-                    color: YanColors.primaryBlue,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.videocam_rounded,
-                    size: 19,
-                    color: Colors.white,
-                  ),
-                ),
+              ValueListenableBuilder<List<AdvocateClientLink>>(
+                valueListenable: ContractLinkRepository.instance.links,
+                builder: (context, _, __) {
+                  final linked = ContractLinkRepository.instance.isLinked(
+                    _myUserId,
+                    _peerUserId,
+                  );
+                  if (linked) {
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        GestureDetector(
+                          onTap: () => _startE2eeCall(isVideo: false),
+                          onLongPress: _openCallOptionsSheet,
+                          child: Container(
+                            width: 39,
+                            height: 39,
+                            decoration: BoxDecoration(
+                              color: YanColors.lightBlue,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: YanColors.border),
+                            ),
+                            child: const Icon(
+                              Icons.call_rounded,
+                              size: 19,
+                              color: YanColors.primaryBlue,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () => _startE2eeCall(isVideo: true),
+                          child: Container(
+                            width: 39,
+                            height: 39,
+                            decoration: const BoxDecoration(
+                              color: YanColors.primaryBlue,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.videocam_rounded,
+                              size: 19,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                  return GestureDetector(
+                    onTap: _openInChatContractInvitationSheet,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: <Color>[Color(0xFF10B981), Color(0xFF059669)],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: <BoxShadow>[
+                          BoxShadow(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.28),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Icon(
+                            Icons.handshake_rounded,
+                            size: 15,
+                            color: Colors.white,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            'Shartnoma',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -10428,6 +11650,10 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                             ),
                           ),
                           const SizedBox(height: 7),
+                        ] else if (ContractInvitation.tryDecodeChatMeta(m.mediaMeta) != null) ...<Widget>[
+                          _buildContractInvitationCard(
+                            ContractInvitation.tryDecodeChatMeta(m.mediaMeta)!,
+                          ),
                         ] else if (ConsultationBooking.tryDecodeChatMeta(m.mediaMeta) != null) ...<Widget>[
                           _buildConsultationBookingCard(
                             m,
@@ -10471,6 +11697,7 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                           const SizedBox(height: 4),
                         ],
                         if (m.mediaType != _ChatMediaType.callLog &&
+                            ContractInvitation.tryDecodeChatMeta(m.mediaMeta) == null &&
                             ConsultationBooking.tryDecodeChatMeta(m.mediaMeta) == null &&
                             (chatFileMeta == null ||
                                 (m.text.trim().isNotEmpty &&
@@ -10875,6 +12102,19 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
                 handleIncomingSignalPayload(Map<String, dynamic>.from(payload));
               },
             )
+            .onPostgresChanges(
+              event: PostgresChangeEvent.update,
+              schema: 'public',
+              table: 'profiles',
+              filter: PostgresChangeFilter(
+                type: PostgresChangeFilterType.eq,
+                column: 'id',
+                value: myId,
+              ),
+              callback: (_) {
+                _checkPendingCallEnvelopeOnce();
+              },
+            )
             .subscribe();
         _myInboxChannel = ch;
         _subscribedInboxUserId = myId;
@@ -10922,13 +12162,18 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
     try {
       var ch = _peerSendChannels[cleanId];
       if (ch == null) {
+        final joined = Completer<void>();
         ch = Supabase.instance.client.channel(
           _inboxTopicFor(cleanId),
           opts: const RealtimeChannelConfig(self: false, ack: false),
         );
-        ch.subscribe();
+        ch.subscribe((status, error) {
+          if (status == RealtimeSubscribeStatus.subscribed &&
+              !joined.isCompleted) {
+            joined.complete();
+          }
+        });
         _peerSendChannels[cleanId] = ch;
-        // Keep cache bounded so memory stays tiny
         if (_peerSendChannels.length > 20) {
           final oldestKey = _peerSendChannels.keys.first;
           final oldestCh = _peerSendChannels.remove(oldestKey);
@@ -10936,6 +12181,11 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
             Supabase.instance.client.removeChannel(oldestCh);
           }
         }
+        // Wait for the WebSocket channel join to finish BEFORE sending the invite!
+        await joined.future.timeout(
+          const Duration(milliseconds: 1800),
+          onTimeout: () {},
+        );
       }
       await ch.sendBroadcastMessage(
         event: 'call_signal',
@@ -11025,8 +12275,10 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
     // 3. Persist invite/cancel/hangup/decline once in profile envelope for app-resume recovery,
     //    and trigger FCM push notification on invite when enabled.
     if (targetProfileId.trim().isNotEmpty &&
-        action != 'media_state' &&
-        !action.startsWith('webrtc_')) {
+        (action == 'invite' ||
+            action == 'cancel' ||
+            action == 'decline' ||
+            action == 'hangup')) {
       await _writeSignalToProfileEnvelope(targetProfileId, payload);
       if (action == 'invite') {
         await _triggerFcmPushIfEnabled(targetProfileId, payload);
@@ -11164,37 +12416,39 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
         targetPeerId: callerId,
       );
 
-      final nav = yanRootNavigatorKey.currentState;
-      if (nav != null) {
-        nav
-            .push<_TelegramCallOutcome>(
-              MaterialPageRoute<_TelegramCallOutcome>(
-                fullscreenDialog: true,
-                builder: (_) => _E2eeLiveCallScreen(
-                  callId: callId,
-                  peerId: callerId,
-                  peerName: callerName,
-                  peerInitials: callerInitials,
-                  peerSubtitle: isVideo
-                      ? 'Kiruvchi HD E2EE Video qo‘ng‘iroq'
-                      : 'Kiruvchi E2EE Audio qo‘ng‘iroq',
-                  myUserId: myId,
-                  myUserName: userProfile.value.displayName,
-                  roomKey: roomKey,
-                  roomChannel: null,
-                  isInitialVideo: isVideo,
-                  isCaller: false,
-                  consultationId: payload['consultation_id']?.toString(),
-                  consultationDeadlineAt: DateTime.tryParse(
-                    payload['consultation_deadline_iso']?.toString() ?? '',
-                  )?.toLocal(),
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final nav = yanRootNavigatorKey.currentState;
+        if (nav != null) {
+          nav
+              .push<_TelegramCallOutcome>(
+                MaterialPageRoute<_TelegramCallOutcome>(
+                  fullscreenDialog: true,
+                  builder: (_) => _E2eeLiveCallScreen(
+                    callId: callId,
+                    peerId: callerId,
+                    peerName: callerName,
+                    peerInitials: callerInitials,
+                    peerSubtitle: isVideo
+                        ? 'Kiruvchi HD E2EE Video qo‘ng‘iroq'
+                        : 'Kiruvchi E2EE Audio qo‘ng‘iroq',
+                    myUserId: myId,
+                    myUserName: userProfile.value.displayName,
+                    roomKey: roomKey,
+                    roomChannel: null,
+                    isInitialVideo: isVideo,
+                    isCaller: false,
+                    consultationId: payload['consultation_id']?.toString(),
+                    consultationDeadlineAt: DateTime.tryParse(
+                      payload['consultation_deadline_iso']?.toString() ?? '',
+                    )?.toLocal(),
+                  ),
                 ),
-              ),
-            )
-            .whenComplete(() => clearActiveCall(callId));
-      } else {
-        clearActiveCall(callId);
-      }
+              )
+              .whenComplete(() => clearActiveCall(callId));
+        } else {
+          clearActiveCall(callId);
+        }
+      });
     }
   }
 }
@@ -11757,9 +13011,8 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
   }
 
   void _startRingtoneAndVibrationLoop() {
-    _triggerRingPulse();
     _ringtoneLoopTimer = Timer.periodic(
-      const Duration(milliseconds: 1500),
+      const Duration(milliseconds: 2400),
       (_) {
         if (_closed ||
             (_stage != _TelegramCallStage.incomingRinging &&
@@ -11776,13 +13029,9 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
   Future<void> _triggerRingPulse() async {
     try {
       if (_stage == _TelegramCallStage.incomingRinging) {
-        await HapticFeedback.heavyImpact();
-        await SystemSound.play(SystemSoundType.alert);
-        await Future<void>.delayed(const Duration(milliseconds: 220));
-        await HapticFeedback.vibrate();
+        HapticFeedback.mediumImpact();
       } else {
-        await HapticFeedback.selectionClick();
-        await SystemSound.play(SystemSoundType.click);
+        HapticFeedback.selectionClick();
       }
     } catch (_) {}
   }
@@ -12912,6 +14161,81 @@ class _ArizalarimRoleViewState extends State<_ArizalarimRoleView> {
     super.dispose();
   }
 
+  Future<void> _openActualArizaFile(ArizaOrderItem item) async {
+    final parsed = _ArizaFileDeliveryMeta.tryParse(
+      item.completedAttachmentMeta,
+      item.completedArizaText ?? '',
+    );
+
+    if (parsed == null) {
+      _showReadyArizaDialog(item);
+      return;
+    }
+
+    // 1. Try opening local file directly if present on phone
+    if (parsed.localPath.isNotEmpty) {
+      final localFile = File(parsed.localPath);
+      if (await localFile.exists()) {
+        await OpenFilex.open(localFile.path);
+        return;
+      }
+    }
+
+    // 2. Otherwise download original file from Supabase Storage and open it with OpenFilex
+    final targetPath = parsed.storagePath.isNotEmpty
+        ? parsed.storagePath
+        : parsed.watermarkedStoragePath;
+    if (targetPath.isEmpty) {
+      _showReadyArizaDialog(item);
+      return;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Ariza hujjati yuklab olinmoqda...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+    }
+
+    Uint8List? bytes;
+    final primaryBucket = parsed.storageBucket.isNotEmpty
+        ? parsed.storageBucket
+        : 'advocate_licenses';
+    final fallbackBucket =
+        primaryBucket == 'chat_media' ? 'advocate_licenses' : 'chat_media';
+
+    for (final bucket in <String>[primaryBucket, fallbackBucket]) {
+      try {
+        bytes = await Supabase.instance.client.storage
+            .from(bucket)
+            .download(targetPath);
+        if (bytes.isNotEmpty) break;
+      } catch (_) {}
+    }
+
+    if (bytes == null || bytes.isEmpty) {
+      if (mounted) _showReadyArizaDialog(item);
+      return;
+    }
+
+    try {
+      final dir = await getTemporaryDirectory();
+      final safeName = (parsed.fileName.isNotEmpty
+              ? parsed.fileName
+              : '${item.id}.pdf')
+          .replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+      final outFile = File('${dir.path}${Platform.pathSeparator}$safeName');
+      await outFile.writeAsBytes(bytes, flush: true);
+      await OpenFilex.open(outFile.path);
+    } catch (_) {
+      if (mounted) _showReadyArizaDialog(item);
+    }
+  }
+
   void _showReadyArizaDialog(ArizaOrderItem item) {
     showModalBottomSheet<void>(
       context: context,
@@ -13046,7 +14370,6 @@ class _ArizalarimRoleViewState extends State<_ArizalarimRoleView> {
   @override
   Widget build(BuildContext context) {
     final profile = widget.profile;
-    final isDiscounted = profile.hasClientDiscounts;
     final now = DateTime.now();
 
     return ValueListenableBuilder<List<ArizaOrderItem>>(
@@ -13197,7 +14520,7 @@ class _ArizalarimRoleViewState extends State<_ArizalarimRoleView> {
                           _CardPillButton(
                             label: 'Arizani ochish',
                             isPrimary: true,
-                            onTap: () => _showReadyArizaDialog(item),
+                            onTap: () => _openActualArizaFile(item),
                           ),
                         ],
                       ),
@@ -13307,177 +14630,44 @@ class _ArizalarimRoleViewState extends State<_ArizalarimRoleView> {
               const SizedBox(height: 8),
             ],
 
-            // 3. Standard Templates Header
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: YanColors.white,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: YanColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDiscounted
-                              ? YanColors.successGreen.withValues(alpha: 0.14)
-                              : YanColors.lightBlue,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          isDiscounted
-                              ? 'MIJOZ TARIFI • -50% CHEGIRMA FAOL'
-                              : 'ARIZALARIM VA HUJJATLAR MARKAZI',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
-                            color: isDiscounted
-                                ? const Color(0xFF0A936B)
-                                : YanColors.primaryBlue,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Arizalarim va Avto-Shablonlar',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: YanColors.primaryNavy,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Advokat chatda #ariza tegi bilan yuborgan barcha tayyor arizalar shu sahifada avtomatik saqlanadi.',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: YanColors.mutedText,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            ..._templates.map((item) {
-              final activePrice = isDiscounted
-                  ? profile.applyDiscount(
-                      item.standardPriceUzs,
-                      category: 'template',
-                    )
-                  : item.standardPriceUzs;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
+            if (readyOrders.isEmpty && activeOrders.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: YanColors.white,
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: YanColors.border),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: const Column(
                   children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 9,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: YanColors.lightBlue,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            item.category,
-                            style: const TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                              color: YanColors.primaryBlue,
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          item.turnaroundTime,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: YanColors.mutedText,
-                          ),
-                        ),
-                      ],
+                    Icon(
+                      CupertinoIcons.doc_text_fill,
+                      size: 40,
+                      color: YanColors.primaryBlue,
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10),
                     Text(
-                      item.title,
-                      style: const TextStyle(
+                      'Hozircha tayyor arizalar yo‘q',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
                         fontSize: 15.5,
                         fontWeight: FontWeight.w800,
                         color: YanColors.primaryNavy,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 6),
                     Text(
-                      item.subtitle,
-                      style: const TextStyle(
+                      'Advokat sizga chatda #ariza yuborganida barcha rasmiy hujjatlar shu yerda avtomatik saqlanadi.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
                         fontSize: 12.5,
                         color: YanColors.mutedText,
-                        height: 1.35,
+                        height: 1.4,
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: <Widget>[
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            if (isDiscounted)
-                              Text(
-                                '${item.standardPriceUzs} so‘m',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: YanColors.mutedText,
-                                  decoration: TextDecoration.lineThrough,
-                                ),
-                              ),
-                            Text(
-                              '$activePrice so‘m',
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w900,
-                                color: YanColors.primaryNavy,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        _CardPillButton(
-                          label: 'Ariza tayyorlash',
-                          isPrimary: true,
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const AlimonyClaimPage(),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
                     ),
                   ],
                 ),
-              );
-            }),
+              ),
           ],
         );
       },
@@ -13761,26 +14951,87 @@ class _AdvokatContractsRoleView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final contracts = YanRoleDataCatalog.sampleContracts;
+    return ValueListenableBuilder<List<AdvocateClientLink>>(
+      valueListenable: ContractLinkRepository.instance.links,
+      builder: (context, allLinks, _) {
+        final authId = Supabase.instance.client.auth.currentUser?.id ?? '';
+        final profileId = profile.clientId;
+        final myNameNorm = profile.displayName.trim().toLowerCase();
+        final myLinks = allLinks.where((l) {
+          if (!l.isActive) return false;
+          return (authId.isNotEmpty &&
+                  YanRoleDataCatalog.isSameParticipant(l.advocateId, authId)) ||
+              (profileId.isNotEmpty &&
+                  YanRoleDataCatalog.isSameParticipant(l.advocateId, profileId)) ||
+              (myNameNorm.isNotEmpty &&
+                  l.advocateName.trim().toLowerCase() == myNameNorm);
+        }).toList();
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 115),
-      children: <Widget>[
-        const Text(
-          'Rasmiy Shartnomalar',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-            color: YanColors.primaryNavy,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Faqat haqiqiy imzolangan mijoz shartnomalari ro‘yxati',
-          style: TextStyle(fontSize: 12.5, color: YanColors.mutedText),
-        ),
-        const SizedBox(height: 16),
-        if (contracts.isEmpty)
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 115),
+          children: <Widget>[
+            const Text(
+              'Rasmiy Shartnomalar',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: YanColors.primaryNavy,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Tasdiqlangan mijoz shartnomalari (${myLinks.length} ta)',
+              style: const TextStyle(fontSize: 12.5, color: YanColors.mutedText),
+            ),
+            const SizedBox(height: 16),
+            ...myLinks.map((link) {
+              final clientPeer = LawyerDirectoryProfile(
+                id: link.clientId,
+                fullName: link.clientName.isEmpty ? 'Rasmiy Mijoz' : link.clientName,
+                title: 'Shartnomali Mijoz',
+                region: 'O‘zbekiston',
+                specialization: 'Tasdiqlangan shartnoma',
+                experienceYears: 1,
+                rating: 5.0,
+                feedbackCount: 1,
+                wonCasesCount: 0,
+                consultationPriceUzs: 0,
+                contractMonthlyNote: 'Shartnoma faol',
+                licenseNumber: link.invitationId ?? 'FAOL',
+                phone: '+998',
+                assistantName: '-',
+                assistantRole: '',
+                assistantPhone: '',
+                bio: 'Siz bilan rasmiy shartnoma orqali bog‘langan mijoz.',
+                feedbacks: const <LawyerFeedbackItem>[],
+              );
+              return _LinkedContractCard(
+                link: link,
+                isAdvocateView: true,
+                onOpenChat: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AdvocateClientChatPage(
+                        lawyer: clientPeer,
+                        profile: profile,
+                      ),
+                    ),
+                  );
+                },
+                onStartCall: (isVideo) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AdvocateClientChatPage(
+                        lawyer: clientPeer,
+                        profile: profile,
+                        initialCallMode: isVideo ? 'video' : 'audio',
+                      ),
+                    ),
+                  );
+                },
+              );
+            }),
+            if (myLinks.isEmpty)
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -13818,7 +15069,9 @@ class _AdvokatContractsRoleView extends StatelessWidget {
               ],
             ),
           ),
-      ],
+          ],
+        );
+      },
     );
   }
 }
@@ -13870,6 +15123,8 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
   }
 
   Future<void> _refreshAllData() async {
+    await ConsultationRepository.instance.refreshAll();
+    await ContractLinkRepository.instance.refreshAll();
     await _YanE2eeCryptoEngine.syncArizaOrdersLedger();
     await _fetchRealClientsFromSupabase();
   }
@@ -13888,10 +15143,26 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
         final id = map['id']?.toString() ?? '';
         final fullName = (map['full_name']?.toString() ?? '').trim();
         if (id.isNotEmpty) {
+          String clientAvatarB64 = (map['avatar_base64']?.toString() ?? '').trim();
+          String clientAvatarUrl = (map['avatar_url']?.toString() ?? '').trim();
+          final pubKey = map['public_key']?.toString();
+          if (pubKey != null &&
+              pubKey.contains(_YanE2eeCryptoEngine._envelopeSeparator)) {
+            final cEnv = _YanE2eeCryptoEngine.decodeProfileEnvelope(pubKey);
+            final cMeta = cEnv['advocate_profile'];
+            if (cMeta is Map) {
+              final ab = (cMeta['avatar_base64']?.toString() ?? '').trim();
+              if (ab.isNotEmpty) clientAvatarB64 = ab;
+              final au = (cMeta['avatar_url']?.toString() ?? '').trim();
+              if (au.isNotEmpty) clientAvatarUrl = au;
+            }
+          }
           parsed.add(
             LawyerDirectoryProfile(
               id: id,
               fullName: fullName.isEmpty ? 'Rasmiy Mijoz' : fullName,
+              avatarBase64: clientAvatarB64,
+              avatarUrl: clientAvatarUrl,
               title: 'YAN360 Mijozi',
               region: map['region']?.toString() ?? 'Toshkent shahri',
               specialization: 'E2EE Himoyalangan Mijoz',
@@ -14020,6 +15291,10 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
                 child: _SortTabPill(
                   label: tab == 'Ariza yozdirish'
                       ? 'Ariza yozdirish (${arizaOrders.length})'
+                      : tab == 'Konsultatsiya'
+                      ? 'Konsultatsiya (${ConsultationRepository.instance.consultations.value.where((b) => (authId.isNotEmpty && YanRoleDataCatalog.isSameParticipant(b.advocateId, authId)) || (profileId.isNotEmpty && YanRoleDataCatalog.isSameParticipant(b.advocateId, profileId)) || b.advocateName.trim().toLowerCase() == widget.profile.displayName.trim().toLowerCase()).length})'
+                      : tab == 'Shartnomali'
+                      ? 'Shartnomali (${ContractLinkRepository.instance.links.value.where((l) => l.isActive && ((authId.isNotEmpty && YanRoleDataCatalog.isSameParticipant(l.advocateId, authId)) || (profileId.isNotEmpty && YanRoleDataCatalog.isSameParticipant(l.advocateId, profileId)) || l.advocateName.trim().toLowerCase() == widget.profile.displayName.trim().toLowerCase())).length})'
                       : tab,
                   selected: selected,
                   onTap: () => setState(() => _selectedCategoryFilter = tab),
@@ -14036,17 +15311,56 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
           ValueListenableBuilder<List<ConsultationBooking>>(
             valueListenable: ConsultationRepository.instance.consultations,
             builder: (context, allBookings, _) {
+              final myNameNorm = widget.profile.displayName.trim().toLowerCase();
               final myConsults = allBookings
                   .where((b) =>
-                      ((authId.isNotEmpty &&
-                              YanRoleDataCatalog.isSameParticipant(b.advocateId, authId)) ||
-                          (profileId.isNotEmpty &&
-                              YanRoleDataCatalog.isSameParticipant(b.advocateId, profileId))) &&
-                      b.isActiveStatus &&
-                      !b.isExpired(now))
+                      (authId.isNotEmpty &&
+                          YanRoleDataCatalog.isSameParticipant(b.advocateId, authId)) ||
+                      (profileId.isNotEmpty &&
+                          YanRoleDataCatalog.isSameParticipant(b.advocateId, profileId)) ||
+                      (myNameNorm.isNotEmpty &&
+                          b.advocateName.trim().toLowerCase() == myNameNorm))
                   .toList()
-                ..sort((a, b) => a.slotStart.compareTo(b.slotStart));
-              if (myConsults.isEmpty) return const SizedBox.shrink();
+                ..sort((a, b) {
+                  final aExp = a.isExpired(now) ? 1 : 0;
+                  final bExp = b.isExpired(now) ? 1 : 0;
+                  if (aExp != bExp) return aExp.compareTo(bExp);
+                  return a.slotStart.compareTo(b.slotStart);
+                });
+              if (myConsults.isEmpty) {
+                if (_selectedCategoryFilter != 'Konsultatsiya') {
+                  return const SizedBox.shrink();
+                }
+                return Container(
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: const Color(0xFFDCEBFF)),
+                  ),
+                  child: const Column(
+                    children: <Widget>[
+                      Icon(Icons.event_note_rounded, size: 36, color: Color(0xFF1677FF)),
+                      SizedBox(height: 8),
+                      Text(
+                        'Hozircha band qilingan konsultatsiyalar yo‘q',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0B1F3A),
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Mijozlar sizga konsultatsiya band qilishi bilan shu yerda real vaqtda ko‘rinadi.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12.2, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                );
+              }
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
@@ -14241,6 +15555,8 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
                     children: <Widget>[
                       _LawyerAvatarPortrait(
                         initials: clientPeer.initials,
+                avatarBase64: clientPeer.avatarBase64,
+                avatarUrl: clientPeer.avatarUrl,
                         isOnline: true,
                         size: 46,
                       ),
@@ -14356,6 +15672,106 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
 
         // 2. REGISTERED SUPABASE CLIENTS
         if (showGeneralClientsSection) ...<Widget>[
+          ValueListenableBuilder<List<AdvocateClientLink>>(
+            valueListenable: ContractLinkRepository.instance.links,
+            builder: (context, allLinks, _) {
+              final myNameNorm = widget.profile.displayName.trim().toLowerCase();
+              final myLinkedClients = allLinks.where((l) {
+                if (!l.isActive) return false;
+                return (authId.isNotEmpty &&
+                        YanRoleDataCatalog.isSameParticipant(l.advocateId, authId)) ||
+                    (profileId.isNotEmpty &&
+                        YanRoleDataCatalog.isSameParticipant(l.advocateId, profileId)) ||
+                    (myNameNorm.isNotEmpty &&
+                        l.advocateName.trim().toLowerCase() == myNameNorm);
+              }).toList();
+              if (myLinkedClients.isEmpty) {
+                if (_selectedCategoryFilter != 'Shartnomali') {
+                  return const SizedBox.shrink();
+                }
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: const Color(0xFFDCEBFF)),
+                  ),
+                  child: const Column(
+                    children: <Widget>[
+                      Icon(Icons.handshake_outlined, size: 36, color: Color(0xFF10B981)),
+                      SizedBox(height: 8),
+                      Text(
+                        'Hozircha shartnomali mijozlar yo‘q',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0B1F3A),
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Chatda shartnoma taklifi tasdiqlanganda mijoz avtomatik shu ro‘yxatga qo‘shiladi.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12.2, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'SHARTNOMALI MIJOZLAR (ID LAR ULANDI)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.6,
+                        color: Color(0xFF059669),
+                      ),
+                    ),
+                  ),
+                  ...myLinkedClients.map((link) {
+                    final peer = LawyerDirectoryProfile(
+                      id: link.clientId,
+                      fullName: link.clientName.isEmpty ? 'Rasmiy Mijoz' : link.clientName,
+                      title: 'Shartnomali Mijoz',
+                      region: 'O‘zbekiston',
+                      specialization: 'Shartnoma faol',
+                      experienceYears: 1,
+                      rating: 5.0,
+                      feedbackCount: 1,
+                      wonCasesCount: 0,
+                      consultationPriceUzs: 0,
+                      contractMonthlyNote: 'Shartnoma faol',
+                      licenseNumber: link.invitationId ?? 'FAOL',
+                      phone: '+998',
+                      assistantName: '-',
+                      assistantRole: '',
+                      assistantPhone: '',
+                      bio: 'Rasmiy shartnoma orqali bog‘langan mijoz.',
+                      feedbacks: const <LawyerFeedbackItem>[],
+                    );
+                    return _LinkedContractCard(
+                      link: link,
+                      isAdvocateView: true,
+                      onOpenChat: () => _openClientChat(context, peer),
+                      onStartCall: (isVideo) => _openClientChat(
+                        context,
+                        peer,
+                        callMode: isVideo ? 'video' : 'audio',
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                ],
+              );
+            },
+          ),
           if (_isLoadingClients)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 42),
@@ -14418,6 +15834,8 @@ class _ClientsDirectoryRoleViewState extends State<_ClientsDirectoryRoleView> {
                   children: <Widget>[
                     _LawyerAvatarPortrait(
                       initials: clientPeer.initials,
+                avatarBase64: clientPeer.avatarBase64,
+                avatarUrl: clientPeer.avatarUrl,
                       isOnline: clientPeer.isVerifiedPartner,
                       size: 48,
                     ),
@@ -14577,51 +15995,72 @@ class _UzbekPhoneField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: YanColors.lightBlue,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: YanColors.border),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
-      child: Row(
-        children: <Widget>[
-          const Icon(
-            Icons.phone_rounded,
-            color: YanColors.primaryBlue,
-            size: 20,
+    return SizedBox(
+      height: 52,
+      child: TextField(
+        controller: controller,
+        keyboardType: TextInputType.phone,
+        cursorColor: const Color(0xFF1675D1),
+        style: const TextStyle(
+          fontSize: 14.5,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF172B4D),
+          letterSpacing: 0.2,
+        ),
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: const Color(0xFFF8FAFD),
+          hintText: '90 123 45 67',
+          hintStyle: const TextStyle(
+            fontSize: 14.2,
+            fontWeight: FontWeight.w400,
+            color: Color(0xFF94A3B8),
           ),
-          const SizedBox(width: 10),
-          const Text(
-            '+998',
-            style: TextStyle(
-              fontSize: 14.5,
-              fontWeight: FontWeight.w800,
-              color: YanColors.primaryNavy,
-            ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              keyboardType: TextInputType.phone,
-              style: const TextStyle(
-                fontSize: 14.5,
-                fontWeight: FontWeight.w700,
-                color: YanColors.primaryNavy,
-              ),
-              decoration: const InputDecoration(
-                hintText: '90 123 45 67',
-                hintStyle: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: YanColors.mutedText,
+          prefixIcon: Padding(
+            padding: const EdgeInsets.only(left: 14, right: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Icon(
+                  Icons.phone_outlined,
+                  color: Color(0xFF1675D1),
+                  size: 19,
                 ),
-                border: InputBorder.none,
-              ),
+                const SizedBox(width: 8),
+                const Text(
+                  '+998',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF172B4D),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  width: 1,
+                  height: 20,
+                  color: const Color(0xFFD5E0EE),
+                ),
+              ],
             ),
           ),
-        ],
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 0,
+            minHeight: 0,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFFDCE5F2), width: 1),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFF1675D1), width: 1.5),
+          ),
+        ),
       ),
     );
   }
@@ -14646,41 +16085,43 @@ class _CleanTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: YanColors.lightBlue,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: YanColors.border),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
-      child: Row(
-        children: <Widget>[
-          Icon(icon, color: YanColors.primaryBlue, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              obscureText: obscureText,
-              keyboardType: keyboardType,
-              maxLength: maxLength,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: YanColors.primaryNavy,
-              ),
-              decoration: InputDecoration(
-                counterText: '',
-                hintText: hintText,
-                hintStyle: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w500,
-                  color: YanColors.mutedText,
-                ),
-                border: InputBorder.none,
-              ),
-            ),
+    return SizedBox(
+      height: 52,
+      child: TextField(
+        controller: controller,
+        obscureText: obscureText,
+        keyboardType: keyboardType,
+        maxLength: maxLength,
+        cursorColor: const Color(0xFF1675D1),
+        style: const TextStyle(
+          fontSize: 14.5,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF172B4D),
+        ),
+        decoration: InputDecoration(
+          counterText: '',
+          filled: true,
+          fillColor: const Color(0xFFF8FAFD),
+          hintText: hintText,
+          hintStyle: const TextStyle(
+            fontSize: 14.2,
+            fontWeight: FontWeight.w400,
+            color: Color(0xFF94A3B8),
           ),
-        ],
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
+          prefixIcon: Icon(icon, color: const Color(0xFF1675D1), size: 19),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFFDCE5F2), width: 1),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFF1675D1), width: 1.5),
+          ),
+        ),
       ),
     );
   }
@@ -14689,12 +16130,14 @@ class _CleanTextField extends StatelessWidget {
 class _SolidPrimaryButton extends StatelessWidget {
   final String label;
   final IconData icon;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+  final bool isLoading;
 
   const _SolidPrimaryButton({
     required this.label,
     required this.icon,
     required this.onPressed,
+    this.isLoading = false,
   });
 
   @override
@@ -14703,32 +16146,45 @@ class _SolidPrimaryButton extends StatelessWidget {
       width: double.infinity,
       height: 52,
       child: ElevatedButton(
-        onPressed: onPressed,
+        onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: YanColors.primaryBlue,
+          backgroundColor: const Color(0xFF1675D1),
           foregroundColor: Colors.white,
+          disabledBackgroundColor: const Color(0xFF1675D1).withValues(alpha: 0.55),
+          disabledForegroundColor: Colors.white,
           elevation: 0,
+          shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Flexible(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
+        child: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Flexible(
+                    child: Text(
+                      label,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(icon, size: 18, color: Colors.white),
+                ],
               ),
-            ),
-            const SizedBox(width: 8),
-            Icon(icon, size: 18, color: Colors.white),
-          ],
-        ),
       ),
     );
   }
@@ -14751,19 +16207,24 @@ class _SolidSecondaryButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 52,
+      height: 48,
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: active ? YanColors.primaryBlue : YanColors.lightBlue,
-          foregroundColor: active ? Colors.white : YanColors.primaryBlue,
+          backgroundColor:
+              active ? const Color(0xFF1675D1) : const Color(0xFFEAF3FD),
+          foregroundColor:
+              active ? Colors.white : const Color(0xFF12356B),
           elevation: 0,
+          shadowColor: Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(14),
             side: BorderSide(
               color: active
-                  ? YanColors.primaryBlue
-                  : YanColors.primaryBlue.withValues(alpha: 0.35),
+                  ? const Color(0xFF1675D1)
+                  : const Color(0xFFD6E6FA),
+              width: 1,
             ),
           ),
         ),
@@ -14772,17 +16233,19 @@ class _SolidSecondaryButton extends StatelessWidget {
           children: <Widget>[
             Icon(
               icon,
-              size: 18,
-              color: active ? Colors.white : YanColors.primaryBlue,
+              size: 17,
+              color: active ? Colors.white : const Color(0xFF1675D1),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 7),
             Flexible(
               child: Text(
                 label,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
+                  color: active ? Colors.white : const Color(0xFF12356B),
                 ),
               ),
             ),
@@ -14917,4 +16380,304 @@ class _PinnedConsultationBannerCard extends StatelessWidget {
       ),
     );
   }
+}
+
+
+class _LinkedContractCard extends StatelessWidget {
+  final AdvocateClientLink link;
+  final bool isAdvocateView;
+  final VoidCallback onOpenChat;
+  final void Function(bool isVideo) onStartCall;
+
+  const _LinkedContractCard({
+    required this.link,
+    required this.isAdvocateView,
+    required this.onOpenChat,
+    required this.onStartCall,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final peerName = isAdvocateView
+        ? (link.clientName.isEmpty ? 'Rasmiy Mijoz' : link.clientName)
+        : (link.advocateName.isEmpty ? 'Shaxsiy Advokat' : link.advocateName);
+    final roleLabel = isAdvocateView ? 'Shartnomali Mijoz' : 'Shaxsiy Advokatingiz';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[Color(0xFFFFFFFF), Color(0xFFF0FDF4)],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: const Color(0xFF10B981).withValues(alpha: 0.55),
+          width: 1.4,
+        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: const Color(0xFF10B981).withValues(alpha: 0.09),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: <Color>[Color(0xFF10B981), Color(0xFF059669)],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.verified_user_rounded,
+                  color: Colors.white,
+                  size: 23,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      roleLabel,
+                      style: const TextStyle(
+                        fontSize: 10.8,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF059669),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      peerName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0B1F3A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: const Text(
+                  '● FAOL',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF059669),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFD1FAE5)),
+            ),
+            child: Text(
+              'Advokat ID: ${ContractLinkRepository.instance.shortDisplayId(link.advocateId)}  •  Mijoz ID: ${ContractLinkRepository.instance.shortDisplayId(link.clientId)}',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0B1F3A),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: onOpenChat,
+                  icon: const Icon(Icons.chat_bubble_rounded, size: 15),
+                  label: const Text(
+                    'Chat',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1677FF),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => onStartCall(false),
+                child: Container(
+                  width: 40,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEBF4FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFDCEBFF)),
+                  ),
+                  child: const Icon(
+                    Icons.call_rounded,
+                    size: 18,
+                    color: Color(0xFF1677FF),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () => onStartCall(true),
+                child: Container(
+                  width: 40,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.videocam_rounded,
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Syncs the authenticated user's (especially Advocate's) entered profile fields
+/// to Supabase `profiles` (both `public_key` JSON envelope for zero-migration
+/// compatibility and direct `profiles` columns when present).
+Future<void> syncCurrentUserProfileToSupabase(UserProfileData p) async {
+  final authUser = Supabase.instance.client.auth.currentUser;
+  if (authUser == null) return;
+  try {
+    final myRow = await Supabase.instance.client
+        .from('profiles')
+        .select()
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+    final existingPubKey = myRow?['public_key']?.toString();
+    final env = _YanE2eeCryptoEngine.decodeProfileEnvelope(existingPubKey);
+    String avatarB64 = p.avatarBase64.trim();
+    if (avatarB64.isEmpty && p.avatarFile != null && p.avatarFile!.existsSync()) {
+      try {
+        final rawBytes = await p.avatarFile!.readAsBytes();
+        if (rawBytes.isNotEmpty && rawBytes.length <= 180000) {
+          avatarB64 = base64Encode(rawBytes);
+        }
+      } catch (_) {}
+    }
+
+    env['advocate_profile'] = <String, dynamic>{
+      'full_name': p.displayName.trim(),
+      'phone': p.phone.trim(),
+      'region': p.region.trim(),
+      'district': p.district.trim(),
+      'street_address': p.streetAddress.trim(),
+      'passport_or_pinfl': p.passportOrPinfl.trim(),
+      'specialization': p.lawyerSpecialization.trim(),
+      'license_number': p.lawyerLicenseNumber.trim(),
+      'experience_years': p.lawyerExperienceYears > 0
+          ? p.lawyerExperienceYears
+          : 0,
+      'bio': p.lawyerBio.trim(),
+      if (avatarB64.isNotEmpty) 'avatar_base64': avatarB64,
+    };
+    final newPubKey = _YanE2eeCryptoEngine.encodeProfileEnvelope(
+      existingPubKey,
+      env,
+    );
+
+    final baseUpdate = <String, dynamic>{
+      'public_key': newPubKey,
+      if (p.displayName.trim().isNotEmpty) 'full_name': p.displayName.trim(),
+    };
+    await Supabase.instance.client
+        .from('profiles')
+        .update(baseUpdate)
+        .eq('id', authUser.id);
+
+    // Best-effort update of dedicated columns if they exist in `profiles`
+    try {
+      await Supabase.instance.client
+          .from('profiles')
+          .update(<String, dynamic>{
+            'phone': p.phone.trim(),
+            'region': p.region.trim(),
+            'specialization': p.lawyerSpecialization.trim(),
+            'license_number': p.lawyerLicenseNumber.trim(),
+            'experience_years': p.lawyerExperienceYears,
+            'bio': p.lawyerBio.trim(),
+          })
+          .eq('id', authUser.id);
+    } catch (_) {
+      // Envelope already persisted safely above even if optional columns are absent
+    }
+
+    // Immediately update in-memory directory cache so changes reflect right away
+    final currentList = YanRoleDataCatalog.registeredLawyers.value;
+    final updatedList = currentList.map((item) {
+      if (YanRoleDataCatalog.isSameParticipant(item.id, authUser.id)) {
+        return LawyerDirectoryProfile(
+          id: item.id,
+          fullName: p.displayName.trim().isNotEmpty
+              ? p.displayName.trim()
+              : item.fullName,
+          title: item.title,
+          region: p.region.trim(),
+          specialization: p.lawyerSpecialization.trim(),
+          experienceYears: p.lawyerExperienceYears > 0
+              ? p.lawyerExperienceYears
+              : 0,
+          rating: item.rating,
+          feedbackCount: item.feedbackCount,
+          wonCasesCount: item.wonCasesCount,
+          consultationPriceUzs: item.consultationPriceUzs,
+          contractMonthlyNote: item.contractMonthlyNote,
+          licenseNumber: p.lawyerLicenseNumber.trim(),
+          phone: p.phone.trim() == '+998' ? '' : p.phone.trim(),
+          assistantName: item.assistantName,
+          assistantRole: item.assistantRole,
+          assistantPhone: item.assistantPhone,
+          bio: p.lawyerBio.trim(),
+          feedbacks: item.feedbacks,
+          isVerifiedPartner: item.isVerifiedPartner,
+          avatarBase64: avatarB64.isNotEmpty ? avatarB64 : item.avatarBase64,
+          avatarUrl: item.avatarUrl,
+        );
+      }
+      return item;
+    }).toList();
+    YanRoleDataCatalog.registeredLawyers.value = updatedList;
+  } catch (_) {}
 }

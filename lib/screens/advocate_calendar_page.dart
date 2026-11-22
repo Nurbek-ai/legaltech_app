@@ -68,23 +68,24 @@ class _AdvocateCalendarPageState extends State<AdvocateCalendarPage> {
     HapticFeedback.mediumImpact();
     setState(() => _isBusyUpdating = true);
     try {
-      if (currentlyBlocked) {
-        await ConsultationRepository.instance.unblockTime(
-          advocateId: _advocateId,
-          blockType: 'day',
-          dateKey: _selectedDateKey,
-        );
-        _showToast(
-          'Kun qayta ochildi. Mijozlar endi ushbu kunni band qila oladi.',
-        );
+      final err = currentlyBlocked
+          ? await ConsultationRepository.instance.unblockTime(
+              advocateId: _advocateId,
+              blockType: 'day',
+              dateKey: _selectedDateKey,
+            )
+          : await ConsultationRepository.instance.blockTime(
+              advocateId: _advocateId,
+              blockType: 'day',
+              dateKey: _selectedDateKey,
+            );
+      if (err != null) {
+        _showToast(err, isError: true);
       } else {
-        await ConsultationRepository.instance.blockTime(
-          advocateId: _advocateId,
-          blockType: 'day',
-          dateKey: _selectedDateKey,
-        );
         _showToast(
-          'Kun yopildi. Ushbu kunga yangi konsultatsiya band qilib bo‘lmaydi.',
+          currentlyBlocked
+              ? 'Kun qayta ochildi. Mijozlar endi ushbu kunni band qila oladi.'
+              : 'Kun yopildi va Supabase’ga saqlandi.',
         );
       }
     } finally {
@@ -97,24 +98,27 @@ class _AdvocateCalendarPageState extends State<AdvocateCalendarPage> {
     HapticFeedback.selectionClick();
     setState(() => _isBusyUpdating = true);
     try {
-      if (currentlyBlocked) {
-        await ConsultationRepository.instance.unblockTime(
-          advocateId: _advocateId,
-          blockType: 'hour',
-          dateKey: _selectedDateKey,
-          hourValue: hour,
-        );
-        _showToast(
-          '${ConsultationSlotMath.formatHour(hour)} soati qayta ochildi.',
-        );
+      final err = currentlyBlocked
+          ? await ConsultationRepository.instance.unblockTime(
+              advocateId: _advocateId,
+              blockType: 'hour',
+              dateKey: _selectedDateKey,
+              hourValue: hour,
+            )
+          : await ConsultationRepository.instance.blockTime(
+              advocateId: _advocateId,
+              blockType: 'hour',
+              dateKey: _selectedDateKey,
+              hourValue: hour,
+            );
+      if (err != null) {
+        _showToast(err, isError: true);
       } else {
-        await ConsultationRepository.instance.blockTime(
-          advocateId: _advocateId,
-          blockType: 'hour',
-          dateKey: _selectedDateKey,
-          hourValue: hour,
+        _showToast(
+          currentlyBlocked
+              ? '${ConsultationSlotMath.formatHour(hour)} soati qayta ochildi.'
+              : '${ConsultationSlotMath.formatHour(hour)} soati yopildi va saqlandi.',
         );
-        _showToast('${ConsultationSlotMath.formatHour(hour)} soati yopildi.');
       }
     } finally {
       if (mounted) setState(() => _isBusyUpdating = false);
@@ -131,38 +135,43 @@ class _AdvocateCalendarPageState extends State<AdvocateCalendarPage> {
     setState(() => _isBusyUpdating = true);
     try {
       final range = ConsultationSlotMath.formatSlotRange(hour, slotIdx);
-      if (currentlyBlocked) {
-        await ConsultationRepository.instance.unblockTime(
-          advocateId: _advocateId,
-          blockType: 'slot',
-          dateKey: _selectedDateKey,
-          hourValue: hour,
-          slotIndex: slotIdx,
-        );
-        _showToast('$range vaqti qayta ochildi.');
+      final err = currentlyBlocked
+          ? await ConsultationRepository.instance.unblockTime(
+              advocateId: _advocateId,
+              blockType: 'slot',
+              dateKey: _selectedDateKey,
+              hourValue: hour,
+              slotIndex: slotIdx,
+            )
+          : await ConsultationRepository.instance.blockTime(
+              advocateId: _advocateId,
+              blockType: 'slot',
+              dateKey: _selectedDateKey,
+              hourValue: hour,
+              slotIndex: slotIdx,
+            );
+      if (err != null) {
+        _showToast(err, isError: true);
       } else {
-        await ConsultationRepository.instance.blockTime(
-          advocateId: _advocateId,
-          blockType: 'slot',
-          dateKey: _selectedDateKey,
-          hourValue: hour,
-          slotIndex: slotIdx,
+        _showToast(
+          currentlyBlocked
+              ? '$range vaqti qayta ochildi.'
+              : '$range vaqti yopildi va saqlandi.',
         );
-        _showToast('$range vaqti yopildi.');
       }
     } finally {
       if (mounted) setState(() => _isBusyUpdating = false);
     }
   }
 
-  void _showToast(String message) {
+  void _showToast(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: _inkNavy,
+          backgroundColor: isError ? _rose : _inkNavy,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),

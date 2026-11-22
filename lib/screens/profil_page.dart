@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../main.dart';
 import '../services/alimony_claim_document_service.dart';
@@ -36,11 +38,25 @@ class _ProfilPageState extends State<ProfilPage> {
     try {
       final picked = await _picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 96,
+        maxWidth: 320,
+        maxHeight: 320,
+        imageQuality: 72,
       );
       if (picked != null) {
         final file = File(picked.path);
-        userProfile.value = profile.copyWith(avatarFile: file);
+        String b64 = '';
+        try {
+          final bytes = await file.readAsBytes();
+          if (bytes.isNotEmpty) {
+            b64 = base64Encode(bytes);
+          }
+        } catch (_) {}
+        final updated = profile.copyWith(
+          avatarFile: file,
+          avatarBase64: b64.isNotEmpty ? b64 : profile.avatarBase64,
+        );
+        userProfile.value = updated;
+        await syncCurrentUserProfileToSupabase(updated);
         await ActivityHistoryRepository.instance.record(
           title: 'Guvohnoma fotosurati yangilandi',
           description:
@@ -88,145 +104,16 @@ class _ProfilPageState extends State<ProfilPage> {
     );
   }
 
-  void _showQrShareModal(UserProfileData profile) {
-    final isMijoz = profile.roleType == UserRole.mijoz;
-    final passportNo = profile.passportOrPinfl.trim().isNotEmpty
-        ? profile.passportOrPinfl.trim()
-        : 'AA 4829104';
-
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return Container(
-          padding: const EdgeInsets.fromLTRB(22, 16, 22, 28),
-          decoration: BoxDecoration(
-            color: YanColors.background,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border.all(color: YanColors.border),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Container(
-                  width: 42,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: YanColors.border,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  isMijoz
-                      ? 'YAN360 VIP Mijoz Raqamli QR Guvohnomasi'
-                      : 'YAN360 Raqamli Yuridik Guvohnoma QR Kodi',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: YanColors.primaryNavy,
-                    fontSize: 17.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Advokat yoki sud devonxonasi ushbu QR kod orqali shaxsingiz va shartnomangizni tasdiqlaydi',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: YanColors.mutedText,
-                    fontSize: 12.4,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Container(
-                  width: 176,
-                  height: 176,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: YanColors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: YanColors.border, width: 1.5),
-                    boxShadow: <BoxShadow>[
-                      BoxShadow(
-                        color: YanColors.primaryNavy.withValues(alpha: 0.08),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: <Widget>[
-                      const Icon(
-                        CupertinoIcons.qrcode,
-                        size: 138,
-                        color: YanColors.primaryNavy,
-                      ),
-                      Container(
-                        width: 36,
-                        height: 36,
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: YanColors.white,
-                          borderRadius: BorderRadius.circular(9),
-                          border: Border.all(color: YanColors.border),
-                        ),
-                        child: Image.asset(
-                          'assets/logo.png',
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.high,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  '${profile.displayName} • ${profile.clientId} • $passportNo',
-                  style: const TextStyle(
-                    color: YanColors.primaryNavy,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: LiquidActionButton(
-                        label: 'ID nusxalash',
-                        icon: CupertinoIcons.doc_on_doc,
-                        isPrimary: false,
-                        onPressed: () {
-                          Navigator.pop(sheetContext);
-                          _copyToClipboard(
-                            'Raqamli Guvohnoma ID',
-                            '${profile.displayName} | ID: ${profile.clientId} | Pasport: $passportNo',
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: LiquidActionButton(
-                        label: 'Tayyor',
-                        icon: CupertinoIcons.checkmark_alt,
-                        onPressed: () => Navigator.pop(sheetContext),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+  int _countWords(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return 0;
+    return trimmed.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
   }
 
   void _showEditProfileSheet(UserProfileData profile) {
+    final isAdvocate =
+        profile.roleType == UserRole.advokat ||
+        profile.roleType == UserRole.yordamchi;
     final nameCtrl = TextEditingController(text: profile.displayName);
     final phoneCtrl = TextEditingController(text: profile.phone);
     final emailCtrl = TextEditingController(text: profile.email);
@@ -234,9 +121,21 @@ class _ProfilPageState extends State<ProfilPage> {
     final districtCtrl = TextEditingController(text: profile.district);
     final streetCtrl = TextEditingController(text: profile.streetAddress);
     final pinflCtrl = TextEditingController(
-      text: profile.passportOrPinfl.isEmpty
-          ? 'AA 4829104'
-          : profile.passportOrPinfl,
+      text: profile.passportOrPinfl.trim(),
+    );
+    final specCtrl = TextEditingController(
+      text: profile.lawyerSpecialization.trim(),
+    );
+    final licenseCtrl = TextEditingController(
+      text: profile.lawyerLicenseNumber.trim(),
+    );
+    final expCtrl = TextEditingController(
+      text: profile.lawyerExperienceYears > 0
+          ? '${profile.lawyerExperienceYears}'
+          : '',
+    );
+    final bioCtrl = TextEditingController(
+      text: profile.lawyerBio.trim(),
     );
 
     showModalBottomSheet<void>(
@@ -245,104 +144,296 @@ class _ProfilPageState extends State<ProfilPage> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         final bottomInset = MediaQuery.viewInsetsOf(sheetContext).bottom;
-        return Container(
-          padding: EdgeInsets.fromLTRB(20, 16, 20, 22 + bottomInset),
-          decoration: BoxDecoration(
-            color: YanColors.background,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border.all(color: YanColors.border),
-          ),
-          child: SafeArea(
-            top: false,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: YanColors.border,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Shaxsiy Guvohnoma va Rekvizitlarni Tahrirlash',
-                    style: TextStyle(
-                      color: YanColors.primaryNavy,
-                      fontSize: 17.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _ProfileInputField(label: 'F.I.Sh.', controller: nameCtrl),
-                  const SizedBox(height: 9),
-                  _ProfileInputField(
-                    label: 'Pasport seriya va raqami / JSHSHIR',
-                    controller: pinflCtrl,
-                  ),
-                  const SizedBox(height: 9),
-                  _ProfileInputField(
-                    label: 'Telefon raqami',
-                    controller: phoneCtrl,
-                  ),
-                  const SizedBox(height: 9),
-                  _ProfileInputField(
-                    label: 'Email manzili',
-                    controller: emailCtrl,
-                  ),
-                  const SizedBox(height: 9),
-                  _ProfileInputField(
-                    label: 'Viloyat / Shahar',
-                    controller: regionCtrl,
-                  ),
-                  const SizedBox(height: 9),
-                  _ProfileInputField(label: 'Tuman', controller: districtCtrl),
-                  const SizedBox(height: 9),
-                  _ProfileInputField(
-                    label: 'Mahalla va uy manzili',
-                    controller: streetCtrl,
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final bioWords = _countWords(bioCtrl.text);
+            final bioTooLong = bioWords > 100;
+
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.90,
+              ),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 22 + bottomInset),
+              decoration: BoxDecoration(
+                color: YanColors.background,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
+                border: Border.all(color: YanColors.border),
+              ),
+              child: SafeArea(
+                top: false,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Expanded(
-                        child: LiquidActionButton(
-                          label: 'Bekor qilish',
-                          icon: CupertinoIcons.xmark,
-                          isPrimary: false,
-                          onPressed: () => Navigator.pop(sheetContext),
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: YanColors.border,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: LiquidActionButton(
-                          label: 'Saqlash',
-                          icon: CupertinoIcons.checkmark_alt,
-                          onPressed: () {
-                            userProfile.value = profile.copyWith(
-                              displayName: nameCtrl.text.trim(),
-                              phone: phoneCtrl.text.trim(),
-                              email: emailCtrl.text.trim(),
-                              region: regionCtrl.text.trim(),
-                              district: districtCtrl.text.trim(),
-                              streetAddress: streetCtrl.text.trim(),
-                              passportOrPinfl: pinflCtrl.text.trim(),
-                            );
-                            Navigator.pop(sheetContext);
-                          },
+                      const SizedBox(height: 14),
+                      Text(
+                        isAdvocate
+                            ? 'Advokat Profili va Rekvizitlarni Tahrirlash'
+                            : 'Shaxsiy Guvohnoma va Rekvizitlarni Tahrirlash',
+                        style: const TextStyle(
+                          color: YanColors.primaryNavy,
+                          fontSize: 17.5,
+                          fontWeight: FontWeight.w800,
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      _ProfileInputField(label: 'F.I.Sh.', controller: nameCtrl),
+                      const SizedBox(height: 9),
+                      _ProfileInputField(
+                        label: 'Telefon raqami',
+                        controller: phoneCtrl,
+                        placeholder: '+998 90 123 45 67',
+                        keyboardType: TextInputType.phone,
+                      ),
+                      const SizedBox(height: 9),
+                      _ProfileInputField(
+                        label: 'Viloyat / Shahar (Hudud)',
+                        controller: regionCtrl,
+                        placeholder: 'Masalan: Toshkent shahri',
+                      ),
+                      if (isAdvocate) ...<Widget>[
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF5F9FF),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: const Color(0xFFCFE2FF)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              const Row(
+                                children: <Widget>[
+                                  Icon(
+                                    CupertinoIcons.briefcase_fill,
+                                    size: 16,
+                                    color: YanColors.primaryBlue,
+                                  ),
+                                  SizedBox(width: 7),
+                                  Text(
+                                    'Advokat profili ma’lumotlari (mijozlarga ko‘rinadi)',
+                                    style: TextStyle(
+                                      color: YanColors.primaryNavy,
+                                      fontSize: 12.6,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              _ProfileInputField(
+                                label: 'Mutaxassisligi',
+                                controller: specCtrl,
+                                placeholder: 'Masalan: Oila va fuqarolik huquqi',
+                              ),
+                              const SizedBox(height: 9),
+                              _ProfileInputField(
+                                label: 'Litsenziya raqami',
+                                controller: licenseCtrl,
+                                placeholder: 'Masalan: № 001245 yoki STIR',
+                              ),
+                              const SizedBox(height: 9),
+                              _ProfileInputField(
+                                label: 'Ish tajribasi (yil)',
+                                controller: expCtrl,
+                                placeholder: 'Masalan: 5',
+                                keyboardType: TextInputType.number,
+                              ),
+                              const SizedBox(height: 9),
+                              Row(
+                                children: <Widget>[
+                                  const Expanded(
+                                    child: Text(
+                                      'Advokat haqida (Bio — 100 so‘zgacha)',
+                                      style: TextStyle(
+                                        color: YanColors.mutedText,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2.5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: bioTooLong
+                                          ? const Color(0xFFFEE2E2)
+                                          : const Color(0xFFEAF5FF),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '$bioWords / 100 so‘z',
+                                      style: TextStyle(
+                                        color: bioTooLong
+                                            ? YanColors.destructiveRed
+                                            : YanColors.primaryBlue,
+                                        fontSize: 10.8,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              CupertinoTextField(
+                                controller: bioCtrl,
+                                maxLines: 4,
+                                minLines: 3,
+                                placeholder:
+                                    'Tajribangiz, asosiy yo‘nalishlaringiz va mijozlarga qanday yordam berishingiz haqida qisqacha yozing...',
+                                placeholderStyle: const TextStyle(
+                                  color: YanColors.subtleText,
+                                  fontSize: 13,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 13,
+                                  vertical: 11,
+                                ),
+                                style: const TextStyle(
+                                  color: YanColors.primaryNavy,
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(13),
+                                  border: Border.all(
+                                    color: bioTooLong
+                                        ? YanColors.destructiveRed
+                                        : YanColors.border,
+                                  ),
+                                ),
+                                onChanged: (_) => setModalState(() {}),
+                              ),
+                              if (bioTooLong)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 5),
+                                  child: Text(
+                                    'Bio matni 100 so‘zdan oshmasligi kerak.',
+                                    style: TextStyle(
+                                      color: YanColors.destructiveRed,
+                                      fontSize: 11.2,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      const SizedBox(height: 9),
+                      _ProfileInputField(
+                        label: 'Pasport seriya va raqami / JSHSHIR',
+                        controller: pinflCtrl,
+                      ),
+                      const SizedBox(height: 9),
+                      _ProfileInputField(
+                        label: 'Email manzili',
+                        controller: emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 9),
+                      _ProfileInputField(label: 'Tuman', controller: districtCtrl),
+                      const SizedBox(height: 9),
+                      _ProfileInputField(
+                        label: 'Mahalla va uy manzili',
+                        controller: streetCtrl,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: LiquidActionButton(
+                              label: 'Bekor qilish',
+                              icon: CupertinoIcons.xmark,
+                              isPrimary: false,
+                              onPressed: () => Navigator.pop(sheetContext),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: LiquidActionButton(
+                              label: 'Saqlash',
+                              icon: CupertinoIcons.checkmark_alt,
+                              onPressed: () {
+                                if (isAdvocate && _countWords(bioCtrl.text) > 100) {
+                                  setModalState(() {});
+                                  return;
+                                }
+                                final parsedExp =
+                                    int.tryParse(expCtrl.text.trim()) ?? 0;
+                                final updated = profile.copyWith(
+                                  displayName: nameCtrl.text.trim(),
+                                  phone: phoneCtrl.text.trim(),
+                                  email: emailCtrl.text.trim(),
+                                  region: regionCtrl.text.trim(),
+                                  district: districtCtrl.text.trim(),
+                                  streetAddress: streetCtrl.text.trim(),
+                                  passportOrPinfl: pinflCtrl.text.trim(),
+                                  lawyerSpecialization: isAdvocate
+                                      ? specCtrl.text.trim()
+                                      : profile.lawyerSpecialization,
+                                  lawyerLicenseNumber: isAdvocate
+                                      ? licenseCtrl.text.trim()
+                                      : profile.lawyerLicenseNumber,
+                                  lawyerExperienceYears: isAdvocate
+                                      ? (parsedExp > 0 ? parsedExp : 0)
+                                      : profile.lawyerExperienceYears,
+                                  lawyerBio: isAdvocate
+                                      ? bioCtrl.text.trim()
+                                      : profile.lawyerBio,
+                                );
+                                userProfile.value = updated;
+                                syncCurrentUserProfileToSupabase(updated);
+                                Navigator.pop(sheetContext);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      behavior: SnackBarBehavior.floating,
+                                      backgroundColor: YanColors.primaryNavy,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      content: const Text(
+                                        'Profil ma’lumotlari saqlandi',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -375,7 +466,6 @@ class _ProfilPageState extends State<ProfilPage> {
                           _ProfileTopHeader(
                             profile: profile,
                             onEditTap: () => _showEditProfileSheet(profile),
-                            onQrTap: () => _showQrShareModal(profile),
                           ),
                           const SizedBox(height: 12),
 
@@ -386,7 +476,6 @@ class _ProfilPageState extends State<ProfilPage> {
                             onPhotoTap: () => _openAvatarViewer(profile),
                             onCameraTap: () => _pickAvatarImage(profile),
                             onCopyField: _copyToClipboard,
-                            onQrShareTap: () => _showQrShareModal(profile),
                             onEditTap: () => _showEditProfileSheet(profile),
                           ),
                           const SizedBox(height: 14),
@@ -414,6 +503,21 @@ class _ProfilPageState extends State<ProfilPage> {
                             onEditTap: () => _showEditProfileSheet(profile),
                           ),
                           const SizedBox(height: 18),
+
+                          if (profile.roleType == UserRole.advokat ||
+                              profile.roleType == UserRole.yordamchi) ...<Widget>[
+                            const _SectionHeaderRow(
+                              title: 'Advokat profili ma’lumotlari',
+                              badgeText: 'Mijozlarga ko‘rinadi',
+                              icon: CupertinoIcons.briefcase_fill,
+                            ),
+                            const SizedBox(height: 10),
+                            _AdvocatePublicInfoCard(
+                              profile: profile,
+                              onEditTap: () => _showEditProfileSheet(profile),
+                            ),
+                            const SizedBox(height: 18),
+                          ],
 
                           // 4. Faol Rol va Kabinet Rejimi (4-Role Switcher)
                           const _SectionHeaderRow(
@@ -519,12 +623,21 @@ class _ProfilPageState extends State<ProfilPage> {
                                         label: 'Hisobdan chiqish',
                                         icon: CupertinoIcons.square_arrow_right,
                                         isDestructive: true,
-                                        onPressed: () {
-                                          Navigator.of(context).pushReplacement(
+                                        onPressed: () async {
+                                          try {
+                                            await Supabase.instance.client.auth
+                                                .signOut();
+                                          } catch (_) {}
+                                          userProfile.value =
+                                              const UserProfileData();
+                                          if (!context.mounted) return;
+                                          Navigator.of(context)
+                                              .pushAndRemoveUntil(
                                             MaterialPageRoute<void>(
                                               builder: (_) =>
                                                   const IntroScreen(),
                                             ),
+                                            (_) => false,
                                           );
                                         },
                                       ),
@@ -552,12 +665,10 @@ class _ProfileTopHeader extends StatelessWidget {
   const _ProfileTopHeader({
     required this.profile,
     required this.onEditTap,
-    required this.onQrTap,
   });
 
   final UserProfileData profile;
   final VoidCallback onEditTap;
-  final VoidCallback onQrTap;
 
   @override
   Widget build(BuildContext context) {
@@ -599,24 +710,6 @@ class _ProfileTopHeader extends StatelessWidget {
           ),
         ),
         GestureDetector(
-          onTap: onQrTap,
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: YanColors.white,
-              shape: BoxShape.circle,
-              border: Border.all(color: YanColors.border),
-            ),
-            child: const Icon(
-              CupertinoIcons.qrcode,
-              color: YanColors.primaryNavy,
-              size: 19,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        GestureDetector(
           onTap: onEditTap,
           child: Container(
             width: 40,
@@ -638,19 +731,12 @@ class _ProfileTopHeader extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Official YAN360 Passport / Şəxsiyyət Vəsiqəsi Style ID Card (Screenshot 4)
-// With rectangular photo, medium shining firm logo watermark at the background,
-// copyable FIN / Document fields, bottom QR share strip, and Mijoz VIP styling!
-// ═══════════════════════════════════════════════════════════════════════════
-
 class _YanPassportIdCard extends StatelessWidget {
   const _YanPassportIdCard({
     required this.profile,
     required this.onPhotoTap,
     required this.onCameraTap,
     required this.onCopyField,
-    required this.onQrShareTap,
     required this.onEditTap,
   });
 
@@ -658,236 +744,253 @@ class _YanPassportIdCard extends StatelessWidget {
   final VoidCallback onPhotoTap;
   final VoidCallback onCameraTap;
   final void Function(String label, String value) onCopyField;
-  final VoidCallback onQrShareTap;
   final VoidCallback onEditTap;
+
+  String _formatMemberSinceDate() {
+    DateTime? created;
+    try {
+      final raw = Supabase.instance.client.auth.currentUser?.createdAt;
+      if (raw != null && raw.trim().isNotEmpty) {
+        created = DateTime.tryParse(raw)?.toLocal();
+      }
+    } catch (_) {}
+    final dt = created ?? DateTime.now();
+    final dd = dt.day.toString().padLeft(2, '0');
+    final mm = dt.month.toString().padLeft(2, '0');
+    return '$dd.$mm.${dt.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isMijoz = profile.roleType == UserRole.mijoz;
-    final isAdvokat = profile.roleType == UserRole.advokat;
-    final passportNumber = profile.passportOrPinfl.trim().isNotEmpty
-        ? profile.passportOrPinfl.trim()
-        : (isAdvokat ? profile.lawyerLicenseNumber : 'AA 4829104');
-    final contractedLawyer = YanRoleDataCatalog.byId(
-      profile.contractedLawyerId,
-    );
+    final isAdvocate =
+        profile.roleType == UserRole.advokat ||
+        profile.roleType == UserRole.yordamchi;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: YanColors.white,
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(
-          color: isMijoz
-              ? YanColors.primaryBlue.withValues(alpha: 0.45)
-              : YanColors.border,
-          width: isMijoz ? 1.5 : 1.2,
-        ),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: YanColors.primaryNavy.withValues(
-              alpha: isMijoz ? 0.11 : 0.07,
+    final outerBg = isAdvocate
+        ? const <Color>[Color(0xFFF7FBFF), Color(0xFFE6F1FF), Color(0xFFDAE9FF)]
+        : const <Color>[Color(0xFFFFFFFF), Color(0xFFF5F9FF), Color(0xFFEBF4FF)];
+    final frameBorderColor = isAdvocate
+        ? const Color(0xFF93C5FD)
+        : const Color(0xFFCFE2FF);
+    final innerLineColor = isAdvocate
+        ? const Color(0xFF60A5FA)
+        : const Color(0xFFB5D2FF);
+    final crestColor = isAdvocate
+        ? const Color(0xFF0B1F3A)
+        : const Color(0xFF1677FF);
+    final inkPrimary = const Color(0xFF0B1F3A);
+    final inkMuted = const Color(0xFF64748B);
+
+    final nameParts = profile.displayName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    final firstLine = nameParts.isNotEmpty
+        ? nameParts.first.toUpperCase()
+        : 'YAN360';
+    final secondLine = nameParts.length > 1
+        ? nameParts.sublist(1).join(' ').toUpperCase()
+        : '';
+
+    final shortId = profile.clientId.trim().isNotEmpty
+        ? profile.clientId.trim()
+        : 'YAN-2026';
+    final subCaptionLabel = isAdvocate ? 'Litsenziya' : 'A’zo bo‘lgan sana';
+    final subCaptionValue = isAdvocate
+        ? (profile.lawyerLicenseNumber.trim().isNotEmpty
+              ? profile.lawyerLicenseNumber.trim()
+              : 'Tasdiqlangan')
+        : _formatMemberSinceDate();
+
+    return Column(
+      children: <Widget>[
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: outerBg,
             ),
-            blurRadius: 26,
-            offset: const Offset(0, 10),
+            border: Border.all(color: frameBorderColor, width: 1.2),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: const Color(0xFF0F172A).withValues(alpha: 0.08),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        children: <Widget>[
-          // Upper Passport Body with Guilloche Network + Shining Firm Logo Watermark
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
+          padding: const EdgeInsets.all(6),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
             child: Container(
-              width: double.infinity,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: isMijoz
-                      ? const <Color>[
-                          Color(0xFFEAF4FF),
-                          Color(0xFFD9ECFF),
-                          Color(0xFFE3F6F1),
-                        ]
-                      : const <Color>[
-                          Color(0xFFF3F8FF),
-                          Color(0xFFE5F0FF),
-                          Color(0xFFDCEBFA),
-                        ],
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: innerLineColor.withValues(alpha: 0.72),
+                  width: 1.0,
                 ),
               ),
               child: Stack(
                 children: <Widget>[
-                  // Official Passport Guilloche & Constellation Lines
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _PassportGuillochePainter(isVip: isMijoz),
-                      ),
-                    ),
-                  ),
-                  // Medium-size Shining YAN360 Firm Logo Watermark in the Background
                   Positioned(
-                    right: 44,
-                    top: 22,
-                    bottom: 12,
+                    right: -18,
+                    bottom: -20,
                     child: IgnorePointer(
-                      child: Container(
-                        width: 132,
-                        height: 132,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: <BoxShadow>[
-                            BoxShadow(
-                              color: YanColors.cyanAccent.withValues(
-                                alpha: isMijoz ? 0.22 : 0.14,
-                              ),
-                              blurRadius: 32,
-                              spreadRadius: 4,
-                            ),
-                          ],
-                        ),
-                        child: Opacity(
-                          opacity: isMijoz ? 0.22 : 0.16,
-                          child: Image.asset(
-                            'assets/logo.png',
-                            fit: BoxFit.contain,
-                            filterQuality: FilterQuality.high,
-                          ),
+                      child: Opacity(
+                        opacity: isAdvocate ? 0.095 : 0.065,
+                        child: Image.asset(
+                          'assets/logo.png',
+                          width: 158,
+                          height: 158,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
                         ),
                       ),
                     ),
                   ),
-                  // Foreground Passport Content
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        // Passport Top Header Row
                         Row(
                           children: <Widget>[
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Row(
-                                    children: <Widget>[
-                                      Text(
-                                        isMijoz
-                                            ? 'Shaxsiy Yuridik Guvohnoma • VIP'
-                                            : 'Shaxsiy Yuridik Guvohnoma',
-                                        style: const TextStyle(
-                                          color: YanColors.primaryNavy,
-                                          fontSize: 15.5,
-                                          fontWeight: FontWeight.w900,
-                                          letterSpacing: -0.2,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 5),
-                                      const Icon(
-                                        CupertinoIcons.checkmark_seal_fill,
-                                        size: 16,
-                                        color: YanColors.successGreen,
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    isMijoz
-                                        ? 'YAN360 PRIVILEGE PASSPORT • SHARTNOMA № ${profile.contractNumber ?? "SH-2026/084"}'
-                                        : 'YAN360 DIGITAL LEGAL ID • O‘ZBEKISTON RESPUBLIKASI',
-                                    style: const TextStyle(
-                                      color: YanColors.mutedText,
-                                      fontSize: 9.6,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
-                                vertical: 4,
-                              ),
+                              width: 34,
+                              height: 34,
                               decoration: BoxDecoration(
-                                color: isMijoz
-                                    ? YanColors.successGreen
-                                    : YanColors.primaryBlue,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                profile.roleType.shortBadge,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 9.8,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.4,
+                                shape: BoxShape.circle,
+                                color: crestColor.withValues(alpha: 0.1),
+                                border: Border.all(
+                                  color: crestColor.withValues(alpha: 0.45),
+                                  width: 1.1,
                                 ),
                               ),
+                              child: Icon(
+                                Icons.balance_rounded,
+                                size: 18,
+                                color: crestColor,
+                              ),
+                            ),
+                            const SizedBox(width: 9),
+                            Text(
+                              'YAN360ID',
+                              style: TextStyle(
+                                color: inkPrimary,
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.4,
+                              ),
+                            ),
+                            if (isAdvocate) ...<Widget>[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0B1F3A),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'ADVOCATE',
+                                  style: TextStyle(
+                                    color: Color(0xFF93C5FD),
+                                    fontSize: 8.8,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const Spacer(),
+                            _HolographicSealBadge(
+                              size: 38,
+                              isAdvocate: isAdvocate,
                             ),
                           ],
                         ),
-                        const SizedBox(height: 14),
-
-                        // Main Passport Row: Rectangular Photo on Left + Credentials & Copy Buttons on Right
+                        const SizedBox(height: 16),
                         Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: <Widget>[
-                            // Rectangular ID Portrait Photo (Screenshot 4 style)
                             GestureDetector(
                               onTap: onPhotoTap,
                               child: Stack(
                                 clipBehavior: Clip.none,
                                 children: <Widget>[
                                   Container(
-                                    width: 96,
-                                    height: 120,
+                                    width: 94,
+                                    height: 114,
                                     decoration: BoxDecoration(
-                                      color: YanColors.primaryNavy,
-                                      borderRadius: BorderRadius.circular(16),
+                                      color: isAdvocate
+                                          ? const Color(0xFFDBEAFE)
+                                          : const Color(0xFFEAF3FF),
+                                      borderRadius: BorderRadius.circular(14),
                                       border: Border.all(
-                                        color: isMijoz
-                                            ? YanColors.successGreen
-                                            : Colors.white,
-                                        width: 2.2,
-                                      ),
-                                      boxShadow: <BoxShadow>[
-                                        BoxShadow(
-                                          color: YanColors.primaryNavy
-                                              .withValues(alpha: 0.16),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 5),
+                                        color: frameBorderColor.withValues(
+                                          alpha: 0.7,
                                         ),
-                                      ],
+                                        width: 1,
+                                      ),
                                     ),
                                     child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(14),
+                                      borderRadius: BorderRadius.circular(13),
                                       child: profile.avatarFile != null
                                           ? Image.file(
                                               profile.avatarFile!,
                                               fit: BoxFit.cover,
                                               filterQuality: FilterQuality.high,
                                             )
+                                          : profile.avatarBase64.trim().isNotEmpty
+                                          ? Image.memory(
+                                              base64Decode(
+                                                profile.avatarBase64.trim(),
+                                              ),
+                                              fit: BoxFit.cover,
+                                              filterQuality: FilterQuality.high,
+                                              errorBuilder: (_, __, ___) =>
+                                                  Center(
+                                                    child: Text(
+                                                      profile.initials,
+                                                      style: TextStyle(
+                                                        color: inkPrimary
+                                                            .withValues(
+                                                              alpha: 0.75,
+                                                            ),
+                                                        fontSize: 16,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                      ),
+                                                    ),
+                                                  ),
+                                            )
                                           : Column(
                                               mainAxisAlignment:
                                                   MainAxisAlignment.center,
                                               children: <Widget>[
-                                                const Icon(
+                                                Icon(
                                                   CupertinoIcons.person_fill,
-                                                  color: Color(0xFF9ED8FF),
-                                                  size: 42,
+                                                  size: 44,
+                                                  color: isAdvocate
+                                                      ? const Color(0xFF475569)
+                                                      : const Color(0xFF64748B),
                                                 ),
-                                                const SizedBox(height: 4),
+                                                const SizedBox(height: 2),
                                                 Text(
                                                   profile.initials,
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w900,
-                                                    letterSpacing: 1.0,
+                                                  style: TextStyle(
+                                                    color: inkPrimary
+                                                        .withValues(
+                                                          alpha: 0.75,
+                                                        ),
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w800,
+                                                    letterSpacing: 1.2,
                                                   ),
                                                 ),
                                               ],
@@ -895,25 +998,34 @@ class _YanPassportIdCard extends StatelessWidget {
                                     ),
                                   ),
                                   Positioned(
-                                    right: -5,
-                                    bottom: -5,
+                                    right: -4,
+                                    bottom: -4,
                                     child: GestureDetector(
                                       onTap: onCameraTap,
                                       child: Container(
-                                        width: 28,
-                                        height: 28,
+                                        width: 26,
+                                        height: 26,
                                         decoration: BoxDecoration(
-                                          color: YanColors.primaryBlue,
+                                          color: Colors.white,
                                           shape: BoxShape.circle,
                                           border: Border.all(
-                                            color: Colors.white,
-                                            width: 1.8,
+                                            color: frameBorderColor,
+                                            width: 1.2,
                                           ),
+                                          boxShadow: <BoxShadow>[
+                                            BoxShadow(
+                                              color: Colors.black.withValues(
+                                                alpha: 0.08,
+                                              ),
+                                              blurRadius: 6,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
                                         ),
-                                        child: const Icon(
+                                        child: Icon(
                                           CupertinoIcons.camera_fill,
-                                          color: Colors.white,
-                                          size: 13,
+                                          color: inkPrimary,
+                                          size: 12.5,
                                         ),
                                       ),
                                     ),
@@ -921,104 +1033,106 @@ class _YanPassportIdCard extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 14),
-
-                            // Right Column: Holder Name, YAN-ID (FIN), Passport Number + Copy Buttons
+                            const SizedBox(width: 16),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: <Widget>[
-                                  const Text(
-                                    'FUQARO / F.I.SH.',
-                                    style: TextStyle(
-                                      color: YanColors.mutedText,
-                                      fontSize: 9.8,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 1),
                                   Text(
-                                    profile.displayName,
+                                    firstLine,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: YanColors.primaryNavy,
-                                      fontSize: 16.2,
-                                      fontWeight: FontWeight.w900,
+                                    style: TextStyle(
+                                      color: inkPrimary,
+                                      fontSize: 19.5,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.3,
+                                      height: 1.15,
+                                    ),
+                                  ),
+                                  if (secondLine.isNotEmpty)
+                                    Text(
+                                      secondLine,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: inkPrimary,
+                                        fontSize: 19.5,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.3,
+                                        height: 1.15,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 10),
+                                  GestureDetector(
+                                    onTap: () =>
+                                        onCopyField('YAN360ID', shortId),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: <Widget>[
+                                        Flexible(
+                                          child: Text(
+                                            shortId,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: isAdvocate
+                                                  ? const Color(0xFF1E3A8A)
+                                                  : const Color(0xFF4B5563),
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 0.6,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Icon(
+                                          CupertinoIcons.doc_on_doc,
+                                          size: 12,
+                                          color: inkMuted,
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-
-                                  // Row 1: YAN-ID / FIN with Copy Button
-                                  _PassportFieldWithCopy(
-                                    label: 'SHAXSIY YAN-ID (FIN)',
-                                    value: profile.clientId,
-                                    onCopy: () => onCopyField(
-                                      'YAN-ID',
-                                      profile.clientId,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 7),
-
-                                  // Row 2: Guvohnoma / Pasport raqami with Copy Button
-                                  _PassportFieldWithCopy(
-                                    label: isAdvokat
-                                        ? 'ADVOKAT LITSENZIYASI'
-                                        : 'GUVOHNOMA / PASPORT RAQAMI',
-                                    value: passportNumber,
-                                    onCopy: () => onCopyField(
-                                      'Pasport / Guvohnoma raqami',
-                                      passportNumber,
-                                    ),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: <Widget>[
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: <Widget>[
+                                            Text(
+                                              subCaptionLabel,
+                                              style: TextStyle(
+                                                color: inkMuted,
+                                                fontSize: 11.2,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 1),
+                                            Text(
+                                              subCaptionValue,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: inkPrimary,
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      _DualFoilMark(isAdvocate: isAdvocate),
+                                    ],
                                   ),
                                 ],
                               ),
                             ),
                           ],
                         ),
-
-                        // Special Mijoz VIP Diplomatic Privilege Strip inside the Passport Card
-                        if (isMijoz) ...<Widget>[
-                          const SizedBox(height: 13),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 11,
-                              vertical: 8.5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.78),
-                              borderRadius: BorderRadius.circular(13),
-                              border: Border.all(
-                                color: YanColors.successGreen.withValues(
-                                  alpha: 0.45,
-                                ),
-                              ),
-                            ),
-                            child: Row(
-                              children: <Widget>[
-                                const Icon(
-                                  CupertinoIcons.shield_lefthalf_fill,
-                                  color: YanColors.primaryBlue,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 7),
-                                Expanded(
-                                  child: Text(
-                                    'Biriktirilgan advokat: ${contractedLawyer.fullName} • Imtiyoz: -30% / -50%',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: YanColors.primaryNavy,
-                                      fontSize: 11.2,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
@@ -1026,136 +1140,43 @@ class _YanPassportIdCard extends StatelessWidget {
               ),
             ),
           ),
-
-          // Bottom White Action Bar (Matches "QR paylaş" in Screenshot 4)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            decoration: const BoxDecoration(
-              color: YanColors.white,
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(25)),
-            ),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onQrShareTap,
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        Icon(
-                          CupertinoIcons.qrcode,
-                          color: YanColors.primaryBlue,
-                          size: 18,
-                        ),
-                        SizedBox(width: 7),
-                        Text(
-                          'QR Guvohnomani ulashish',
-                          style: TextStyle(
-                            color: YanColors.primaryNavy,
-                            fontSize: 13.4,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Container(
-                  width: 1,
-                  height: 20,
-                  color: YanColors.divider,
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onEditTap,
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        Icon(
-                          CupertinoIcons.pencil_outline,
-                          color: YanColors.primaryBlue,
-                          size: 18,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'Ma’lumotni tahrirlash',
-                          style: TextStyle(
-                            color: YanColors.primaryNavy,
-                            fontSize: 13.2,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PassportFieldWithCopy extends StatelessWidget {
-  const _PassportFieldWithCopy({
-    required this.label,
-    required this.value,
-    required this.onCopy,
-  });
-
-  final String label;
-  final String value;
-  final VoidCallback onCopy;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: <Widget>[
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                label,
-                style: const TextStyle(
-                  color: YanColors.mutedText,
-                  fontSize: 9.8,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: YanColors.primaryNavy,
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ],
-          ),
         ),
-        GestureDetector(
-          onTap: onCopy,
-          child: Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.88),
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(color: YanColors.border),
-            ),
-            child: const Icon(
-              CupertinoIcons.doc_on_doc,
-              color: YanColors.primaryBlue,
-              size: 16,
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: GestureDetector(
+            onTap: onEditTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 11,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: YanColors.border),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Icon(
+                    CupertinoIcons.pencil,
+                    color: YanColors.primaryBlue,
+                    size: 16,
+                  ),
+                  SizedBox(width: 7),
+                  Text(
+                    'Ma’lumotni tahrirlash',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: YanColors.primaryNavy,
+                      fontSize: 12.8,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1164,51 +1185,111 @@ class _PassportFieldWithCopy extends StatelessWidget {
   }
 }
 
-class _PassportGuillochePainter extends CustomPainter {
-  const _PassportGuillochePainter({required this.isVip});
+class _HolographicSealBadge extends StatelessWidget {
+  const _HolographicSealBadge({required this.size, required this.isAdvocate});
 
-  final bool isVip;
+  final double size;
+  final bool isAdvocate;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final linePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.9
-      ..color = YanColors.primaryBlue.withValues(alpha: isVip ? 0.13 : 0.09);
-
-    final nodePaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = YanColors.white.withValues(alpha: 0.65);
-
-    final p1 = Path()
-      ..moveTo(size.width * 0.25, 0)
-      ..lineTo(size.width * 0.62, size.height * 0.45)
-      ..lineTo(size.width * 0.95, size.height * 0.18)
-      ..lineTo(size.width * 0.78, size.height);
-
-    final p2 = Path()
-      ..moveTo(size.width * 0.42, size.height)
-      ..lineTo(size.width * 0.62, size.height * 0.45)
-      ..lineTo(size.width, size.height * 0.68);
-
-    canvas.drawPath(p1, linePaint);
-    canvas.drawPath(p2, linePaint);
-
-    canvas.drawCircle(
-      Offset(size.width * 0.62, size.height * 0.45),
-      4.5,
-      nodePaint,
-    );
-    canvas.drawCircle(
-      Offset(size.width * 0.85, size.height * 0.28),
-      3.5,
-      nodePaint,
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isAdvocate
+              ? const <Color>[
+                  Color(0xFFDBEAFE),
+                  Color(0xFFC7D2FE),
+                  Color(0xFFE0F2FE),
+                  Color(0xFFBFDBFE),
+                ]
+              : const <Color>[
+                  Color(0xFFE0F2FE),
+                  Color(0xFFD8F3DC),
+                  Color(0xFFE9D5FF),
+                  Color(0xFFDBEAFE),
+                ],
+        ),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.9),
+          width: 1.5,
+        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: const Color(0xFF3B82F6).withValues(alpha: 0.14),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Icon(
+        Icons.verified_user_outlined,
+        size: size * 0.48,
+        color: Colors.white.withValues(alpha: 0.95),
+      ),
     );
   }
+}
+
+class _DualFoilMark extends StatelessWidget {
+  const _DualFoilMark({required this.isAdvocate});
+
+  final bool isAdvocate;
 
   @override
-  bool shouldRepaint(covariant _PassportGuillochePainter oldDelegate) =>
-      oldDelegate.isVip != isVip;
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isAdvocate
+                  ? const <Color>[Color(0xFFBFDBFE), Color(0xFFDDD6FE)]
+                  : const <Color>[Color(0xFFE9D5FF), Color(0xFFBAE6FD)],
+            ),
+            border: Border.all(color: Colors.white, width: 1),
+          ),
+          child: const Icon(
+            CupertinoIcons.shield_fill,
+            size: 11,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(width: 2),
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(7),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isAdvocate
+                  ? const <Color>[Color(0xFFC7D2FE), Color(0xFFBAE6FD)]
+                  : const <Color>[Color(0xFFD8F3DC), Color(0xFFE9D5FF)],
+            ),
+            border: Border.all(color: Colors.white, width: 1),
+          ),
+          child: const Icon(
+            CupertinoIcons.checkmark_alt,
+            size: 12,
+            color: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _ProfileReadinessAndStatsCard extends StatelessWidget {
@@ -1413,9 +1494,28 @@ class _CredentialsDetailCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final passportText = profile.passportOrPinfl.trim().isNotEmpty
-        ? profile.passportOrPinfl.trim()
-        : 'AA 4829104 (Tasdiqlangan)';
+    final hasAddress = profile.region.trim().isNotEmpty ||
+        profile.district.trim().isNotEmpty ||
+        profile.streetAddress.trim().isNotEmpty;
+    final addressText = hasAddress ? profile.fullAddress : 'Kiritilmagan';
+
+    final cleanDistrict = profile.district.trim();
+    final courtText = cleanDistrict.isNotEmpty
+        ? 'Fuqarolik ishlari bo‘yicha $cleanDistrict tumanlararo sudi'
+        : 'Kiritilmagan';
+
+    final cleanEmail = profile.email.trim();
+    final cleanPhone = profile.phone.trim();
+    final contactParts = <String>[
+      if (cleanEmail.isNotEmpty) cleanEmail,
+      if (cleanPhone.isNotEmpty) cleanPhone,
+    ];
+    final contactText =
+        contactParts.isNotEmpty ? contactParts.join(' • ') : 'Kiritilmagan';
+
+    final cleanPassport = profile.passportOrPinfl.trim();
+    final passportText =
+        cleanPassport.isNotEmpty ? cleanPassport : 'Kiritilmagan';
 
     return LiquidGlassWindow(
       padding: const EdgeInsets.all(16),
@@ -1426,8 +1526,10 @@ class _CredentialsDetailCard extends StatelessWidget {
             iconBg: const Color(0xFFE8F2FF),
             iconColor: YanColors.primaryBlue,
             label: 'Yashash manzili (Ariza va da’volar uchun)',
-            value: profile.fullAddress,
-            onCopy: () => onCopy('Manzil', profile.fullAddress),
+            value: addressText,
+            onCopy: hasAddress
+                ? () => onCopy('Manzil', addressText)
+                : onEditTap,
           ),
           const Divider(height: 18, color: YanColors.divider),
           _CredentialTile(
@@ -1435,9 +1537,10 @@ class _CredentialsDetailCard extends StatelessWidget {
             iconBg: const Color(0xFFE6FAF3),
             iconColor: YanColors.successGreen,
             label: 'Biriktirilgan sud hududi',
-            value:
-                'Fuqarolik ishlari bo‘yicha ${profile.district} tumanlararo sudi',
-            onCopy: () => onCopy('Sud hududi', profile.district),
+            value: courtText,
+            onCopy: cleanDistrict.isNotEmpty
+                ? () => onCopy('Sud hududi', courtText)
+                : onEditTap,
           ),
           const Divider(height: 18, color: YanColors.divider),
           _CredentialTile(
@@ -1445,8 +1548,10 @@ class _CredentialsDetailCard extends StatelessWidget {
             iconBg: const Color(0xFFEDF4FF),
             iconColor: YanColors.primaryBlue,
             label: 'Rasmiy elektron pochta va telefon',
-            value: '${profile.email} • ${profile.phone}',
-            onCopy: () => onCopy('Telefon', profile.phone),
+            value: contactText,
+            onCopy: cleanPhone.isNotEmpty
+                ? () => onCopy('Telefon', cleanPhone)
+                : onEditTap,
           ),
           const Divider(height: 18, color: YanColors.divider),
           _CredentialTile(
@@ -1455,7 +1560,9 @@ class _CredentialsDetailCard extends StatelessWidget {
             iconColor: YanColors.primaryNavy,
             label: 'Pasport seriyasi / JSHSHIR',
             value: passportText,
-            onCopy: () => onCopy('Pasport', passportText),
+            onCopy: cleanPassport.isNotEmpty
+                ? () => onCopy('Pasport', cleanPassport)
+                : onEditTap,
           ),
           const SizedBox(height: 14),
            SizedBox(
@@ -1551,14 +1658,119 @@ class _CredentialTile extends StatelessWidget {
   }
 }
 
+class _AdvocatePublicInfoCard extends StatelessWidget {
+  const _AdvocatePublicInfoCard({
+    required this.profile,
+    required this.onEditTap,
+  });
+
+  final UserProfileData profile;
+  final VoidCallback onEditTap;
+
+  Widget _row(String label, String value) {
+    final isEmpty = value.trim().isEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            width: 124,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: YanColors.mutedText,
+                fontSize: 12.2,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              isEmpty ? 'Kiritilmagan' : value.trim(),
+              style: TextStyle(
+                color: isEmpty ? YanColors.subtleText : YanColors.primaryNavy,
+                fontSize: 12.8,
+                fontWeight: isEmpty ? FontWeight.w500 : FontWeight.w700,
+                fontStyle: isEmpty ? FontStyle.italic : FontStyle.normal,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bioText = profile.lawyerBio.trim();
+    return LiquidGlassWindow(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _row('Mutaxassisligi', profile.lawyerSpecialization),
+          _row('Litsenziya raqami', profile.lawyerLicenseNumber),
+          _row(
+            'Ish tajribasi',
+            profile.lawyerExperienceYears > 0
+                ? '${profile.lawyerExperienceYears} yil'
+                : '',
+          ),
+          _row('Hudud', profile.region),
+          const Divider(height: 16, color: YanColors.divider),
+          const Text(
+            'Advokat haqida (Bio)',
+            style: TextStyle(
+              color: YanColors.mutedText,
+              fontSize: 11.8,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            bioText.isEmpty
+                ? 'Hali kiritilmagan. Mijozlar siz haqingizda bilishi uchun 100 so‘zgacha bio qo‘shing.'
+                : bioText,
+            style: TextStyle(
+              color: bioText.isEmpty
+                  ? YanColors.subtleText
+                  : YanColors.primaryNavy,
+              fontSize: 12.8,
+              fontWeight: FontWeight.w500,
+              fontStyle: bioText.isEmpty ? FontStyle.italic : FontStyle.normal,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: LiquidActionButton(
+              label: 'Advokat ma’lumotlarini tahrirlash',
+              icon: CupertinoIcons.pencil,
+              isPrimary: false,
+              compact: true,
+              onPressed: onEditTap,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProfileInputField extends StatelessWidget {
   const _ProfileInputField({
     required this.label,
     required this.controller,
+    this.placeholder,
+    this.keyboardType,
   });
 
   final String label;
   final TextEditingController controller;
+  final String? placeholder;
+  final TextInputType? keyboardType;
 
   @override
   Widget build(BuildContext context) {
@@ -1576,6 +1788,12 @@ class _ProfileInputField extends StatelessWidget {
         const SizedBox(height: 4),
         CupertinoTextField(
           controller: controller,
+          placeholder: placeholder,
+          placeholderStyle: const TextStyle(
+            color: YanColors.subtleText,
+            fontSize: 13.5,
+          ),
+          keyboardType: keyboardType,
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
           style: const TextStyle(
             color: YanColors.primaryNavy,

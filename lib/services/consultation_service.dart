@@ -594,36 +594,23 @@ class ConsultationRepository {
   }
 
   /// Advocate action: Block a full day, a specific hour, or an exact 19-min slot.
-  Future<void> blockTime({
+  /// Returns null on success, or an error message if Supabase rejected the write.
+  Future<String?> blockTime({
     required String advocateId,
     required String blockType, // 'day' | 'hour' | 'slot'
     required String dateKey,
     int? hourValue,
     int? slotIndex,
   }) async {
-    final localId = 'BLK-${DateTime.now().microsecondsSinceEpoch}';
-    final entry = AdvocateBlockedSlot(
-      id: localId,
-      advocateId: advocateId,
-      blockType: blockType,
-      dateKey: dateKey,
-      hourValue: blockType == 'day' ? null : hourValue,
-      slotIndex: blockType == 'slot' ? slotIndex : null,
-      createdAt: DateTime.now(),
-    );
-
-    // Optimistic local update
-    final current = List<AdvocateBlockedSlot>.from(blockedSlots.value);
-    if (!current.any((e) => e.uniqueKey == entry.uniqueKey)) {
-      current.add(entry);
-      blockedSlots.value = current;
-      await _saveLocalCache();
+    final cleanAdvId = advocateId.trim();
+    if (cleanAdvId.isEmpty) {
+      return 'Advokat ID topilmadi. Iltimos, qayta tizimga kiring.';
     }
 
     try {
       await Supabase.instance.client.from('advocate_blocked_slots').insert(
         <String, dynamic>{
-          'advocate_id': advocateId,
+          'advocate_id': cleanAdvId,
           'block_type': blockType,
           'date_key': dateKey,
           'hour_value': blockType == 'day' ? null : hourValue,
@@ -631,36 +618,33 @@ class ConsultationRepository {
         },
       );
       await refreshBlockedSlots();
+      return null;
     } catch (e) {
-      debugPrint('blockTime Supabase insert warning: $e');
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('duplicate') || msg.contains('unique')) {
+        await refreshBlockedSlots();
+        return null;
+      }
+      debugPrint('blockTime Supabase error: $e');
+      return 'Serverga saqlab bo‘lmadi (Supabase SQL v2 ni ishga tushiring): $e';
     }
   }
 
   /// Advocate action: Cancel/remove a previously blocked day, hour, or slot.
-  Future<void> unblockTime({
+  /// Returns null on success, or an error message if Supabase rejected the delete.
+  Future<String?> unblockTime({
     required String advocateId,
     required String blockType,
     required String dateKey,
     int? hourValue,
     int? slotIndex,
   }) async {
-    final current = List<AdvocateBlockedSlot>.from(blockedSlots.value);
-    current.removeWhere(
-      (b) =>
-          YanRoleDataCatalog.isSameParticipant(b.advocateId, advocateId) &&
-          b.blockType == blockType &&
-          b.dateKey == dateKey &&
-          (blockType == 'day' || b.hourValue == hourValue) &&
-          (blockType != 'slot' || b.slotIndex == slotIndex),
-    );
-    blockedSlots.value = current;
-    await _saveLocalCache();
-
+    final cleanAdvId = advocateId.trim();
     try {
       var query = Supabase.instance.client
           .from('advocate_blocked_slots')
           .delete()
-          .eq('advocate_id', advocateId)
+          .eq('advocate_id', cleanAdvId)
           .eq('block_type', blockType)
           .eq('date_key', dateKey);
       if (blockType != 'day' && hourValue != null) {
@@ -671,13 +655,15 @@ class ConsultationRepository {
       }
       await query;
       await refreshBlockedSlots();
+      return null;
     } catch (e) {
-      debugPrint('unblockTime Supabase delete warning: $e');
+      debugPrint('unblockTime Supabase error: $e');
+      return 'Serverdan o‘chirib bo‘lmadi: $e';
     }
   }
 
-  Future<void> unblockByEntry(AdvocateBlockedSlot entry) async {
-    await unblockTime(
+  Future<String?> unblockByEntry(AdvocateBlockedSlot entry) async {
+    return unblockTime(
       advocateId: entry.advocateId,
       blockType: entry.blockType,
       dateKey: entry.dateKey,
@@ -759,14 +745,27 @@ class ConsultationRepository {
           .insert(booking.toJson());
     } catch (e) {
       final msg = e.toString().toLowerCase();
+      if (msg.contains('slot_blocked_by_advocate') || msg.contains('yopgan')) {
+        await refreshBlockedSlots();
+        return const ConsultationBookingResult(
+          success: false,
+          errorMessage:
+              'Kechirasiz, advokat ushbu kun yoki soatni yopgan. Iltimos, boshqa vaqt tanlang.',
+        );
+      }
       if (msg.contains('duplicate') || msg.contains('unique')) {
+        await refreshConsultations();
         return const ConsultationBookingResult(
           success: false,
           errorMessage:
               'Ushbu vaqt boshqa mijoz tomonidan band qilindi. Boshqa vaqt tanlang.',
         );
       }
-      debugPrint('bookConsultation Supabase insert warning: $e');
+      debugPrint('bookConsultation Supabase insert error: $e');
+      return ConsultationBookingResult(
+        success: false,
+        errorMessage: 'Serverga band qilishda xatolik: $e',
+      );
     }
 
     final updated = List<ConsultationBooking>.from(consultations.value)

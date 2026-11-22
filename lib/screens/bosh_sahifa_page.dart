@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,16 +7,19 @@ import 'package:open_filex/open_filex.dart';
 
 import '../services/alimony_claim_document_service.dart';
 import '../services/family_claim_document_service.dart';
-import '../shared/profile_widgets.dart';
 import '../shared/user_profile.dart';
-import 'services/advokat_yollash_page.dart';
 import 'services/consultation_booking_page.dart';
 import 'services/alimony_claim_page.dart';
 import 'services/family_claim_page.dart';
 import 'services/lawyer_draft_request_page.dart';
 
 class BoshSahifaPage extends StatefulWidget {
-  const BoshSahifaPage({super.key});
+  const BoshSahifaPage({
+    super.key,
+    this.onOpenAdvokatxona,
+  });
+
+  final VoidCallback? onOpenAdvokatxona;
 
   @override
   State<BoshSahifaPage> createState() => _BoshSahifaPageState();
@@ -325,14 +330,9 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
     }
 
     if (service.title == 'Advokat yollash') {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => AdvokatYollashPage(
-            initialRepresentation: true,
-            onSubmit: _handleLawyerOrConsultSubmit,
-          ),
-        ),
-      );
+      if (widget.onOpenAdvokatxona != null) {
+        widget.onOpenAdvokatxona!();
+      }
       return;
     }
   }
@@ -728,11 +728,11 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
           sliver: SliverToBoxAdapter(child: _buildBrandHeader()),
         ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+          padding: const EdgeInsets.fromLTRB(18, 2, 18, 0),
           sliver: SliverToBoxAdapter(child: _buildMiniProfileCard()),
         ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
           sliver: SliverToBoxAdapter(
             child: _buildSectionHeading(visibleServices.length),
           ),
@@ -927,45 +927,19 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
             return ValueListenableBuilder<List<ActivityEntry>>(
               valueListenable: ActivityHistoryRepository.instance.entries,
               builder: (context, history, _) {
-                final docxCount = docs.isNotEmpty
-                    ? docs.length
-                    : profile.savedDocuments;
-                final totalArizalar = docxCount + profile.activeApplications;
-                final lawyerCount =
-                    24 +
-                    history
-                        .where(
-                          (e) =>
-                              e.category == ActivityCategory.lawyer ||
-                              e.category == ActivityCategory.consultation,
-                        )
-                        .length;
-                final historyCount = 64 + history.length;
-
                 return _MiniProfileCard(
                   profile: profile,
-                  totalArizalarCount: totalArizalar,
-                  docxCount: docxCount,
-                  lawyerCount: lawyerCount,
-                  historyCount: historyCount,
-                  onArizalarTap: () => _showStatsDetailModal(
-                    title: 'Arizalar va hujjatlar ($totalArizalar ta)',
-                    subtitle:
-                        'Yaratilgan rasmiy DOCX da’vo arizalari va yuristga yuborilgan murojaatlar',
-                    docs: docs,
-                    entries: history,
-                  ),
                   onProfileTap: () => _showStatsDetailModal(
                     title: '${profile.displayName} — Huquqiy profil',
                     subtitle:
-                        'ID: ${profile.clientId} • ${profile.fullAddress} • Tayyorlik: ${profile.completionPercent}',
+                        'ID: ${profile.clientId} • ${profile.fullAddress} • Profil to‘liqligi: ${profile.completionPercent}',
                     docs: docs,
                     entries: history,
                   ),
                   onReadinessTap: () => _showStatsDetailModal(
-                    title: 'Profil tayyorligi: ${profile.completionPercent}',
+                    title: 'Profil to‘liqligi: ${profile.completionPercent}',
                     subtitle: profile.missingProfileItems.isEmpty
-                        ? 'Barcha shaxsiy va yuridik rekvizitlar to‘liq kiritilgan (Mukammal).'
+                        ? 'Barcha shaxsiy va yuridik rekvizitlar to‘liq kiritilgan.'
                         : 'To‘ldirilmagan maydonlar: ${profile.missingProfileItems.join(", ")}',
                     docs: docs,
                     entries: history,
@@ -1151,352 +1125,175 @@ class _BoshSahifaPageState extends State<BoshSahifaPage> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Selective Liquid Glass Profile & Metrics Banner (Matches Reference 1-to-1)
+// Minimalist Legal-Tech Home Profile Header (Reference-Matched Design)
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _MiniProfileCard extends StatelessWidget {
   const _MiniProfileCard({
     required this.profile,
-    required this.totalArizalarCount,
-    required this.docxCount,
-    required this.lawyerCount,
-    required this.historyCount,
-    required this.onArizalarTap,
     required this.onProfileTap,
     required this.onReadinessTap,
   });
 
   final UserProfileData profile;
-  final int totalArizalarCount;
-  final int docxCount;
-  final int lawyerCount;
-  final int historyCount;
-  final VoidCallback onArizalarTap;
   final VoidCallback onProfileTap;
   final VoidCallback onReadinessTap;
 
-  Color _readinessColor(double value) {
-    final pct = value * 100;
-    if (pct < 50) return YanColors.destructiveRed;
-    if (pct < 80) return const Color(0xFFF59E0B);
-    return YanColors.successGreen; // #10C995 for 80%+
-  }
-
-  String _readinessLabel(double value) {
-    final pct = value * 100;
-    if (pct < 50) return 'Past';
-    if (pct < 80) return 'O‘rtacha';
-    return 'Mukammal';
-  }
+  static const Color _primaryNavy = Color(0xFF102B50);
+  static const Color _mutedLabel = Color(0xFF5A6B82);
+  static const Color _completionGreen = Color(0xFF16A36A);
+  static const Color _verifiedBlue = Color(0xFF1685E8);
 
   @override
   Widget build(BuildContext context) {
-    final completion = profile.profileCompletion;
-    final ringColor = _readinessColor(completion);
-    final statusText = _readinessLabel(completion);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final ringSize = (screenWidth * 0.21).clamp(76.0, 88.0);
+    const strokeWidth = 5.2;
+    const whiteGap = 3.5;
+    final avatarSize = ringSize - (strokeWidth * 2) - (whiteGap * 2);
+    final initialsFontSize = (avatarSize * 0.36).clamp(20.0, 24.0);
+    final completion = profile.profileCompletion.clamp(0.0, 1.0);
+    final displayName = profile.displayName.trim().isNotEmpty
+        ? profile.displayName.trim()
+        : profile.firstName;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.90),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white, width: 1.4),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: YanColors.primaryNavy.withValues(alpha: 0.065),
-            blurRadius: 22,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          Row(
-            children: <Widget>[
-              // 1. Left: Arizalar va hujjatlar
-              Expanded(
-                flex: 11,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onArizalarTap,
-                  child: Row(
-                    children: <Widget>[
-                      Container(
-                        width: 40,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: YanColors.lightBlue,
-                          borderRadius: BorderRadius.circular(13),
-                          border: Border.all(color: YanColors.border),
-                        ),
-                        child: const Icon(
-                          CupertinoIcons.doc_text_fill,
-                          color: YanColors.cyanAccent,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 9),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Row(
-                              children: <Widget>[
-                                Text(
-                                  '$totalArizalarCount',
-                                  style: const TextStyle(
-                                    color: YanColors.primaryNavy,
-                                    fontSize: 21,
-                                    fontWeight: FontWeight.w900,
-                                    height: 1.0,
-                                  ),
-                                ),
-                                const SizedBox(width: 3),
-                                const Icon(
-                                  CupertinoIcons.chevron_right,
-                                  size: 13,
-                                  color: YanColors.primaryNavy,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 3),
-                            const Text(
-                              'Arizalar va\nhujjatlar',
-                              style: TextStyle(
-                                color: YanColors.primaryNavy,
-                                fontSize: 10.6,
-                                fontWeight: FontWeight.w600,
-                                height: 1.15,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+          // 1. Circular Profile Avatar + Dynamic Royal-Blue Progress Ring
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onProfileTap,
+            child: SizedBox(
+              width: ringSize,
+              height: ringSize,
+              child: Stack(
+                alignment: Alignment.center,
+                children: <Widget>[
+                  CustomPaint(
+                    size: Size.square(ringSize),
+                    painter: _ProfileCompletionRingPainter(
+                      progress: completion,
+                      strokeWidth: strokeWidth,
+                    ),
                   ),
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 48,
-                color: YanColors.divider,
-              ),
-              // 2. Center: User Profile Avatar (NO) + Verified Checkmark + Name
-              Expanded(
-                flex: 9,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onProfileTap,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Stack(
-                        clipBehavior: Clip.none,
-                        children: <Widget>[
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: YanColors.primaryNavy,
-                              border: Border.all(
-                                color: YanColors.cyanAccent,
-                                width: 2.2,
-                              ),
-                              boxShadow: <BoxShadow>[
-                                BoxShadow(
-                                  color: YanColors.cyanAccent.withValues(
-                                    alpha: 0.25,
-                                  ),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: ClipOval(
-                              child: buildAvatarContent(
-                                profile,
-                                initialsSize: 17,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            right: -2,
-                            bottom: -2,
-                            child: Container(
-                              width: 18,
-                              height: 18,
-                              decoration: BoxDecoration(
-                                color: YanColors.primaryBlue,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: const Icon(
-                                CupertinoIcons.checkmark_alt,
-                                color: Colors.white,
-                                size: 11,
-                              ),
-                            ),
-                          ),
+                  Container(
+                    width: avatarSize,
+                    height: avatarSize,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        center: Alignment(-0.32, -0.42),
+                        radius: 1.05,
+                        colors: <Color>[
+                          Color(0xFF17477F),
+                          Color(0xFF0C2A52),
+                          Color(0xFF071B36),
                         ],
+                        stops: <double>[0.0, 0.56, 1.0],
                       ),
-                      const SizedBox(height: 5),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Flexible(
-                            child: Text(
-                              profile.firstName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: YanColors.primaryNavy,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 2),
-                          const Icon(
-                            CupertinoIcons.chevron_right,
-                            size: 11,
-                            color: YanColors.primaryNavy,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 48,
-                color: YanColors.divider,
-              ),
-              // 3. Right: Dynamic Circular Profil Tayyorligi Ring + Mukammal Pill
-              Expanded(
-                flex: 12,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onReadinessTap,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Row(
-                      children: <Widget>[
-                        SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: <Widget>[
-                              SizedBox(
-                                width: 46,
-                                height: 46,
-                                child: CircularProgressIndicator(
-                                  value: completion.clamp(0.08, 1.0),
-                                  strokeWidth: 4.5,
-                                  backgroundColor: ringColor.withValues(
-                                    alpha: 0.18,
-                                  ),
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    ringColor,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                profile.completionPercent,
-                                style: const TextStyle(
-                                  color: YanColors.primaryNavy,
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              const Text(
-                                'Profil\ntayyorligi',
+                    ),
+                    child: ClipOval(
+                      child: profile.avatarFile != null
+                          ? Image.file(
+                              profile.avatarFile!,
+                              fit: BoxFit.cover,
+                              filterQuality: FilterQuality.high,
+                              isAntiAlias: true,
+                              width: avatarSize,
+                              height: avatarSize,
+                            )
+                          : Center(
+                              child: Text(
+                                profile.initials,
                                 style: TextStyle(
-                                  color: YanColors.primaryNavy,
-                                  fontSize: 10.6,
+                                  color: Colors.white,
+                                  fontSize: initialsFontSize,
                                   fontWeight: FontWeight.w700,
-                                  height: 1.15,
+                                  letterSpacing: 0.8,
+                                  height: 1.0,
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 2.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: ringColor.withValues(alpha: 0.16),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: ringColor.withValues(alpha: 0.55),
-                                  ),
-                                ),
-                                child: Text(
-                                  statusText,
-                                  style: TextStyle(
-                                    color: ringColor == YanColors.successGreen
-                                        ? const Color(0xFF098562)
-                                        : ringColor,
-                                    fontSize: 9.6,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 9),
+
+          // 2. Dynamic Profile Completion Indicator ("Profil to‘liqligi 100%")
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onReadinessTap,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: <Widget>[
+                const Text(
+                  'Profil to‘liqligi',
+                  style: TextStyle(
+                    color: _mutedLabel,
+                    fontSize: 12.8,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.1,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  profile.completionPercent,
+                  style: const TextStyle(
+                    color: _completionGreen,
+                    fontSize: 13.2,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 3),
+
+          // 3. Centered Full Name + Conditional Blue Verified Badge
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onProfileTap,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                Flexible(
+                  child: Text(
+                    displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: _primaryNavy,
+                      fontSize: 18.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
+                      height: 1.15,
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Bottom Row: 3 Clickable Quick-Stat Pills (DOCX, Yurist, Tarix)
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: _HeaderStatPill(
-                  icon: CupertinoIcons.doc_text_fill,
-                  iconColor: YanColors.cyanAccent,
-                  label: 'DOCX: $docxCount ta',
-                  onTap: onArizalarTap,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _HeaderStatPill(
-                  icon: CupertinoIcons.videocam_fill,
-                  iconColor: YanColors.cyanAccent,
-                  label: 'Yurist: $lawyerCount ta',
-                  onTap: onProfileTap,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _HeaderStatPill(
-                  icon: CupertinoIcons.checkmark_circle_fill,
-                  iconColor: YanColors.successGreen,
-                  label: 'Tarix: $historyCount ta',
-                  onTap: onReadinessTap,
-                ),
-              ),
-            ],
+                if (profile.isVerified) ...<Widget>[
+                  const SizedBox(width: 5),
+                  const Icon(
+                    Icons.verified_rounded,
+                    color: _verifiedBlue,
+                    size: 18,
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
@@ -1504,58 +1301,77 @@ class _MiniProfileCard extends StatelessWidget {
   }
 }
 
-class _HeaderStatPill extends StatelessWidget {
-  const _HeaderStatPill({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.onTap,
+class _ProfileCompletionRingPainter extends CustomPainter {
+  const _ProfileCompletionRingPainter({
+    required this.progress,
+    required this.strokeWidth,
   });
 
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-  final VoidCallback onTap;
+  final double progress;
+  final double strokeWidth;
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 7.5, horizontal: 8),
-        decoration: BoxDecoration(
-          color: YanColors.lightBlue.withValues(alpha: 0.72),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white, width: 1.1),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: YanColors.primaryNavy.withValues(alpha: 0.035),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Icon(icon, size: 13.5, color: iconColor),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: YanColors.primaryNavy,
-                  fontSize: 11.0,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (math.min(size.width, size.height) - strokeWidth) / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+
+    // Subtle soft ice-blue track
+    final trackPaint = Paint()
+      ..color = const Color(0xFFDCE8F6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+    canvas.drawCircle(center, radius, trackPaint);
+
+    final clamped = progress.clamp(0.0, 1.0);
+    if (clamped <= 0.0) return;
+
+    const startAngle = -math.pi / 2;
+    // Slight epsilon at 100% keeps rounded-cap SweepGradient seam completely smooth
+    final sweepAngle = clamped >= 0.999
+        ? (math.pi * 2) - 0.001
+        : math.pi * 2 * clamped;
+
+    // Subtle, elegant royal-blue glow behind the progress arc
+    final glowPaint = Paint()
+      ..color = const Color(0xFF0866D9).withValues(alpha: 0.22)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth + 2.0
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0)
+      ..isAntiAlias = true;
+    canvas.drawArc(rect, startAngle, sweepAngle, false, glowPaint);
+
+    // Royal blue (#0866D9) -> lighter blue (#3295F5) progress ring with rounded ends
+    final gradient = SweepGradient(
+      startAngle: 0.0,
+      endAngle: math.pi * 2,
+      colors: const <Color>[
+        Color(0xFF0866D9),
+        Color(0xFF1A7CE6),
+        Color(0xFF3295F5),
+        Color(0xFF0866D9),
+      ],
+      stops: const <double>[0.0, 0.45, 0.85, 1.0],
+      transform: const GradientRotation(-math.pi / 2),
     );
+
+    final progressPaint = Paint()
+      ..shader = gradient.createShader(rect)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+
+    canvas.drawArc(rect, startAngle, sweepAngle, false, progressPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ProfileCompletionRingPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.strokeWidth != strokeWidth;
   }
 }
 
