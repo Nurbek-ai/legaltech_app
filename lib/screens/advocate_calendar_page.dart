@@ -85,7 +85,7 @@ class _AdvocateCalendarPageState extends State<AdvocateCalendarPage> {
         _showToast(
           currentlyBlocked
               ? 'Kun qayta ochildi. Mijozlar endi ushbu kunni band qila oladi.'
-              : 'Kun yopildi va Supabase’ga saqlandi.',
+              : 'Kun yopildi va saqlandi.',
         );
       }
     } finally {

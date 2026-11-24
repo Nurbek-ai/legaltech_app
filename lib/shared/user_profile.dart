@@ -591,6 +591,7 @@ class LawyerDirectoryProfile {
     required this.bio,
     required this.feedbacks,
     this.isVerifiedPartner = true,
+    this.isOnline = false,
     this.avatarBase64 = '',
     this.avatarUrl = '',
   });
@@ -614,6 +615,7 @@ class LawyerDirectoryProfile {
   final String bio;
   final List<LawyerFeedbackItem> feedbacks;
   final bool isVerifiedPartner;
+  final bool isOnline;
   final String avatarBase64;
   final String avatarUrl;
 
@@ -634,6 +636,7 @@ class LawyerDirectoryProfile {
     int? feedbackCount,
     int? wonCasesCount,
     List<LawyerFeedbackItem>? feedbacks,
+    bool? isOnline,
     String? avatarBase64,
     String? avatarUrl,
   }) {
@@ -657,6 +660,7 @@ class LawyerDirectoryProfile {
       bio: bio,
       feedbacks: feedbacks ?? this.feedbacks,
       isVerifiedPartner: isVerifiedPartner,
+      isOnline: isOnline ?? this.isOnline,
       avatarBase64: avatarBase64 ?? this.avatarBase64,
       avatarUrl: avatarUrl ?? this.avatarUrl,
     );
@@ -702,6 +706,7 @@ class LawyerDirectoryProfile {
       bio: cleanText(row['bio']),
       feedbacks: const <LawyerFeedbackItem>[],
       isVerifiedPartner: row['is_verified'] != false,
+      isOnline: row['is_online'] == true,
       avatarBase64: cleanText(row['avatar_base64']),
       avatarUrl: cleanText(row['avatar_url']),
     );
@@ -1023,6 +1028,10 @@ class YanRoleDataCatalog {
   /// where `role = 'advocate'`. Zero fake accounts!
   static final ValueNotifier<List<LawyerDirectoryProfile>> registeredLawyers =
       ValueNotifier<List<LawyerDirectoryProfile>>(<LawyerDirectoryProfile>[]);
+
+  /// Registered by main.dart on startup to sync advocates with decoded
+  /// profile envelopes (avatars, bios, ratings, and real online presence).
+  static Future<List<LawyerDirectoryProfile>> Function()? refreshRegisteredLawyers;
 
   static List<LawyerDirectoryProfile> get lawyers => registeredLawyers.value;
 

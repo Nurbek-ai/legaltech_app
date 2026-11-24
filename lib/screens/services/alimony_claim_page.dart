@@ -43,17 +43,14 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
   // THEME
   // ===============================================================
 
-  static const Color _background = Color(0xFF061827);
-  static const Color _background2 = Color(0xFF0B2236);
-
-  static const Color _primary = Color(0xFF7B61FF);
-  static const Color _primaryLight = Color(0xFF9B87FF);
-
-  static const Color _pink = Color(0xFFD95C9E);
-  static const Color _cyan = Color(0xFF56D8E8);
-
-  static const Color _white = Colors.white;
-  static const Color _muted = Color(0xFF9FB1C3);
+  static const Color _background = Color(0xFFF5F8FC);
+  static const Color _surface = Color(0xFFFFFFFF);
+  static const Color _primary = Color(0xFF1677D2);
+  static const Color _primarySoft = Color(0xFFEAF3FC);
+  static const Color _navy = Color(0xFF102B50);
+  static const Color _muted = Color(0xFF64748B);
+  static const Color _border = Color(0xFFDCE6F2);
+  static const Color _success = Color(0xFF10B981);
 
   // ===============================================================
   // STEPS
@@ -290,22 +287,25 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
       ..showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          backgroundColor: const Color(0xFF331D2B),
+          backgroundColor: _navy,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
           ),
           content: Row(
             children: [
               const Icon(
                 Icons.error_outline_rounded,
-                color: Color(0xFFFF8BA7),
+                color: Color(0xFFFCA5A5),
+                size: 20,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   message,
                   style: const TextStyle(
                     color: Colors.white,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -358,9 +358,11 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
+            colorScheme: const ColorScheme.light(
               primary: _primary,
-              surface: Color(0xFF122B41),
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: _navy,
             ),
           ),
           child: child!,
@@ -522,105 +524,103 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
       backgroundColor: Colors.transparent,
       builder: (_) {
         return Container(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 34),
+          padding: const EdgeInsets.fromLTRB(24, 14, 24, 32),
           decoration: const BoxDecoration(
-            color: Color(0xFF10283D),
+            color: _surface,
             borderRadius: BorderRadius.vertical(
-              top: Radius.circular(32),
+              top: Radius.circular(28),
             ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-              const SizedBox(height: 28),
-
-              Container(
-                width: 76,
-                height: 76,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF7B61FF),
-                      Color(0xFFD95C9E),
-                    ],
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 42,
+                  height: 4.5,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFCBD5E1),
+                    borderRadius: BorderRadius.circular(99),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _primary.withValues(alpha: 0.35),
-                      blurRadius: 30,
-                    ),
-                  ],
                 ),
-                child: const Icon(
-                  Icons.check_rounded,
-                  color: Colors.white,
-                  size: 42,
-                ),
-              ),
-
-              const SizedBox(height: 22),
-
-              const Text(
-                'Ariza hujjati tayyor',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-
-              const SizedBox(height: 10),
-
-              const Text(
-                'Tayyor DOCX hujjat Hujjatlar boʻlimiga saqlandi.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _muted,
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-              ),
-
-              const SizedBox(height: 26),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).pop();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 17,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+                const SizedBox(height: 26),
+                Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFECFDF5),
+                    border: Border.all(
+                      color: _success.withValues(alpha: 0.25),
+                      width: 2,
                     ),
                   ),
-                  child: const Text(
-                    'Tayyor',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
+                  child: Center(
+                    child: Container(
+                      width: 54,
+                      height: 54,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _success,
+                      ),
+                      child: const Icon(
+                        Icons.check_rounded,
+                        color: Colors.white,
+                        size: 32,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 20),
+                const Text(
+                  'Ariza hujjati tayyor',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _navy,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Tayyor DOCX hujjat Arizalarim boʻlimiga saqlandi. Uni Arizalarim sahifasidan ochib koʻrishingiz mumkin.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _muted,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 26),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).pop();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                    child: const Text(
+                      'Tayyor',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -676,52 +676,26 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
   // ===============================================================
 
   Widget _buildBackground() {
-    return Stack(
-      children: [
-        Positioned(
-          top: -100,
-          right: -90,
-          child: _Glow(
-            color: _primary,
-            size: 260,
-          ),
-        ),
-        Positioned(
-          top: 280,
-          left: -120,
-          child: _Glow(
-            color: _pink,
-            size: 240,
-          ),
-        ),
-        Positioned(
-          bottom: -100,
-          right: -80,
-          child: _Glow(
-            color: _cyan,
-            size: 220,
-          ),
-        ),
-      ],
-    );
+    return const SizedBox.shrink();
   }
 
-  // ===============================================================
-  // TOP BAR
-  // ===============================================================
-
   Widget _buildTopBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 10, 18, 6),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      decoration: const BoxDecoration(
+        color: _surface,
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFE8EFF7)),
+        ),
+      ),
       child: Row(
         children: [
           _GlassButton(
-            icon: Icons.arrow_back_ios_new_rounded,
+            icon: Icons.arrow_back_rounded,
             onTap: _back,
+            size: 42,
           ),
-
-          const SizedBox(width: 14),
-
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -731,42 +705,43 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
+                    color: _navy,
+                    fontSize: 16.5,
                     fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
-                  _steps[_currentStep].subtitle,
+                  '${_currentStep + 1}-qadam · ${_steps[_currentStep].subtitle}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: _muted,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
+                    color: _primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
             ),
           ),
-
-          const SizedBox(width: 10),
-
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 11,
-              vertical: 8,
+              vertical: 6,
             ),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.07),
-              borderRadius: BorderRadius.circular(14),
+              color: _primarySoft,
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.08),
+                color: _primary.withValues(alpha: 0.16),
               ),
             ),
             child: Text(
               '${_currentStep + 1}/${_steps.length}',
               style: const TextStyle(
-                color: Colors.white70,
+                color: _primary,
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
               ),
@@ -777,47 +752,31 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
     );
   }
 
-  // ===============================================================
-  // PROGRESS
-  // ===============================================================
-
   Widget _buildProgress(double progress) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(99),
-                  child: TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: progress),
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeOutCubic,
-                    builder: (_, value, _) {
-                      return LinearProgressIndicator(
-                        value: value,
-                        minHeight: 5,
-                        backgroundColor: Colors.white.withValues(alpha: 0.08),
-                        valueColor: const AlwaysStoppedAnimation(
-                          _primary,
-                        ),
-                      );
-                    },
-                  ),
-                ),
+    return Container(
+      color: _surface,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Row(
+        children: List<Widget>.generate(_steps.length, (index) {
+          final isActive = index <= _currentStep;
+          return Expanded(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+              height: 4.5,
+              margin: EdgeInsets.only(
+                right: index == _steps.length - 1 ? 0 : 6,
               ),
-            ],
-          ),
-        ],
+              decoration: BoxDecoration(
+                color: isActive ? _primary : _border,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          );
+        }),
       ),
     );
   }
-
-  // ===============================================================
-  // STEP 1
-  // ===============================================================
 
   void _fillFromProfile() {
     final p = userProfile.value;
@@ -853,20 +812,24 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 14),
-          child: OutlinedButton.icon(
-            onPressed: _fillFromProfile,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _primaryLight,
-              side: BorderSide(color: _primary.withValues(alpha: 0.45)),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+          child: SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _fillFromProfile,
+              style: OutlinedButton.styleFrom(
+                backgroundColor: _primarySoft,
+                foregroundColor: _primary,
+                side: BorderSide(color: _primary.withValues(alpha: 0.28)),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
-            ),
-            icon: const Icon(Icons.bolt_rounded, size: 18),
-            label: const Text(
-              'Profil rekvizitlaridan avtomatik to‘ldirish',
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+              icon: const Icon(Icons.bolt_rounded, size: 18),
+              label: const Text(
+                'Profil rekvizitlaridan avtomatik to‘ldirish',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              ),
             ),
           ),
         ),
@@ -1073,9 +1036,11 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
                         builder: (context, child) {
                           return Theme(
                             data: Theme.of(context).copyWith(
-                              colorScheme: const ColorScheme.dark(
+                              colorScheme: const ColorScheme.light(
                                 primary: _primary,
-                                surface: Color(0xFF122B41),
+                                onPrimary: Colors.white,
+                                surface: Colors.white,
+                                onSurface: _navy,
                               ),
                             ),
                             child: child!,
@@ -1104,10 +1069,10 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
               vertical: 16,
             ),
             decoration: BoxDecoration(
-              color: _primary.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(18),
+              color: _primarySoft,
+              borderRadius: BorderRadius.circular(15),
               border: Border.all(
-                color: _primary.withValues(alpha: 0.35),
+                color: _primary.withValues(alpha: 0.30),
               ),
             ),
             child: const Row(
@@ -1115,14 +1080,16 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
               children: [
                 Icon(
                   Icons.add_circle_outline_rounded,
-                  color: _primaryLight,
+                  color: _primary,
+                  size: 20,
                 ),
-                SizedBox(width: 9),
+                SizedBox(width: 8),
                 Text(
                   'Yana farzand qoʻshish',
                   style: TextStyle(
-                    color: _primaryLight,
-                    fontWeight: FontWeight.w800,
+                    color: _primary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
@@ -1136,10 +1103,10 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
           icon: Icons.info_outline_rounded,
           title: 'Aliment miqdori',
           text:
-              'Reference loyihadagi huquqiy maʼlumotlarda '
+              'Oʻzbekiston Respublikasi Oila kodeksiga muvofiq '
               '1 bola uchun 1/4, 2 bola uchun 1/3, '
-              '3 va undan ortiq bola uchun 1/2 daromad '
-              'koʻrsatilgan.',
+              '3 va undan ortiq bola uchun 1/2 qism miqdorida '
+              'aliment undiriladi.',
         ),
       ],
     );
@@ -1244,31 +1211,31 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
         const SizedBox(height: 4),
 
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.045),
-            borderRadius: BorderRadius.circular(20),
+            color: _primarySoft,
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
+              color: _primary.withValues(alpha: 0.18),
             ),
           ),
           child: const Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
-                Icons.lock_outline_rounded,
-                color: _cyan,
+                Icons.verified_user_outlined,
+                color: _primary,
                 size: 20,
               ),
-              SizedBox(width: 12),
+              SizedBox(width: 11),
               Expanded(
                 child: Text(
-                  'Maʼlumotlaringiz ariza tayyorlash uchun '
-                  'ishlatiladi. Backend ulanishi keyingi bosqichda qoʻshiladi.',
+                  'Maʼlumotlaringiz rasmiy daʼvo arizasi (DOCX) hujjatini shakllantirish uchun ishlatiladi.',
                   style: TextStyle(
-                    color: _muted,
+                    color: _navy,
                     fontSize: 12.5,
                     height: 1.45,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -1287,16 +1254,11 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
     final isLast = _currentStep == _steps.length - 1;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            _background.withValues(alpha: 0.0),
-            _background.withValues(alpha: 0.97),
-            _background,
-          ],
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      decoration: const BoxDecoration(
+        color: _surface,
+        border: Border(
+          top: BorderSide(color: Color(0xFFE8EFF7)),
         ),
       ),
       child: Row(
@@ -1307,34 +1269,25 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
               child: _GlassButton(
                 icon: Icons.arrow_back_rounded,
                 onTap: _back,
-                size: 56,
+                size: 52,
               ),
             ),
-
           Expanded(
             child: GestureDetector(
               onTap: _isSubmitting ? null : _next,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                height: 56,
+                duration: const Duration(milliseconds: 220),
+                height: 52,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: isLast
-                        ? const [
-                            Color(0xFFD95C9E),
-                            Color(0xFF7B61FF),
-                          ]
-                        : const [
-                            Color(0xFF7B61FF),
-                            Color(0xFF5B8CFF),
-                          ],
-                  ),
-                  borderRadius: BorderRadius.circular(19),
+                  color: _isSubmitting
+                      ? _primary.withValues(alpha: 0.7)
+                      : _primary,
+                  borderRadius: BorderRadius.circular(15),
                   boxShadow: [
                     BoxShadow(
-                      color: _primary.withValues(alpha: 0.25),
-                      blurRadius: 25,
-                      offset: const Offset(0, 10),
+                      color: _primary.withValues(alpha: 0.22),
+                      blurRadius: 14,
+                      offset: const Offset(0, 6),
                     ),
                   ],
                 ),
@@ -1345,31 +1298,27 @@ class _AlimonyClaimPageState extends State<AlimonyClaimPage>
                           height: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
-                            valueColor:
-                                AlwaysStoppedAnimation(Colors.white),
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
                           ),
                         )
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              isLast
-                                  ? 'ARIZANI TAYYORLASH'
-                                  : 'DAVOM ETISH',
+                              isLast ? 'Arizani tayyorlash' : 'Davom etish',
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.3,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 8),
                             Icon(
                               isLast
-                                  ? Icons.auto_awesome_rounded
+                                  ? Icons.check_circle_outline_rounded
                                   : Icons.arrow_forward_rounded,
                               color: Colors.white,
-                              size: 20,
+                              size: 19,
                             ),
                           ],
                         ),
@@ -1407,99 +1356,88 @@ class _StepPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 650),
-            curve: Curves.easeOutCubic,
-            builder: (_, value, child) {
-              return Opacity(
-                opacity: value,
-                child: Transform.translate(
-                  offset: Offset(0, 25 * (1 - value)),
-                  child: child,
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFDCE6F2)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x08102B50),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
                 ),
-              );
-            },
-            child: Row(
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF8C76FF),
-                        Color(0xFF5D80FF),
-                      ],
+                Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAF3FC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFF1677D2).withValues(alpha: 0.16),
+                        ),
+                      ),
+                      child: Icon(
+                        icon,
+                        color: const Color(0xFF1677D2),
+                        size: 23,
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(17),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF7B61FF)
-                            .withValues(alpha: 0.28),
-                        blurRadius: 24,
+                    const SizedBox(width: 13),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            eyebrow,
+                            style: const TextStyle(
+                              color: Color(0xFF1677D2),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.9,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              color: Color(0xFF102B50),
+                              fontSize: 19,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: Icon(
-                    icon,
-                    color: Colors.white,
-                    size: 25,
-                  ),
+                    ),
+                  ],
                 ),
-
-                const SizedBox(width: 15),
-
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        eyebrow,
-                        style: const TextStyle(
-                          color: Color(0xFF9B87FF),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 23,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 10),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 13.5,
+                    height: 1.45,
                   ),
                 ),
               ],
             ),
           ),
-
-          const SizedBox(height: 12),
-
-          Text(
-            description,
-            style: const TextStyle(
-              color: Color(0xFFA5B6C8),
-              fontSize: 13.5,
-              height: 1.5,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-
-          const SizedBox(height: 22),
-
+          const SizedBox(height: 16),
           ...children,
         ],
       ),
@@ -1508,7 +1446,7 @@ class _StepPage extends StatelessWidget {
 }
 
 // ===================================================================
-// TEXT FIELD
+// INPUT FIELD
 // ===================================================================
 
 class _Field extends StatelessWidget {
@@ -1538,56 +1476,55 @@ class _Field extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 7),
+            padding: const EdgeInsets.only(left: 2, bottom: 7),
             child: Text(
               label,
               style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
+                color: Color(0xFF102B50),
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
-
           TextField(
             controller: controller,
             keyboardType: keyboardType,
             maxLines: maxLines,
             textCapitalization: textCapitalization,
             style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
+              color: Color(0xFF102B50),
+              fontSize: 14.5,
               fontWeight: FontWeight.w600,
             ),
-            cursorColor: _AlimonyClaimPageState._primaryLight,
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: const TextStyle(
-                color: Color(0xFF6E8397),
-                fontSize: 13,
+                color: Color(0xFF94A3B8),
+                fontSize: 13.5,
+                fontWeight: FontWeight.w500,
               ),
               prefixIcon: Icon(
                 icon,
-                color: const Color(0xFF8499AC),
+                color: const Color(0xFF1677D2),
                 size: 20,
               ),
               filled: true,
-              fillColor: Colors.white.withValues(alpha: 0.055),
+              fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: 17,
-                vertical: 17,
+                horizontal: 16,
+                vertical: 15,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(17),
-                borderSide: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(15),
+                borderSide: const BorderSide(
+                  color: Color(0xFFDCE6F2),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(17),
+                borderRadius: BorderRadius.circular(15),
                 borderSide: const BorderSide(
-                  color: _AlimonyClaimPageState._primary,
-                  width: 1.2,
+                  color: Color(0xFF1677D2),
+                  width: 1.6,
                 ),
               ),
             ),
@@ -1599,7 +1536,7 @@ class _Field extends StatelessWidget {
 }
 
 // ===================================================================
-// DROPDOWN
+// DROPDOWN FIELD
 // ===================================================================
 
 class _DropdownField extends StatelessWidget {
@@ -1619,73 +1556,86 @@ class _DropdownField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveValue = options.contains(value) ? value : null;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 7),
+            padding: const EdgeInsets.only(left: 2, bottom: 7),
             child: Text(
               label,
               style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
+                color: Color(0xFF102B50),
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
-
           DropdownButtonFormField<String>(
-            initialValue: value,
-            dropdownColor: const Color(0xFF102A40),
-            iconEnabledColor: Colors.white54,
+            initialValue: effectiveValue,
+            isExpanded: true,
+            dropdownColor: Colors.white,
+            iconEnabledColor: const Color(0xFF64748B),
+            borderRadius: BorderRadius.circular(16),
             style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
+              color: Color(0xFF102B50),
+              fontSize: 14.5,
               fontWeight: FontWeight.w600,
             ),
             decoration: InputDecoration(
               prefixIcon: Icon(
                 icon,
-                color: const Color(0xFF8499AC),
+                color: const Color(0xFF1677D2),
                 size: 20,
               ),
               filled: true,
-              fillColor: Colors.white.withValues(alpha: 0.055),
+              fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 5,
+                horizontal: 14,
+                vertical: 14,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(17),
-                borderSide: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(15),
+                borderSide: const BorderSide(
+                  color: Color(0xFFDCE6F2),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(17),
+                borderRadius: BorderRadius.circular(15),
                 borderSide: const BorderSide(
-                  color: _AlimonyClaimPageState._primary,
+                  color: Color(0xFF1677D2),
+                  width: 1.6,
                 ),
               ),
             ),
             hint: const Text(
               'Tanlang',
               style: TextStyle(
-                color: Color(0xFF6E8397),
-                fontSize: 13,
+                color: Color(0xFF94A3B8),
+                fontSize: 13.5,
+                fontWeight: FontWeight.w500,
               ),
             ),
             items: options
                 .map(
                   (item) => DropdownMenuItem<String>(
                     value: item,
-                    child: Text(item),
+                    child: Text(
+                      item,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF102B50),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 )
                 .toList(),
-            onChanged: onChanged,
+            onChanged: options.isEmpty ? null : onChanged,
           ),
         ],
       ),
@@ -1720,55 +1670,54 @@ class _DateField extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 7),
+            padding: const EdgeInsets.only(left: 2, bottom: 7),
             child: Text(
               label,
               style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
+                color: Color(0xFF102B50),
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
-
           GestureDetector(
             onTap: onTap,
             child: Container(
-              width: double.infinity,
               padding: const EdgeInsets.symmetric(
-                horizontal: 17,
-                vertical: 17,
+                horizontal: 14,
+                vertical: 15,
               ),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.055),
-                borderRadius: BorderRadius.circular(17),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(15),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.07),
+                  color: const Color(0xFFDCE6F2),
                 ),
               ),
               child: Row(
                 children: [
                   Icon(
                     icon,
-                    color: const Color(0xFF8499AC),
+                    color: const Color(0xFF1677D2),
                     size: 20,
                   ),
-                  const SizedBox(width: 13),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       value,
                       style: TextStyle(
                         color: hasValue
-                            ? Colors.white
-                            : const Color(0xFF6E8397),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                            ? const Color(0xFF102B50)
+                            : const Color(0xFF94A3B8),
+                        fontSize: 14.5,
+                        fontWeight:
+                            hasValue ? FontWeight.w600 : FontWeight.w500,
                       ),
                     ),
                   ),
                   const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    color: Colors.white38,
+                    Icons.chevron_right_rounded,
+                    color: Color(0xFF94A3B8),
                   ),
                 ],
               ),
@@ -1802,81 +1751,83 @@ class _ChildCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 5),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withValues(alpha: 0.075),
-            Colors.white.withValues(alpha: 0.035),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(22),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.09),
+          color: const Color(0xFFDCE6F2),
         ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08102B50),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Row(
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  color: _AlimonyClaimPageState._pink
-                      .withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(13),
+                  color: const Color(0xFFEAF3FC),
+                  borderRadius: BorderRadius.circular(11),
                 ),
                 child: const Icon(
-                  Icons.child_care_rounded,
-                  color: Color(0xFFFF9BCA),
-                  size: 20,
+                  Icons.child_friendly_rounded,
+                  color: Color(0xFF1677D2),
+                  size: 19,
                 ),
               ),
-
               const SizedBox(width: 11),
-
               Expanded(
                 child: Text(
-                  'Farzand ${index + 1}',
+                  '${index + 1}-farzand',
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
+                    color: Color(0xFF102B50),
+                    fontSize: 15,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
-
               if (canDelete)
-                IconButton(
-                  onPressed: onDelete,
-                  icon: const Icon(
-                    Icons.close_rounded,
-                    color: Colors.white38,
-                    size: 19,
+                InkWell(
+                  onTap: onDelete,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Color(0xFFDC2626),
+                      size: 18,
+                    ),
                   ),
                 ),
             ],
           ),
-
-          const SizedBox(height: 10),
-
+          const SizedBox(height: 14),
           _Field(
             controller: data.name,
-            label: 'Toʻliq ism',
-            hint: 'Farzandning F.I.Sh.',
-            icon: Icons.badge_outlined,
+            label: 'Farzandning F.I.Sh.',
+            hint: 'Toʻliq ism-familiyasi',
+            icon: Icons.person_outline_rounded,
+            textCapitalization: TextCapitalization.words,
           ),
-
           _DateField(
-            label: 'Tugʻilgan sana',
+            label: 'Tugʻilgan sanasi',
             value: data.birthDate == null
                 ? 'Sanani tanlang'
                 : '${data.birthDate!.day.toString().padLeft(2, '0')}.'
-                    '${data.birthDate!.month.toString().padLeft(2, '0')}.'
-                    '${data.birthDate!.year}',
+                  '${data.birthDate!.month.toString().padLeft(2, '0')}.'
+                  '${data.birthDate!.year}',
             icon: Icons.cake_outlined,
             onTap: onDateTap,
           ),
@@ -1887,7 +1838,7 @@ class _ChildCard extends StatelessWidget {
 }
 
 // ===================================================================
-// REVIEW
+// REVIEW CARD
 // ===================================================================
 
 class _ReviewCard extends StatelessWidget {
@@ -1905,64 +1856,80 @@ class _ReviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(17),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.045),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.075),
+          color: const Color(0xFFDCE6F2),
         ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08102B50),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Row(
             children: [
-              Icon(
-                icon,
-                color: _AlimonyClaimPageState._primaryLight,
-                size: 20,
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF3FC),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  icon,
+                  color: const Color(0xFF1677D2),
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   title,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
+                    color: Color(0xFF102B50),
+                    fontSize: 14.5,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
             ],
           ),
-
-          const SizedBox(height: 13),
-
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: Color(0xFFEEF3F9)),
+          const SizedBox(height: 12),
           ...rows.map(
             (row) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.only(bottom: 9),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(
-                    width: 82,
+                    width: 108,
                     child: Text(
                       row.label,
                       style: const TextStyle(
-                        color: Color(0xFF71879B),
-                        fontSize: 11,
+                        color: Color(0xFF64748B),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      row.value.isEmpty
-                          ? 'Kiritilmagan'
-                          : row.value,
+                      row.value.isEmpty ? '—' : row.value,
                       style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF102B50),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
                       ),
                     ),
                   ),
@@ -1995,12 +1962,12 @@ class _InfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: _AlimonyClaimPageState._cyan.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(18),
+        color: const Color(0xFFEAF3FC),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: _AlimonyClaimPageState._cyan.withValues(alpha: 0.14),
+          color: const Color(0xFF1677D2).withValues(alpha: 0.18),
         ),
       ),
       child: Row(
@@ -2008,10 +1975,10 @@ class _InfoCard extends StatelessWidget {
         children: [
           Icon(
             icon,
-            color: _AlimonyClaimPageState._cyan,
+            color: const Color(0xFF1677D2),
             size: 20,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 11),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2019,17 +1986,17 @@ class _InfoCard extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12.5,
+                    color: Color(0xFF102B50),
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 4),
                 Text(
                   text,
                   style: const TextStyle(
-                    color: Color(0xFF91A8BA),
-                    fontSize: 11.5,
+                    color: Color(0xFF475569),
+                    fontSize: 12.5,
                     height: 1.45,
                   ),
                 ),
@@ -2043,14 +2010,14 @@ class _InfoCard extends StatelessWidget {
 }
 
 // ===================================================================
-// GLASS BUTTON
+// GLASS BUTTON (LIGHT SURFACE)
 // ===================================================================
 
 class _GlassButton extends StatelessWidget {
   const _GlassButton({
     required this.icon,
     required this.onTap,
-    this.size = 46,
+    this.size = 42,
   });
 
   final IconData icon;
@@ -2065,50 +2032,16 @@ class _GlassButton extends StatelessWidget {
         width: size,
         height: size,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.065),
-          borderRadius: BorderRadius.circular(15),
+          color: const Color(0xFFF5F8FC),
+          borderRadius: BorderRadius.circular(13),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.08),
+            color: const Color(0xFFDCE6F2),
           ),
         ),
         child: Icon(
           icon,
-          color: Colors.white70,
-          size: 18,
-        ),
-      ),
-    );
-  }
-}
-
-// ===================================================================
-// GLOW
-// ===================================================================
-
-class _Glow extends StatelessWidget {
-  const _Glow({
-    required this.color,
-    required this.size,
-  });
-
-  final Color color;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.13),
-              blurRadius: size * 0.65,
-              spreadRadius: size * 0.05,
-            ),
-          ],
+          color: const Color(0xFF102B50),
+          size: 19,
         ),
       ),
     );

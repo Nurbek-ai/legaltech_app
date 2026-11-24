@@ -357,6 +357,18 @@ class ContractLinkRepository {
   }
 
   Future<String?> acceptInvitation(ContractInvitation inv) async {
+    final myId = Supabase.instance.client.auth.currentUser?.id ?? '';
+    final myRole = userProfile.value.role == UserRole.advokat
+        ? 'advocate'
+        : 'client';
+    if (!inv.isPending) {
+      return 'Bu shartnoma taklifi allaqachon ko‘rib chiqilgan.';
+    }
+    if ((myId.isNotEmpty &&
+            YanRoleDataCatalog.isSameParticipant(inv.senderId, myId)) ||
+        (inv.senderRole.isNotEmpty && inv.senderRole == myRole)) {
+      return 'O‘zingiz yuborgan taklifni tasdiqlay olmaysiz.';
+    }
     final now = DateTime.now();
     try {
       await Supabase.instance.client
@@ -414,6 +426,18 @@ class ContractLinkRepository {
     required ContractInvitation inv,
     required String reason,
   }) async {
+    final myId = Supabase.instance.client.auth.currentUser?.id ?? '';
+    final myRole = userProfile.value.role == UserRole.advokat
+        ? 'advocate'
+        : 'client';
+    if (!inv.isPending) {
+      return 'Bu shartnoma taklifi allaqachon ko‘rib chiqilgan.';
+    }
+    if ((myId.isNotEmpty &&
+            YanRoleDataCatalog.isSameParticipant(inv.senderId, myId)) ||
+        (inv.senderRole.isNotEmpty && inv.senderRole == myRole)) {
+      return 'O‘zingiz yuborgan taklifni rad eta olmaysiz.';
+    }
     final now = DateTime.now();
     final cleanReason = reason.trim();
     try {

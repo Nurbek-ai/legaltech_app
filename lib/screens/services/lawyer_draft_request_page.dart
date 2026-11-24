@@ -1,9 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
 import '../../shared/dashboard_background.dart';
@@ -73,61 +73,18 @@ class _LawyerDraftRequestPageState extends State<LawyerDraftRequestPage> {
   }
 
   Future<void> _loadRegisteredAdvocates() async {
-    if (mounted) setState(() => _loadingAdvocates = true);
-    try {
-      final byId = <String, Map<String, dynamic>>{};
-
-      try {
-        final rows = await Supabase.instance.client
-            .from('profiles')
-            .select()
-            .eq('role', 'advocate');
-        for (final item in rows) {
-          final map = Map<String, dynamic>.from(item as Map);
-          final id = map['id']?.toString() ?? '';
-          if (id.isNotEmpty) {
-            byId[id] = map;
-          }
-        }
-      } catch (_) {}
-
-      try {
-        final licRows = await Supabase.instance.client
-            .from('advocate_licenses')
-            .select();
-        for (final item in licRows) {
-          final map = Map<String, dynamic>.from(item as Map);
-          final id =
-              map['advocate_id']?.toString() ?? map['id']?.toString() ?? '';
-          if (id.isNotEmpty) {
-            final existing = byId[id] ?? <String, dynamic>{'id': id};
-            if ((existing['full_name']?.toString() ?? '').trim().isEmpty &&
-                (map['full_name']?.toString() ?? '').trim().isNotEmpty) {
-              existing['full_name'] = map['full_name'];
-            }
-            if ((map['phone']?.toString() ?? '').trim().isNotEmpty) {
-              existing['phone'] = map['phone'];
-            }
-            if ((map['stir_number']?.toString() ?? '').trim().isNotEmpty) {
-              existing['license_number'] = 'STIR: ${map['stir_number']}';
-            }
-            byId[id] = existing;
-          }
-        }
-      } catch (_) {}
-
-      final parsed = byId.values
-          .map(LawyerDirectoryProfile.fromSupabaseMap)
-          .toList();
-      if (parsed.isNotEmpty) {
-        YanRoleDataCatalog.registeredLawyers.value = parsed;
-      }
-    } catch (_) {
-    } finally {
-      final list = YanRoleDataCatalog.registeredLawyers.value;
+    void selectInitial(List<LawyerDirectoryProfile> list) {
       final contractedId = userProfile.value.contractedLawyerId;
       LawyerDirectoryProfile? initial;
-      if (contractedId != null) {
+      if (_selectedAdvocate != null) {
+        for (final adv in list) {
+          if (adv.id == _selectedAdvocate!.id) {
+            initial = adv;
+            break;
+          }
+        }
+      }
+      if (initial == null && contractedId != null) {
         for (final adv in list) {
           if (adv.id == contractedId) {
             initial = adv;
@@ -143,6 +100,85 @@ class _LawyerDraftRequestPageState extends State<LawyerDraftRequestPage> {
         });
       }
     }
+
+    final cached = YanRoleDataCatalog.registeredLawyers.value;
+    if (cached.isNotEmpty) {
+      selectInitial(cached);
+    } else if (mounted) {
+      setState(() => _loadingAdvocates = true);
+    }
+
+    try {
+      final fresh = await fetchRegisteredLawyersFromSupabase();
+      selectInitial(
+        fresh.isNotEmpty ? fresh : YanRoleDataCatalog.registeredLawyers.value,
+      );
+    } catch (_) {
+      selectInitial(YanRoleDataCatalog.registeredLawyers.value);
+    }
+  }
+
+  Widget _buildAdvocateAvatar(
+    LawyerDirectoryProfile adv, {
+    double size = 44,
+    bool loading = false,
+  }) {
+    Widget fallback() => Center(
+          child: Text(
+            adv.initials,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: size * 0.32,
+            ),
+          ),
+        );
+
+    Widget content;
+    if (loading) {
+      content = const Center(
+        child: CupertinoActivityIndicator(color: Colors.white),
+      );
+    } else {
+      final b64 = adv.avatarBase64.trim();
+      final url = adv.avatarUrl.trim();
+      if (b64.isNotEmpty) {
+        try {
+          final clean = b64.contains(',') ? b64.split(',').last.trim() : b64;
+          content = Image.memory(
+            base64Decode(clean),
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            errorBuilder: (_, __, ___) => fallback(),
+          );
+        } catch (_) {
+          content = fallback();
+        }
+      } else if (url.isNotEmpty) {
+        content = Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => fallback(),
+        );
+      } else {
+        content = fallback();
+      }
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: const BoxDecoration(
+        color: YanColors.primaryNavy,
+        shape: BoxShape.circle,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: content,
+    );
   }
 
   void _showError(String message) {
@@ -260,7 +296,7 @@ class _LawyerDraftRequestPageState extends State<LawyerDraftRequestPage> {
               ),
               const SizedBox(height: 14),
               const Text(
-                'E2EE Hujjat va Dalil Qo‘shish',
+                'Hujjat va dalil qo‘shish',
                 style: TextStyle(
                   color: YanColors.primaryNavy,
                   fontSize: 17,
@@ -373,23 +409,7 @@ class _LawyerDraftRequestPageState extends State<LawyerDraftRequestPage> {
                       ),
                       child: Row(
                         children: <Widget>[
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: const BoxDecoration(
-                              color: YanColors.primaryNavy,
-                              shape: BoxShape.circle,
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              adv.initials,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
+                          _buildAdvocateAvatar(adv),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -619,7 +639,7 @@ class _LawyerDraftRequestPageState extends State<LawyerDraftRequestPage> {
                             ),
                             SizedBox(height: 2),
                             Text(
-                              'E2EE himoyalangan • 30 daqiqada tayyor ariza',
+                              'Himoyalangan aloqa • 30 daqiqada tayyor ariza',
                               style: TextStyle(
                                 color: YanColors.mutedText,
                                 fontSize: 11.5,
@@ -718,7 +738,7 @@ class _LawyerDraftRequestPageState extends State<LawyerDraftRequestPage> {
                               color: YanColors.primaryBlue,
                             ),
                             label: const Text(
-                              'Hujjat bo‘lmasa o‘tkazib yuborish (Skip)',
+                              'Hujjat bo‘lmasa o‘tkazib yuborish',
                               style: TextStyle(
                                 fontSize: 12.8,
                                 fontWeight: FontWeight.w800,
@@ -874,25 +894,7 @@ class _LawyerDraftRequestPageState extends State<LawyerDraftRequestPage> {
           onTap: _openAdvocatePickerSheet,
           child: Row(
             children: <Widget>[
-              Container(
-                width: 44,
-                height: 44,
-                decoration: const BoxDecoration(
-                  color: YanColors.primaryNavy,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: _loadingAdvocates
-                    ? const CupertinoActivityIndicator(color: Colors.white)
-                    : Text(
-                        adv.initials,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
-                      ),
-              ),
+              _buildAdvocateAvatar(adv, loading: _loadingAdvocates),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1066,7 +1068,7 @@ class _LawyerDraftRequestPageState extends State<LawyerDraftRequestPage> {
                   const SizedBox(width: 5),
                   const Expanded(
                     child: Text(
-                      'Zero-Knowledge E2EE bilan shifrlanadi',
+                      'Ma’lumotlar himoyalangan tarzda saqlanadi',
                       style: TextStyle(
                         fontSize: 11.2,
                         fontWeight: FontWeight.w700,
@@ -1139,7 +1141,7 @@ class _LawyerDraftRequestPageState extends State<LawyerDraftRequestPage> {
             borderRadius: BorderRadius.circular(999),
           ),
           child: const Text(
-            'DALILLAR VA HUJJATLAR • E2EE',
+            'DALILLAR VA HUJJATLAR',
             style: TextStyle(
               color: YanColors.primaryBlue,
               fontSize: 10.5,
@@ -1306,7 +1308,7 @@ class _LawyerDraftRequestPageState extends State<LawyerDraftRequestPage> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${index + 1}-tartibdagi E2EE hujjat',
+                          '${index + 1}-tartibdagi himoyalangan hujjat',
                           style: const TextStyle(
                             fontSize: 11.2,
                             color: YanColors.mutedText,
@@ -1366,7 +1368,7 @@ class _LawyerDraftRequestPageState extends State<LawyerDraftRequestPage> {
               SizedBox(width: 9),
               Expanded(
                 child: Text(
-                  'Tanlangan hujjatlar E2EE shifrlangan holda to‘g‘ridan-to‘g‘ri advokat chatiga tartib bilan yuboriladi.',
+                  'Tanlangan hujjatlar himoyalangan holda to‘g‘ridan-to‘g‘ri advokat chatiga tartib bilan yuboriladi.',
                   style: TextStyle(
                     color: YanColors.primaryNavy,
                     fontSize: 12.0,
@@ -1567,8 +1569,8 @@ class _LawyerDraftRequestPageState extends State<LawyerDraftRequestPage> {
               Expanded(
                 child: Text(
                   dynamicFeeUzs > 0
-                      ? 'Xizmat to‘lovi: $dynamicFeeUzs so‘m • E2EE orqali advokat chatiga yuboriladi.'
-                      : 'Murojaat E2EE shifrlangan holda advokat chatiga bepul yuboriladi. Tayyor ariza #ariza tegi bilan "Arizalarim" bo‘limida paydo bo‘ladi.',
+                      ? 'Xizmat to‘lovi: $dynamicFeeUzs so‘m • himoyalangan aloqa orqali advokat chatiga yuboriladi.'
+                      : 'Murojaat himoyalangan holda advokat chatiga bepul yuboriladi. Tayyor ariza #ariza tegi bilan "Arizalarim" bo‘limida paydo bo‘ladi.',
                   style: const TextStyle(
                     color: YanColors.primaryNavy,
                     fontSize: 12.2,

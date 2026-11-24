@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -9,10 +10,10 @@ import '../../main.dart';
 import '../../services/consultation_service.dart';
 import '../../shared/user_profile.dart';
 
-/// Complete 3-Step Client Konsultatsiya Flow (Apple-Clean White & Sky-Blue Design):
-/// Step 0: Select a verified Advocate from Supabase
-/// Step 1: Advocate Profile + Biography + 7-Day Calendar -> 24-Hour Grid -> 3x 19-Min Slots (1-min break)
-/// Step 2: Bright Airy Review & Edit Screen -> Atomic Supabase Booking -> Opens Chat with Live Notification Card
+/// Complete 3-Step Client Online Consultation Booking Flow
+/// Step 0: Advocate Selection (with real-time search & selection state)
+/// Step 1: 7-Day Calendar -> 24-Hour Availability Grid -> 3x 19-Min Slots (1-min break)
+/// Step 2: Review & Confirmation -> Atomic Supabase Booking -> Opens Chat
 class ConsultationBookingPage extends StatefulWidget {
   const ConsultationBookingPage({
     super.key,
@@ -27,26 +28,25 @@ class ConsultationBookingPage extends StatefulWidget {
 }
 
 class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
-  // Apple-Clean Bright Sky-Blue & Pure White Palette (matching YAN360 Home & HydraCare)
-  static const Color _bgTop = Color(0xFFE7F3FF);
-  static const Color _bgMid = Color(0xFFF6FAFF);
-  static const Color _bgBottom = Color(0xFFFFFFFF);
+  // Unified YAN360 Legal-Tech Palette
+  static const Color _bgSurface = Color(0xFFF5F8FC);
   static const Color _cardWhite = Color(0xFFFFFFFF);
-  static const Color _softIce = Color(0xFFF0F7FF);
-  static const Color _brandBlue = Color(0xFF1677FF);
-  static const Color _skyBlue = Color(0xFF3B9EFF);
-  static const Color _inkNavy = Color(0xFF0B1F3A);
+  static const Color _lightBlue = Color(0xFFEAF3FC);
+  static const Color _primaryBlue = Color(0xFF1677D2);
+  static const Color _darkNavy = Color(0xFF102B50);
   static const Color _mutedSlate = Color(0xFF64748B);
-  static const Color _borderBlue = Color(0xFFDCEBFF);
-  static const Color _emerald = Color(0xFF10B981);
-  static const Color _emeraldSoft = Color(0xFFECFDF5);
+  static const Color _borderSubtle = Color(0xFFDCE6F2);
+  static const Color _availableGreen = Color(0xFF10B981);
+  static const Color _availableSoft = Color(0xFFE8F8F0);
+  static const Color _availableText = Color(0xFF0F766E);
+  static const Color _unavailableBg = Color(0xFFE8EDF4);
   static const Color _rose = Color(0xFFE11D48);
   static const Color _roseSoft = Color(0xFFFFF1F2);
-  static const Color _gold = Color(0xFFF59E0B);
 
-  int _step = 0; // 0: Advocate picker, 1: Profile & Calendar, 2: Review & Confirm
+  int _step = 0; // 0: Advocate picker, 1: Date & Time, 2: Review & Confirm
   bool _isLoadingAdvocates = true;
   bool _isBooking = false;
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   List<LawyerDirectoryProfile> _advocates = <LawyerDirectoryProfile>[];
   LawyerDirectoryProfile? _selectedAdvocate;
@@ -66,7 +66,7 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
       _step = 1;
     }
     ConsultationRepository.instance.ensureInitialized();
-    _loadAdvocatesFromSupabase();
+    _loadAdvocates();
     _clockRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
@@ -75,64 +75,61 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
   @override
   void dispose() {
     _clockRefreshTimer?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadAdvocatesFromSupabase() async {
-    if (mounted) setState(() => _isLoadingAdvocates = true);
-    try {
-      final rows = await Supabase.instance.client
-          .from('profiles')
-          .select()
-          .eq('role', 'advocate');
-
-      final parsed = <LawyerDirectoryProfile>[];
-      for (final item in rows) {
-        final map = Map<String, dynamic>.from(item as Map);
-        final id = map['id']?.toString() ?? '';
-        final fullName = (map['full_name']?.toString() ?? '').trim();
-        if (id.isEmpty || fullName.isEmpty) continue;
-        final spec = (map['specialization']?.toString() ?? '').trim();
-        final region = (map['region']?.toString() ?? '').trim();
-        final license = (map['license_number']?.toString() ?? '').trim();
-        final bio = (map['bio']?.toString() ?? '').trim();
-
-        parsed.add(
-          LawyerDirectoryProfile(
-            id: id,
-            fullName: fullName,
-            title: 'BOSH ADVOKAT • YAN LEGAL FIRM',
-            region: region.isEmpty ? 'Toshkent shahri' : region,
-            specialization: spec.isEmpty ? 'Barcha yuridik sohalar' : spec,
-            experienceYears: (map['experience_years'] as num?)?.toInt() ?? 5,
-            rating: (map['rating'] as num?)?.toDouble() ?? 5.0,
-            feedbackCount: (map['feedback_count'] as num?)?.toInt() ?? 1,
-            wonCasesCount: (map['won_cases'] as num?)?.toInt() ?? 24,
-            consultationPriceUzs:
-                (map['consultation_price'] as num?)?.toInt() ?? 99000,
-            contractMonthlyNote: 'Rasmiy YAN360 advokati',
-            licenseNumber: license.isEmpty ? 'Tasdiqlangan' : license,
-            phone: map['phone']?.toString() ?? '+998',
-            assistantName: '-',
-            assistantRole: '',
-            assistantPhone: '',
-            bio: bio.isNotEmpty
-                ? bio
-                : '“YAN Legal Firm” rasmiy litsenziyaga ega advokati. Mijozlarning huquqiy masalalarini 19 daqiqalik onlayn video konsultatsiya orqali aniq va qonuniy hal etishga ixtisoslashgan.',
-            feedbacks: const <LawyerFeedbackItem>[],
-            isVerifiedPartner: true,
-          ),
-        );
-      }
-
-      if (mounted) {
-        setState(() {
-          _advocates = parsed;
-          if (_selectedAdvocate != null &&
-              !_advocates.any((a) => a.id == _selectedAdvocate!.id)) {
+  Future<void> _loadAdvocates() async {
+    void applyList(List<LawyerDirectoryProfile> list) {
+      if (!mounted) return;
+      setState(() {
+        _advocates = List<LawyerDirectoryProfile>.from(list);
+        if (_selectedAdvocate != null) {
+          final updated = _advocates.where(
+            (a) => a.id == _selectedAdvocate!.id,
+          );
+          if (updated.isNotEmpty) {
+            _selectedAdvocate = updated.first;
+          } else {
             _advocates.insert(0, _selectedAdvocate!);
           }
-        });
+        }
+        _isLoadingAdvocates = false;
+      });
+    }
+
+    final cached = YanRoleDataCatalog.registeredLawyers.value;
+    if (cached.isNotEmpty) {
+      applyList(cached);
+    } else if (mounted) {
+      setState(() => _isLoadingAdvocates = true);
+    }
+
+    try {
+      final hook = YanRoleDataCatalog.refreshRegisteredLawyers;
+      if (hook != null) {
+        final fresh = await hook();
+        if (fresh.isNotEmpty) {
+          applyList(fresh);
+          return;
+        }
+      }
+
+      if (cached.isEmpty) {
+        final rows = await Supabase.instance.client
+            .from('profiles')
+            .select()
+            .eq('role', 'advocate');
+
+        final parsed = <LawyerDirectoryProfile>[];
+        for (final item in rows) {
+          final map = Map<String, dynamic>.from(item as Map);
+          final id = map['id']?.toString() ?? '';
+          final fullName = (map['full_name']?.toString() ?? '').trim();
+          if (id.isEmpty || fullName.isEmpty) continue;
+          parsed.add(LawyerDirectoryProfile.fromSupabaseMap(map));
+        }
+        applyList(parsed);
       }
     } catch (e) {
       debugPrint('Loading advocates for consultation failed: $e');
@@ -146,14 +143,61 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
 
   void _selectAdvocate(LawyerDirectoryProfile advocate) {
     HapticFeedback.selectionClick();
+    final changed = _selectedAdvocate?.id != advocate.id;
     setState(() {
       _selectedAdvocate = advocate;
-      _selectedDayIndex = 0;
-      _selectedHour = null;
-      _selectedSlotIndex = null;
-      _step = 1;
+      if (changed) {
+        _selectedDayIndex = 0;
+        _selectedHour = null;
+        _selectedSlotIndex = null;
+      }
     });
+  }
+
+  void _proceedFromStep0() {
+    if (_selectedAdvocate == null) return;
+    HapticFeedback.selectionClick();
     ConsultationRepository.instance.refreshAll();
+    setState(() => _step = 1);
+  }
+
+  Future<void> _proceedFromStep1() async {
+    final adv = _selectedAdvocate;
+    final hour = _selectedHour;
+    final slot = _selectedSlotIndex;
+    if (adv == null || hour == null || slot == null) return;
+
+    HapticFeedback.selectionClick();
+    await ConsultationRepository.instance.refreshAll();
+    if (!mounted) return;
+
+    final repo = ConsultationRepository.instance;
+    final now = DateTime.now();
+    final dateKey = _selectedDateKey;
+    final stillUnavailable =
+        repo.isDayBlocked(adv.id, dateKey) ||
+        repo.isHourBlocked(adv.id, dateKey, hour) ||
+        repo.isSlotPast(dateKey, hour, slot, now) ||
+        repo.isSlotBlocked(adv.id, dateKey, hour, slot) ||
+        repo.findBookingForSlot(adv.id, dateKey, hour, slot) != null;
+
+    if (stillUnavailable) {
+      setState(() => _selectedSlotIndex = null);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Ushbu vaqt oralig‘i band bo‘lib qoldi. Iltimos, boshqa bo‘sh vaqtni tanlang.',
+            ),
+            backgroundColor: _rose,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      return;
+    }
+
+    setState(() => _step = 2);
   }
 
   void _handleBack() {
@@ -232,15 +276,21 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
     );
   }
 
-  BoxDecoration _appleCardDecoration({double radius = 24}) => BoxDecoration(
-    color: _cardWhite,
+  BoxDecoration _surfaceCardDecoration({
+    double radius = 20,
+    bool highlighted = false,
+  }) => BoxDecoration(
+    color: highlighted ? const Color(0xFFF3F8FF) : _cardWhite,
     borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: _borderBlue, width: 1),
-    boxShadow: <BoxShadow>[
+    border: Border.all(
+      color: highlighted ? _primaryBlue : _borderSubtle,
+      width: highlighted ? 1.5 : 1.0,
+    ),
+    boxShadow: const <BoxShadow>[
       BoxShadow(
-        color: _brandBlue.withValues(alpha: 0.06),
-        blurRadius: 22,
-        offset: const Offset(0, 8),
+        color: Color(0x0A102B50),
+        blurRadius: 16,
+        offset: Offset(0, 5),
       ),
     ],
   );
@@ -248,158 +298,45 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bgBottom,
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: <double>[0.0, 0.34, 1.0],
-            colors: <Color>[_bgTop, _bgMid, _bgBottom],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: <Widget>[
-              _buildTopHeader(),
-              _buildStepProgressBar(),
-              Expanded(
-                child: ValueListenableBuilder<List<AdvocateBlockedSlot>>(
-                  valueListenable: ConsultationRepository.instance.blockedSlots,
-                  builder: (context, _, __) {
-                    return ValueListenableBuilder<List<ConsultationBooking>>(
-                      valueListenable:
-                          ConsultationRepository.instance.consultations,
-                      builder: (context, _, __) {
-                        if (_step == 0) return _buildStep0AdvocatePicker();
-                        if (_step == 1) return _buildStep1CalendarPicker();
-                        return _buildStep2ReviewScreen();
-                      },
-                    );
-                  },
-                ),
+      backgroundColor: _bgSurface,
+      body: SafeArea(
+        child: Column(
+          children: <Widget>[
+            _ConsultationHeader(
+              step: _step,
+              onBack: _handleBack,
+            ),
+            Expanded(
+              child: ValueListenableBuilder<List<AdvocateBlockedSlot>>(
+                valueListenable: ConsultationRepository.instance.blockedSlots,
+                builder: (context, _, __) {
+                  return ValueListenableBuilder<List<ConsultationBooking>>(
+                    valueListenable:
+                        ConsultationRepository.instance.consultations,
+                    builder: (context, _, __) {
+                      return AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        child: _step == 0
+                            ? _buildStep0AdvocatePicker()
+                            : _step == 1
+                            ? _buildStep1CalendarPicker()
+                            : _buildStep2ReviewScreen(),
+                      );
+                    },
+                  );
+                },
               ),
-              if (_step == 1 || _step == 2) _buildBottomActionBar(),
-            ],
-          ),
+            ),
+            _buildBottomActionBar(),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildTopHeader() {
-    final subtitle = _step == 0
-        ? '1-qadam • Advokatni tanlang'
-        : _step == 1
-        ? '2-qadam • Kun va 19 daqiqalik vaqtni tanlang'
-        : '3-qadam • Rejangizni tasdiqlang';
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-      child: Row(
-        children: <Widget>[
-          GestureDetector(
-            onTap: _handleBack,
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: _cardWhite,
-                shape: BoxShape.circle,
-                border: Border.all(color: _borderBlue),
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: _brandBlue.withValues(alpha: 0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.arrow_back_ios_new_rounded,
-                color: _inkNavy,
-                size: 18,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                const Text(
-                  'Onlayn Konsultatsiya',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w900,
-                    color: _inkNavy,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 12.2,
-                    fontWeight: FontWeight.w600,
-                    color: _brandBlue,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: _cardWhite,
-              shape: BoxShape.circle,
-              border: Border.all(color: _borderBlue),
-              boxShadow: <BoxShadow>[
-                BoxShadow(
-                  color: _brandBlue.withValues(alpha: 0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.verified_user_rounded,
-              color: _brandBlue,
-              size: 19,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStepProgressBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-      child: Row(
-        children: List<Widget>.generate(3, (i) {
-          final active = i <= _step;
-          return Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              height: 4.5,
-              margin: EdgeInsets.only(right: i < 2 ? 6 : 0),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(99),
-                gradient: active
-                    ? const LinearGradient(
-                        colors: <Color>[_brandBlue, _skyBlue],
-                      )
-                    : null,
-                color: active ? null : _borderBlue,
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
+  // ═════════════════════════════════════════════════════════════════════════
+  // STEP 1: ADVOCATE SELECTION
+  // ═════════════════════════════════════════════════════════════════════════
 
   Widget _buildStep0AdvocatePicker() {
     final query = _searchQuery.trim().toLowerCase();
@@ -411,37 +348,62 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
     }).toList();
 
     return Column(
+      key: const ValueKey<String>('step-0'),
       children: <Widget>[
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-            decoration: BoxDecoration(
-              color: _cardWhite,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _borderBlue),
-              boxShadow: <BoxShadow>[
-                BoxShadow(
-                  color: _brandBlue.withValues(alpha: 0.05),
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
+          child: SizedBox(
+            height: 48,
             child: TextField(
+              controller: _searchController,
               onChanged: (v) => setState(() => _searchQuery = v),
-              style: const TextStyle(color: _inkNavy, fontSize: 14.2),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                icon: Icon(
-                  CupertinoIcons.search,
-                  color: _brandBlue,
-                  size: 19,
-                ),
-                hintText: 'Advokat ismi, soha yoki viloyat bo‘yicha qidirish...',
-                hintStyle: TextStyle(
+              cursorColor: _primaryBlue,
+              style: const TextStyle(
+                color: _darkNavy,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: _cardWhite,
+                hintText: 'Advokat ismi, soha yoki viloyat bo‘yicha qidiring...',
+                hintStyle: const TextStyle(
                   color: _mutedSlate,
-                  fontSize: 13.5,
+                  fontSize: 13.4,
+                  fontWeight: FontWeight.w400,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  color: _primaryBlue,
+                  size: 20,
+                ),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          color: _mutedSlate,
+                        ),
+                      )
+                    : null,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: _borderSubtle, width: 1),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(
+                    color: _primaryBlue,
+                    width: 1.5,
+                  ),
                 ),
               ),
             ),
@@ -452,7 +414,7 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
               ? const Center(
                   child: CupertinoActivityIndicator(
                     radius: 14,
-                    color: _brandBlue,
+                    color: _primaryBlue,
                   ),
                 )
               : filtered.isEmpty
@@ -463,47 +425,44 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
                         Container(
-                          width: 68,
-                          height: 68,
+                          width: 60,
+                          height: 60,
                           decoration: const BoxDecoration(
-                            color: _softIce,
+                            color: _lightBlue,
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
-                            CupertinoIcons.person_2_fill,
-                            size: 34,
-                            color: _brandBlue,
+                            Icons.person_search_rounded,
+                            size: 30,
+                            color: _primaryBlue,
                           ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Advokat topilmadi',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: _darkNavy,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Qidiruv so‘zini o‘zgartiring yoki ro‘yxatni yangilang.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 13, color: _mutedSlate),
                         ),
                         const SizedBox(height: 14),
-                        const Text(
-                          'Rasmiy advokatlar topilmadi',
-                          style: TextStyle(
-                            fontSize: 16.5,
-                            fontWeight: FontWeight.w800,
-                            color: _inkNavy,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Yangi advokatlar ro‘yxatdan o‘tgach shu yerda avtomatik ko‘rinadi.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: _mutedSlate,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
                         TextButton.icon(
-                          onPressed: _loadAdvocatesFromSupabase,
+                          onPressed: _loadAdvocates,
                           icon: const Icon(
                             Icons.refresh_rounded,
-                            color: _brandBlue,
+                            color: _primaryBlue,
                           ),
                           label: const Text(
                             'Qayta yuklash',
                             style: TextStyle(
-                              color: _brandBlue,
+                              color: _primaryBlue,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -512,322 +471,75 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                     ),
                   ),
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 2, 16, 24),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    final adv = filtered[index];
-                    return GestureDetector(
-                      onTap: () => _selectAdvocate(adv),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(16),
-                        decoration: _appleCardDecoration(radius: 24),
-                        child: Row(
-                          children: <Widget>[
-                            Container(
-                              width: 56,
-                              height: 56,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: <Color>[_brandBlue, _skyBlue],
-                                ),
-                                boxShadow: <BoxShadow>[
-                                  BoxShadow(
-                                    color: _brandBlue.withValues(alpha: 0.24),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                adv.initials,
-                                style: const TextStyle(
-                                  fontSize: 19,
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Row(
-                                    children: <Widget>[
-                                      Flexible(
-                                        child: Text(
-                                          adv.fullName,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 15.8,
-                                            fontWeight: FontWeight.w900,
-                                            color: _inkNavy,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 5),
-                                      const Icon(
-                                        Icons.verified_rounded,
-                                        size: 16,
-                                        color: _brandBlue,
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    '${adv.specialization} • ${adv.region}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 12.4,
-                                      color: _mutedSlate,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: <Widget>[
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFFFBEB),
-                                          borderRadius:
-                                              BorderRadius.circular(99),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: <Widget>[
-                                            const Icon(
-                                              Icons.star_rounded,
-                                              size: 14,
-                                              color: _gold,
-                                            ),
-                                            const SizedBox(width: 3),
-                                            Text(
-                                              adv.rating.toStringAsFixed(1),
-                                              style: const TextStyle(
-                                                fontSize: 11.5,
-                                                fontWeight: FontWeight.w800,
-                                                color: Color(0xFFB45309),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 9,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: _softIce,
-                                          borderRadius:
-                                              BorderRadius.circular(99),
-                                        ),
-                                        child: const Text(
-                                          '19 daq video',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w800,
-                                            color: _brandBlue,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: const BoxDecoration(
-                                color: _softIce,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.arrow_forward_ios_rounded,
-                                size: 14,
-                                color: _brandBlue,
-                              ),
-                            ),
-                          ],
+              : ListView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 2, 16, 20),
+                  children: <Widget>[
+                    ...filtered.map((adv) {
+                      final isSelected = _selectedAdvocate?.id == adv.id;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _LawyerSelectionCard(
+                          advocate: adv,
+                          selected: isSelected,
+                          onTap: () => _selectAdvocate(adv),
                         ),
+                      );
+                    }),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: _lightBlue.withValues(alpha: 0.72),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: _borderSubtle),
                       ),
-                    );
-                  },
+                      child: const Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Icon(
+                            Icons.info_outline_rounded,
+                            size: 19,
+                            color: _primaryBlue,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  'Advokat tanlashda yordam kerakmi?',
+                                  style: TextStyle(
+                                    color: _darkNavy,
+                                    fontSize: 13.2,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                SizedBox(height: 3),
+                                Text(
+                                  'Mutaxassislik, viloyat yoki reyting bo‘yicha qidirib, o‘zingizga mos advokatni tanlang.',
+                                  style: TextStyle(
+                                    color: _mutedSlate,
+                                    fontSize: 12.2,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
         ),
       ],
     );
   }
 
-  Widget _buildAdvocateProfileCard(
-    LawyerDirectoryProfile adv, {
-    bool showChangeButton = false,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: _appleCardDecoration(radius: 26),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Container(
-                width: 62,
-                height: 62,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: <Color>[_brandBlue, _skyBlue],
-                  ),
-                  boxShadow: <BoxShadow>[
-                    BoxShadow(
-                      color: _brandBlue.withValues(alpha: 0.22),
-                      blurRadius: 14,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  adv.initials,
-                  style: const TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      adv.fullName,
-                      style: const TextStyle(
-                        fontSize: 17.5,
-                        fontWeight: FontWeight.w900,
-                        color: _inkNavy,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2.5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _softIce,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                      child: Text(
-                        adv.title,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.4,
-                          color: _brandBlue,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Row(
-                      children: <Widget>[
-                        const Icon(
-                          Icons.verified_rounded,
-                          size: 14,
-                          color: _emerald,
-                        ),
-                        const SizedBox(width: 5),
-                        Flexible(
-                          child: Text(
-                            adv.specialization,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12.2,
-                              fontWeight: FontWeight.w600,
-                              color: _mutedSlate,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (showChangeButton)
-                GestureDetector(
-                  onTap: () => setState(() => _step = 0),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 11,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _softIce,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _borderBlue),
-                    ),
-                    child: const Text(
-                      'Almashtirish',
-                      style: TextStyle(
-                        fontSize: 11.2,
-                        fontWeight: FontWeight.w800,
-                        color: _brandBlue,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          const Divider(height: 1, color: _borderBlue),
-          const SizedBox(height: 12),
-          const Row(
-            children: <Widget>[
-              Icon(
-                Icons.workspace_premium_rounded,
-                size: 16,
-                color: _brandBlue,
-              ),
-              SizedBox(width: 6),
-              Text(
-                'Yurist biografiyasi',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: _inkNavy,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            adv.bio,
-            style: const TextStyle(
-              fontSize: 12.8,
-              height: 1.48,
-              color: _mutedSlate,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // ═════════════════════════════════════════════════════════════════════════
+  // STEP 2: DATE & TIME SELECTION (7-DAY CALENDAR + 24-HOUR GRID + 3x 19-MIN)
+  // ═════════════════════════════════════════════════════════════════════════
 
   Widget _buildStep1CalendarPicker() {
     final adv = _selectedAdvocate!;
@@ -835,91 +547,71 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
     final dateKey = _selectedDateKey;
     final dayBlocked = repo.isDayBlocked(adv.id, dateKey);
     final now = DateTime.now();
+    final selectedDate = _sevenDays[_selectedDayIndex];
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+      key: const ValueKey<String>('step-1'),
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
       children: <Widget>[
-        _buildAdvocateProfileCard(
-          adv,
-          showChangeButton: widget.preselectedAdvocate == null,
-        ),
-        const SizedBox(height: 18),
-        const Text(
-          'Sizga qulay kun va vaqtni tanlang',
-          style: TextStyle(
-            fontSize: 20.5,
-            fontWeight: FontWeight.w900,
-            color: _inkNavy,
-            letterSpacing: -0.3,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Har bir soat 3 ta 19 daqiqalik qismga bo‘lingan (advokat uchun 1 daqiqa tanaffus bilan).',
-          style: TextStyle(
-            fontSize: 12.6,
-            color: _mutedSlate,
-            height: 1.4,
-          ),
+        _SelectedLawyerSummary(
+          advocate: adv,
+          onChangeTap: widget.preselectedAdvocate == null
+              ? () => setState(() => _step = 0)
+              : null,
         ),
         const SizedBox(height: 14),
 
-        // Luminous Apple-Clean Calendar Card
+        // Calendar & Time Card
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: _appleCardDecoration(radius: 26),
+          decoration: _surfaceCardDecoration(radius: 22),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              // 1. 7-Day Selector (Today + Upcoming 6 Days)
+              // 1. Date Selector Header
               Row(
                 children: <Widget>[
-                  Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: _softIce,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.calendar_month_rounded,
-                      size: 16,
-                      color: _brandBlue,
-                    ),
+                  const Icon(
+                    Icons.calendar_today_rounded,
+                    size: 16,
+                    color: _primaryBlue,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 7),
                   const Text(
-                    'Sana tanlang',
+                    'Sanani tanlang',
                     style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w800,
-                      color: _inkNavy,
+                      color: _darkNavy,
                     ),
                   ),
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 4,
+                      horizontal: 10,
+                      vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: _softIce,
-                      borderRadius: BorderRadius.circular(99),
+                      color: _lightBlue,
+                      borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      '${ConsultationSlotMath.monthName(_sevenDays[_selectedDayIndex]).toUpperCase()} ${_sevenDays[_selectedDayIndex].year}',
+                      '${ConsultationSlotMath.monthName(selectedDate)} ${selectedDate.year}',
                       style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        color: _brandBlue,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: _primaryBlue,
                       ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
+
+              // Horizontal 7-Day Calendar
               SizedBox(
-                height: 84,
+                height: 78,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: _sevenDays.length,
@@ -940,36 +632,29 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                         });
                       },
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        width: 60,
+                        duration: const Duration(milliseconds: 160),
+                        width: 58,
                         decoration: BoxDecoration(
-                          gradient: isSelected
-                              ? const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: <Color>[_brandBlue, _skyBlue],
-                                )
-                              : null,
                           color: isSelected
-                              ? null
+                              ? _primaryBlue
                               : isBlocked
-                              ? _roseSoft
-                              : _softIce,
-                          borderRadius: BorderRadius.circular(18),
+                              ? _unavailableBg
+                              : _bgSurface,
+                          borderRadius: BorderRadius.circular(16),
                           border: Border.all(
                             color: isSelected
-                                ? _brandBlue
+                                ? _primaryBlue
                                 : isBlocked
-                                ? _rose.withValues(alpha: 0.35)
-                                : _borderBlue,
-                            width: isSelected ? 1.5 : 1,
+                                ? const Color(0xFFD5DCE6)
+                                : _borderSubtle,
+                            width: isSelected ? 1.4 : 1,
                           ),
                           boxShadow: isSelected
                               ? <BoxShadow>[
                                   BoxShadow(
-                                    color: _brandBlue.withValues(alpha: 0.28),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 5),
+                                    color: _primaryBlue.withValues(alpha: 0.24),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
                                   ),
                                 ]
                               : null,
@@ -983,43 +668,39 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                                   : ConsultationSlotMath.shortWeekday(d),
                               style: TextStyle(
                                 fontSize: 9.8,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: isSelected
-                                    ? Colors.white.withValues(alpha: 0.9)
+                                    ? Colors.white.withValues(alpha: 0.92)
                                     : isBlocked
-                                    ? _rose
+                                    ? const Color(0xFF94A3B8)
                                     : _mutedSlate,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 3),
                             Text(
                               '${d.day}',
                               style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
                                 color: isSelected
                                     ? Colors.white
                                     : isBlocked
-                                    ? _rose.withValues(alpha: 0.55)
-                                    : _inkNavy,
+                                    ? const Color(0xFF94A3B8)
+                                    : _darkNavy,
                                 decoration: isBlocked
                                     ? TextDecoration.lineThrough
                                     : null,
                               ),
                             ),
-                            const SizedBox(height: 3),
-                            Container(
-                              width: isSelected ? 16 : 6,
-                              height: 3,
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? Colors.white
-                                    : isBlocked
-                                    ? _rose
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
+                            const SizedBox(height: 2),
+                            if (isSelected)
+                              const Icon(
+                                Icons.check_rounded,
+                                size: 12,
+                                color: Colors.white,
+                              )
+                            else
+                              const SizedBox(height: 12),
                           ],
                         ),
                       ),
@@ -1029,33 +710,25 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
               ),
               const SizedBox(height: 18),
 
-              // 2. 24-Hour Grid (00:00 - 23:00)
-              Row(
+              // 2. 24-Hour Grid Header
+              const Row(
                 children: <Widget>[
-                  Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: _softIce,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.access_time_filled_rounded,
-                      size: 16,
-                      color: _brandBlue,
-                    ),
+                  Icon(
+                    Icons.access_time_filled_rounded,
+                    size: 16,
+                    color: _primaryBlue,
                   ),
-                  const SizedBox(width: 8),
-                  const Text(
+                  SizedBox(width: 7),
+                  Text(
                     'Soatni tanlang (24 soat)',
                     style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w800,
-                      color: _inkNavy,
+                      color: _darkNavy,
                     ),
                   ),
-                  const Spacer(),
-                  const Text(
+                  Spacer(),
+                  Text(
                     'Toshkent vaqti',
                     style: TextStyle(
                       fontSize: 11.5,
@@ -1073,19 +746,19 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: _roseSoft,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: _rose.withValues(alpha: 0.3)),
                   ),
                   child: const Row(
                     children: <Widget>[
-                      Icon(Icons.event_busy_rounded, color: _rose, size: 20),
+                      Icon(Icons.event_busy_rounded, color: _rose, size: 19),
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Advokat ushbu kunni band deb yopgan. Iltimos, yuqoridan boshqa kunni tanlang.',
+                          'Advokat ushbu kunni band deb belgilagan. Iltimos, boshqa kunni tanlang.',
                           style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 12.4,
+                            fontWeight: FontWeight.w600,
                             color: _rose,
                           ),
                         ),
@@ -1102,7 +775,7 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                     crossAxisCount: 4,
                     mainAxisSpacing: 8,
                     crossAxisSpacing: 8,
-                    childAspectRatio: 1.72,
+                    childAspectRatio: 1.68,
                   ),
                   itemBuilder: (context, hour) {
                     final availCount = repo.countAvailableSlotsForHour(
@@ -1130,36 +803,22 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                               });
                             },
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 160),
+                        duration: const Duration(milliseconds: 150),
                         decoration: BoxDecoration(
-                          gradient: isSelected
-                              ? const LinearGradient(
-                                  colors: <Color>[_brandBlue, _skyBlue],
-                                )
-                              : null,
                           color: isSelected
-                              ? null
+                              ? _primaryBlue
                               : isDisabled
-                              ? const Color(0xFFF8FAFC)
-                              : _softIce,
-                          borderRadius: BorderRadius.circular(14),
+                              ? _unavailableBg
+                              : _availableSoft,
+                          borderRadius: BorderRadius.circular(13),
                           border: Border.all(
                             color: isSelected
-                                ? _brandBlue
+                                ? _primaryBlue
                                 : isDisabled
-                                ? const Color(0xFFE2E8F0)
-                                : _borderBlue,
+                                ? const Color(0xFFDDE3EC)
+                                : _availableGreen.withValues(alpha: 0.35),
                             width: isSelected ? 1.5 : 1,
                           ),
-                          boxShadow: isSelected
-                              ? <BoxShadow>[
-                                  BoxShadow(
-                                    color: _brandBlue.withValues(alpha: 0.25),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ]
-                              : null,
                         ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -1167,29 +826,29 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                             Text(
                               ConsultationSlotMath.formatHour(hour),
                               style: TextStyle(
-                                fontSize: 13.5,
+                                fontSize: 13.2,
                                 fontWeight: FontWeight.w800,
                                 color: isSelected
                                     ? Colors.white
                                     : isDisabled
                                     ? const Color(0xFF94A3B8)
-                                    : _inkNavy,
+                                    : _darkNavy,
                               ),
                             ),
                             Text(
                               isHourBlocked
-                                  ? 'Yopiq'
+                                  ? 'Band'
                                   : availCount == 0
-                                  ? 'Bo‘sh emas'
+                                  ? 'Band'
                                   : '$availCount/3 bo‘sh',
                               style: TextStyle(
-                                fontSize: 9.5,
+                                fontSize: 9.6,
                                 fontWeight: FontWeight.w700,
                                 color: isSelected
-                                    ? Colors.white.withValues(alpha: 0.9)
+                                    ? Colors.white.withValues(alpha: 0.92)
                                     : isDisabled
-                                    ? const Color(0xFFCBD5E1)
-                                    : _brandBlue,
+                                    ? const Color(0xFF94A3B8)
+                                    : _availableText,
                               ),
                             ),
                           ],
@@ -1199,25 +858,25 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                   },
                 ),
 
-              // 3. 3-Part 19-Minute Sub-Slot Selector below selected hour
+              // 3. Detailed 19-Minute Sub-Slots (00-19, 20-39, 40-59)
               if (!dayBlocked && _selectedHour != null) ...<Widget>[
-                const SizedBox(height: 18),
-                const Divider(height: 1, color: _borderBlue),
+                const SizedBox(height: 16),
+                const Divider(height: 1, color: _borderSubtle),
                 const SizedBox(height: 14),
                 Row(
                   children: <Widget>[
                     const Icon(
                       Icons.timelapse_rounded,
-                      size: 18,
-                      color: _brandBlue,
+                      size: 17,
+                      color: _primaryBlue,
                     ),
-                    const SizedBox(width: 7),
+                    const SizedBox(width: 6),
                     Text(
-                      '${ConsultationSlotMath.formatHour(_selectedHour!)} soatidagi 3 ta qism:',
+                      '${ConsultationSlotMath.formatHour(_selectedHour!)} soatidagi 19 daqiqalik vaqtlar:',
                       style: const TextStyle(
-                        fontSize: 14,
+                        fontSize: 13.4,
                         fontWeight: FontWeight.w800,
-                        color: _inkNavy,
+                        color: _darkNavy,
                       ),
                     ),
                   ],
@@ -1255,10 +914,10 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                     final statusLabel = isBooked
                         ? 'Band'
                         : isBlocked
-                        ? 'Yopilgan'
+                        ? 'Yopiq'
                         : isPast
                         ? 'O‘tgan'
-                        : 'Bo‘sh • 19 daq';
+                        : 'Bo‘sh';
 
                     return Expanded(
                       child: GestureDetector(
@@ -1269,45 +928,27 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                                 setState(() => _selectedSlotIndex = slotIdx);
                               },
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 160),
+                          duration: const Duration(milliseconds: 150),
                           margin: EdgeInsets.only(right: slotIdx < 2 ? 8 : 0),
                           padding: const EdgeInsets.symmetric(
-                            vertical: 13,
+                            vertical: 12,
                             horizontal: 6,
                           ),
                           decoration: BoxDecoration(
-                            gradient: selected
-                                ? const LinearGradient(
-                                    colors: <Color>[_brandBlue, _skyBlue],
-                                  )
-                                : null,
                             color: selected
-                                ? null
-                                : (isBooked || isBlocked)
-                                ? _roseSoft
-                                : isPast
-                                ? const Color(0xFFF8FAFC)
-                                : _emeraldSoft,
-                            borderRadius: BorderRadius.circular(16),
+                                ? _primaryBlue
+                                : disabled
+                                ? _unavailableBg
+                                : _availableSoft,
+                            borderRadius: BorderRadius.circular(14),
                             border: Border.all(
                               color: selected
-                                  ? _brandBlue
-                                  : (isBooked || isBlocked)
-                                  ? _rose.withValues(alpha: 0.35)
-                                  : isPast
-                                  ? const Color(0xFFE2E8F0)
-                                  : _emerald.withValues(alpha: 0.4),
-                              width: selected ? 1.6 : 1,
+                                  ? _primaryBlue
+                                  : disabled
+                                  ? const Color(0xFFDDE3EC)
+                                  : _availableGreen.withValues(alpha: 0.4),
+                              width: selected ? 1.5 : 1,
                             ),
-                            boxShadow: selected
-                                ? <BoxShadow>[
-                                    BoxShadow(
-                                      color: _brandBlue.withValues(alpha: 0.25),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ]
-                                : null,
                           ),
                           child: Column(
                             children: <Widget>[
@@ -1315,29 +956,27 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                                 rangeLabel,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  fontSize: 12.2,
-                                  fontWeight: FontWeight.w900,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
                                   color: selected
                                       ? Colors.white
                                       : disabled
                                       ? const Color(0xFF94A3B8)
-                                      : _inkNavy,
+                                      : _darkNavy,
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 3),
                               Text(
                                 statusLabel,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
+                                  fontSize: 10.2,
+                                  fontWeight: FontWeight.w700,
                                   color: selected
                                       ? Colors.white.withValues(alpha: 0.92)
-                                      : (isBooked || isBlocked)
-                                      ? _rose
-                                      : isPast
-                                      ? const Color(0xFFCBD5E1)
-                                      : _emerald,
+                                      : disabled
+                                      ? const Color(0xFF94A3B8)
+                                      : _availableText,
                                 ),
                               ),
                             ],
@@ -1348,12 +987,114 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                   }),
                 ),
               ],
+
+              // Selected Time Summary Strip
+              if (_selectedHour != null && _selectedSlotIndex != null) ...<Widget>[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _lightBlue,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: _primaryBlue.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        size: 19,
+                        color: _primaryBlue,
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              '${ConsultationSlotMath.formatFriendlyDate(selectedDate)} • ${ConsultationSlotMath.formatSlotRange(_selectedHour!, _selectedSlotIndex!)}',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: _darkNavy,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              '19 daqiqa (+1 daq tanaffus) • Toshkent vaqti',
+                              style: TextStyle(
+                                fontSize: 11.4,
+                                fontWeight: FontWeight.w500,
+                                color: _mutedSlate,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // 19-Minute Rule Explanation + Legend
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _bgSurface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: _borderSubtle),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 17,
+                      color: _primaryBlue,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Har bir konsultatsiya 19 daqiqa davom etadi. Keyingi uchrashuvgacha 1 daqiqalik tanaffus ajratiladi.',
+                        style: TextStyle(
+                          fontSize: 11.8,
+                          height: 1.4,
+                          color: _darkNavy,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: <Widget>[
+                  _SlotLegendDot(color: _primaryBlue, label: 'Tanlangan'),
+                  _SlotLegendDot(
+                    color: _availableSoft,
+                    borderColor: _availableGreen,
+                    label: 'Bo‘sh',
+                  ),
+                  _SlotLegendDot(
+                    color: _unavailableBg,
+                    borderColor: Color(0xFFCBD5E1),
+                    label: 'Band / o‘tgan',
+                  ),
+                ],
+              ),
             ],
           ),
         ),
       ],
     );
   }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // STEP 3: BOOKING CONFIRMATION
+  // ═════════════════════════════════════════════════════════════════════════
 
   Widget _buildStep2ReviewScreen() {
     final adv = _selectedAdvocate!;
@@ -1364,33 +1105,37 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
     );
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+      key: const ValueKey<String>('step-2'),
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
       children: <Widget>[
-        _buildAdvocateProfileCard(
-          adv,
-          showChangeButton: widget.preselectedAdvocate == null,
+        _SelectedLawyerSummary(
+          advocate: adv,
+          onChangeTap: widget.preselectedAdvocate == null
+              ? () => setState(() => _step = 0)
+              : null,
         ),
         const SizedBox(height: 18),
         const Text(
           'Rejangizni tasdiqlang',
           style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w900,
-            color: _inkNavy,
+            fontSize: 21,
+            fontWeight: FontWeight.w800,
+            color: _darkNavy,
             letterSpacing: -0.3,
           ),
         ),
         const SizedBox(height: 4),
         const Text(
           'Tanlangan advokat, sana va 19 daqiqalik vaqt oralig‘ini yana bir bor tekshiring.',
-          style: TextStyle(fontSize: 13, color: _mutedSlate),
+          style: TextStyle(fontSize: 13, color: _mutedSlate, height: 1.4),
         ),
         const SizedBox(height: 14),
 
-        // Review Summary Card (Clean Apple White + Edit Pills)
+        // Appointment Summary Card
         Container(
-          padding: const EdgeInsets.all(18),
-          decoration: _appleCardDecoration(radius: 26),
+          padding: const EdgeInsets.all(16),
+          decoration: _surfaceCardDecoration(radius: 22),
           child: Column(
             children: <Widget>[
               _buildReviewRow(
@@ -1401,63 +1146,63 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                     ? () => setState(() => _step = 0)
                     : null,
               ),
-              const Divider(height: 22, color: _borderBlue),
+              const Divider(height: 20, color: _borderSubtle),
               _buildReviewRow(
                 icon: Icons.calendar_today_rounded,
                 label: 'Sana',
                 value: ConsultationSlotMath.formatFriendlyDate(date),
                 onEdit: () => setState(() => _step = 1),
               ),
-              const Divider(height: 22, color: _borderBlue),
+              const Divider(height: 20, color: _borderSubtle),
               _buildReviewRow(
                 icon: Icons.access_time_filled_rounded,
                 label: 'Toshkent vaqti',
                 value: range,
-                valueColor: _brandBlue,
+                valueColor: _primaryBlue,
                 onEdit: () => setState(() => _step = 1),
               ),
-              const Divider(height: 22, color: _borderBlue),
+              const Divider(height: 20, color: _borderSubtle),
               _buildReviewRow(
                 icon: Icons.timelapse_rounded,
                 label: 'Davomiyligi',
                 value: '19 daqiqa (+1 daq tanaffus)',
               ),
-              const Divider(height: 22, color: _borderBlue),
+              const Divider(height: 20, color: _borderSubtle),
               _buildReviewRow(
                 icon: Icons.videocam_rounded,
                 label: 'Format',
-                value: 'E2EE Jonli Video Konsultatsiya',
-                valueColor: _emerald,
+                value: 'Jonli Video Konsultatsiya',
+                valueColor: _availableGreen,
               ),
             ],
           ),
         ),
         const SizedBox(height: 14),
 
-        // Soft Ice-Blue Auto-Stop Notice
+        // Consultation Information Panel
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: _softIce,
+            color: _lightBlue,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _borderBlue),
+            border: Border.all(color: _borderSubtle),
           ),
-          child: Row(
+          child: const Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Icon(
+              Icon(
                 Icons.info_outline_rounded,
-                color: _brandBlue,
+                color: _primaryBlue,
                 size: 19,
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Diqqat: “Video qo‘ng‘iroqni boshlash” tugmasi faqat belgilangan $range oralig‘ida faol bo‘ladi. Vaqt tugashi (00:00) bilan video qo‘ng‘iroq har ikki tomon uchun avtomatik yakunlanadi va baholash oynasi ochiladi.',
-                  style: const TextStyle(
-                    fontSize: 12.2,
+                  'Video konsultatsiya belgilangan vaqt oralig‘ida faollashadi. Vaqt tugagach, videoaloqa avtomatik yakunlanadi.',
+                  style: TextStyle(
+                    fontSize: 12.4,
                     height: 1.45,
-                    color: _inkNavy,
+                    color: _darkNavy,
                   ),
                 ),
               ),
@@ -1481,10 +1226,10 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-            color: _softIce,
+            color: _lightBlue,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, size: 19, color: _brandBlue),
+          child: Icon(icon, size: 19, color: _primaryBlue),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -1495,7 +1240,7 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
                 label,
                 style: const TextStyle(
                   fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                   color: _mutedSlate,
                 ),
               ),
@@ -1503,9 +1248,9 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
               Text(
                 value,
                 style: TextStyle(
-                  fontSize: 14.5,
+                  fontSize: 14.2,
                   fontWeight: FontWeight.w800,
-                  color: valueColor ?? _inkNavy,
+                  color: valueColor ?? _darkNavy,
                 ),
               ),
             ],
@@ -1515,18 +1260,17 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
           GestureDetector(
             onTap: onEdit,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
               decoration: BoxDecoration(
-                color: _softIce,
+                color: _lightBlue,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _borderBlue),
               ),
               child: const Text(
                 'Tahrirlash',
                 style: TextStyle(
-                  fontSize: 11.2,
-                  fontWeight: FontWeight.w800,
-                  color: _brandBlue,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: _primaryBlue,
                 ),
               ),
             ),
@@ -1535,24 +1279,22 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
     );
   }
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // FIXED BOTTOM ACTION BAR
+  // ═════════════════════════════════════════════════════════════════════════
+
   Widget _buildBottomActionBar() {
-    final canContinue =
+    final canStep0 = _step == 0 && _selectedAdvocate != null;
+    final canStep1 =
         _step == 1 && _selectedHour != null && _selectedSlotIndex != null;
     final isReview = _step == 2;
-    final enabled = isReview || canContinue;
+    final enabled = isReview || canStep0 || canStep1;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: _cardWhite,
-        border: const Border(top: BorderSide(color: _borderBlue)),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: _brandBlue.withValues(alpha: 0.06),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-          ),
-        ],
+        border: Border(top: BorderSide(color: _borderSubtle)),
       ),
       child: Row(
         children: <Widget>[
@@ -1560,16 +1302,15 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
             GestureDetector(
               onTap: _isBooking ? null : () => setState(() => _step = 1),
               child: Container(
-                width: 52,
-                height: 54,
+                width: 50,
+                height: 52,
                 decoration: BoxDecoration(
-                  color: _softIce,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: _borderBlue),
+                  color: _lightBlue,
+                  borderRadius: BorderRadius.circular(15),
                 ),
                 child: const Icon(
                   Icons.arrow_back_ios_new_rounded,
-                  color: _inkNavy,
+                  color: _darkNavy,
                   size: 18,
                 ),
               ),
@@ -1577,62 +1318,58 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
             const SizedBox(width: 10),
           ],
           Expanded(
-            child: GestureDetector(
-              onTap: isReview
-                  ? (_isBooking ? null : _confirmAndBook)
-                  : (canContinue
-                        ? () {
-                            HapticFeedback.selectionClick();
-                            setState(() => _step = 2);
-                          }
-                        : null),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                height: 54,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  gradient: enabled
-                      ? const LinearGradient(
-                          colors: <Color>[_brandBlue, _skyBlue],
-                        )
-                      : null,
-                  color: enabled ? null : const Color(0xFFE2E8F0),
-                  boxShadow: enabled
-                      ? <BoxShadow>[
-                          BoxShadow(
-                            color: _brandBlue.withValues(alpha: 0.3),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          ),
-                        ]
-                      : null,
+            child: SizedBox(
+              height: 52,
+              child: ElevatedButton(
+                onPressed: !enabled || _isBooking
+                    ? null
+                    : () {
+                        if (_step == 0) {
+                          _proceedFromStep0();
+                        } else if (_step == 1) {
+                          _proceedFromStep1();
+                        } else {
+                          _confirmAndBook();
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryBlue,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: _unavailableBg,
+                  disabledForegroundColor: const Color(0xFF94A3B8),
+                  elevation: 0,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
                 ),
-                alignment: Alignment.center,
                 child: _isBooking
-                    ? const CupertinoActivityIndicator(color: Colors.white)
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: <Widget>[
                           Text(
-                            isReview
-                                ? 'UCHRASHUVNI TASDIQLASH'
-                                : 'DAVOM ETISH',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.4,
-                              color: enabled
-                                  ? Colors.white
-                                  : const Color(0xFF94A3B8),
+                            isReview ? 'Uchrashuvni tasdiqlash' : 'Davom etish',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                           const SizedBox(width: 8),
                           Icon(
-                            Icons.arrow_forward_rounded,
+                            isReview
+                                ? Icons.check_rounded
+                                : Icons.arrow_forward_rounded,
                             size: 18,
-                            color: enabled
-                                ? Colors.white
-                                : const Color(0xFF94A3B8),
                           ),
                         ],
                       ),
@@ -1641,6 +1378,593 @@ class _ConsultationBookingPageState extends State<ConsultationBookingPage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REUSABLE BOOKING COMPONENTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _ConsultationHeader extends StatelessWidget {
+  const _ConsultationHeader({
+    required this.step,
+    required this.onBack,
+  });
+
+  final int step;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = step == 0
+        ? '1-qadam · Advokatni tanlang'
+        : step == 1
+        ? '2-qadam · Kun va 19 daqiqalik vaqtni tanlang'
+        : '3-qadam · Rejangizni tasdiqlang';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      child: Column(
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              GestureDetector(
+                onTap: onBack,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFDCE6F2)),
+                  ),
+                  child: const Icon(
+                    Icons.arrow_back_rounded,
+                    color: Color(0xFF102B50),
+                    size: 19,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const Text(
+                      'Onlayn Konsultatsiya',
+                      style: TextStyle(
+                        fontSize: 18.5,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF102B50),
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.2,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1677D2),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFDCE6F2)),
+                ),
+                child: const Icon(
+                  Icons.verified_user_rounded,
+                  color: Color(0xFF1677D2),
+                  size: 19,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: List<Widget>.generate(3, (i) {
+              final active = i <= step;
+              return Expanded(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  height: 4,
+                  margin: EdgeInsets.only(right: i < 2 ? 6 : 0),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    color: active
+                        ? const Color(0xFF1677D2)
+                        : const Color(0xFFDCE6F2),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BookingAvatar extends StatelessWidget {
+  const _BookingAvatar({
+    required this.advocate,
+    this.size = 54,
+  });
+
+  final LawyerDirectoryProfile advocate;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final b64 = advocate.avatarBase64.trim();
+    final url = advocate.avatarUrl.trim();
+    Widget inner = _initials();
+    if (b64.isNotEmpty) {
+      try {
+        final clean = b64.contains(',') ? b64.split(',').last.trim() : b64;
+        inner = Image.memory(
+          base64Decode(clean),
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => _initials(),
+        );
+      } catch (_) {
+        inner = _initials();
+      }
+    } else if (url.isNotEmpty) {
+      inner = Image.network(
+        url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _initials(),
+      );
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Color(0xFF1677D2),
+      ),
+      child: ClipOval(child: inner),
+    );
+  }
+
+  Widget _initials() {
+    return Center(
+      child: Text(
+        advocate.initials,
+        style: TextStyle(
+          fontSize: size * 0.34,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+}
+
+class _LawyerSelectionCard extends StatelessWidget {
+  const _LawyerSelectionCard({
+    required this.advocate,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final LawyerDirectoryProfile advocate;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final spec = advocate.specialization.trim();
+    final region = advocate.region.trim();
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFF2F8FF) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected
+                ? const Color(0xFF1677D2)
+                : const Color(0xFFDCE6F2),
+            width: selected ? 1.5 : 1.0,
+          ),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x09102B50),
+              blurRadius: 14,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            _BookingAvatar(advocate: advocate, size: 54),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(
+                          advocate.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF102B50),
+                          ),
+                        ),
+                      ),
+                      if (advocate.isVerifiedPartner) ...<Widget>[
+                        const SizedBox(width: 5),
+                        const Icon(
+                          Icons.verified_rounded,
+                          size: 16,
+                          color: Color(0xFF1677D2),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (spec.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 3),
+                    Row(
+                      children: <Widget>[
+                        const Icon(
+                          Icons.work_outline_rounded,
+                          size: 13,
+                          color: Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            spec,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12.2,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (region.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: <Widget>[
+                        const Icon(
+                          Icons.location_on_outlined,
+                          size: 13,
+                          color: Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            region,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12.2,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: <Widget>[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3F7FC),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            const Icon(
+                              Icons.star_rounded,
+                              size: 13,
+                              color: Color(0xFFF59E0B),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              advocate.feedbackCount > 0
+                                  ? '${advocate.rating.toStringAsFixed(1)} (${advocate.feedbackCount} izoh)'
+                                  : 'Yangi',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF102B50),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEAF3FC),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Icon(
+                              Icons.videocam_rounded,
+                              size: 12,
+                              color: Color(0xFF1677D2),
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              '19 daq video',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1677D2),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F8F0),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Mavjud',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0F766E),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: selected
+                    ? const Color(0xFF1677D2)
+                    : const Color(0xFFEAF3FC),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                selected
+                    ? Icons.check_rounded
+                    : Icons.chevron_right_rounded,
+                size: 17,
+                color: selected ? Colors.white : const Color(0xFF1677D2),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectedLawyerSummary extends StatelessWidget {
+  const _SelectedLawyerSummary({
+    required this.advocate,
+    this.onChangeTap,
+  });
+
+  final LawyerDirectoryProfile advocate;
+  final VoidCallback? onChangeTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final spec = advocate.specialization.trim();
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFDCE6F2)),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x08102B50),
+            blurRadius: 14,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: <Widget>[
+          _BookingAvatar(advocate: advocate, size: 50),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Flexible(
+                      child: Text(
+                        advocate.fullName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF102B50),
+                        ),
+                      ),
+                    ),
+                    if (advocate.isVerifiedPartner) ...<Widget>[
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.verified_rounded,
+                        size: 15,
+                        color: Color(0xFF1677D2),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEAF3FC),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    advocate.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 9.8,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1677D2),
+                    ),
+                  ),
+                ),
+                if (spec.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: <Widget>[
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        size: 13,
+                        color: Color(0xFF10B981),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          spec,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11.8,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (onChangeTap != null) ...<Widget>[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: onChangeTap,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF3FC),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Text(
+                  'Almashtirish',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1677D2),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SlotLegendDot extends StatelessWidget {
+  const _SlotLegendDot({
+    required this.color,
+    required this.label,
+    this.borderColor,
+  });
+
+  final Color color;
+  final String label;
+  final Color? borderColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: 13,
+          height: 13,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+            border: borderColor != null
+                ? Border.all(color: borderColor!, width: 1)
+                : null,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF64748B),
+          ),
+        ),
+      ],
     );
   }
 }
