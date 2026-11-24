@@ -22,6 +22,7 @@ import 'screens/case_progress_stepper_page.dart';
 import 'screens/bosh_sahifa_page.dart';
 import 'services/consultation_service.dart';
 import 'services/contract_link_service.dart';
+import 'services/push_notification_service.dart';
 import 'screens/profil_page.dart';
 import 'screens/services/alimony_claim_page.dart';
 import 'services/alimony_claim_document_service.dart';
@@ -62,6 +63,7 @@ Future<void> main() async {
   } catch (_) {
     // Already initialized or offline fallback
   }
+  await PushNotificationService.instance.initialize();
   runApp(const YAN360App());
 }
 
@@ -213,6 +215,7 @@ class _AppPinLockScreenState extends State<AppPinLockScreen> {
 
   Future<void> _switchToPasswordLogin() async {
     try {
+      await PushNotificationService.instance.clearCurrentUserToken();
       await Supabase.instance.client.auth.signOut();
     } catch (_) {}
     userProfile.value = userProfile.value.copyWith(clearPinCode: true);
@@ -2858,6 +2861,7 @@ class _MainDashboardState extends State<MainDashboard>
     _YanGlobalCallCenter.instance.startGlobalListening();
     ConsultationRepository.instance.ensureInitialized();
     ContractLinkRepository.instance.ensureInitialized();
+    PushNotificationService.instance.syncCurrentUserToken();
     YanRoleDataCatalog.refreshRegisteredLawyers =
         fetchRegisteredLawyersFromSupabase;
     fetchRegisteredLawyersFromSupabase();
@@ -8462,6 +8466,24 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     );
     _saveLocalEncryptedCache();
     _syncMyRoomStateToProfileEnvelope(isOnline: true);
+    PushNotificationService.instance.notifyUser(
+      targetUserId: _peerUserId,
+      title: widget.profile.displayName.trim().isEmpty
+          ? 'YAN360'
+          : widget.profile.displayName.trim(),
+      body: newMsg.mediaType == _ChatMediaType.text
+          ? 'Sizga yangi xabar yubordi'
+          : newMsg.mediaType == _ChatMediaType.voice
+              ? 'Ovozli xabar yubordi'
+              : newMsg.mediaType == _ChatMediaType.image
+                  ? 'Rasm yubordi'
+                  : 'Yangi hujjat yubordi',
+      data: <String, String>{
+        'type': 'chat_message',
+        'room_key': _roomKey,
+        'sender_id': _myUserId,
+      },
+    );
   }
 
   // ==========================================================================
@@ -12968,6 +12990,8 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
   final Set<String> _handledCallIds = <String>{};
   final Set<String> _handledEnvelopeSignalKeys = <String>{};
   final Map<String, RealtimeChannel> _peerSendChannels = <String, RealtimeChannel>{};
+  final Map<String, Completer<void>> _peerJoinCompleters =
+      <String, Completer<void>>{};
   final ValueNotifier<Map<String, dynamic>?> latestSignalNotifier =
       ValueNotifier<Map<String, dynamic>?>(null);
 
@@ -12990,6 +13014,37 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
       WidgetsBinding.instance.addObserver(this);
       _lifecycleAttached = true;
     }
+
+    PushNotificationService.instance.onCallKitAccept = (callData) {
+      handleIncomingSignalPayload(callData, autoAcceptFromCallKit: true);
+    };
+    PushNotificationService.instance.onCallKitDecline = (callData) {
+      final callId = (callData['call_id']?.toString() ?? '').trim();
+      final callerId = (callData['caller_id']?.toString() ?? '').trim();
+      final myId = _resolveMyId();
+      if (callId.isNotEmpty && callerId.isNotEmpty && myId.isNotEmpty) {
+        dispatchCallSignal(
+          callId: callId,
+          action: 'decline',
+          callerId: callerId,
+          callerName: callData['caller_name']?.toString() ?? 'YAN360',
+          callerInitials: callData['caller_initials']?.toString() ?? 'Y',
+          calleeId: myId,
+          calleeName: userProfile.value.displayName,
+          roomKey: callData['room_key']?.toString() ??
+              _YanE2eeCryptoEngine.buildCanonicalRoomKey(myId, callerId),
+          isVideo: callData['call_type'] == 'video',
+          targetPeerId: callerId,
+        );
+      }
+      PushNotificationService.instance.endCallKitCall(callId);
+    };
+
+    PushNotificationService.instance.consumePendingAcceptedCall().then((pending) {
+      if (pending != null && pending.isNotEmpty) {
+        handleIncomingSignalPayload(pending, autoAcceptFromCallKit: true);
+      }
+    });
 
     final myId = _resolveMyId();
     if (myId.isEmpty) return;
@@ -13059,6 +13114,7 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
   }
 
   void clearActiveCall(String callId) {
+    PushNotificationService.instance.endCallKitCall(callId);
     if (_activeCallId == callId) {
       _activeCallId = null;
     }
@@ -13072,15 +13128,17 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
     if (cleanId.isEmpty) return;
     try {
       var ch = _peerSendChannels[cleanId];
-      if (ch == null) {
-        final joined = Completer<void>();
+      var joined = _peerJoinCompleters[cleanId];
+      if (ch == null || joined == null) {
+        joined = Completer<void>();
+        _peerJoinCompleters[cleanId] = joined;
         ch = Supabase.instance.client.channel(
           _inboxTopicFor(cleanId),
           opts: const RealtimeChannelConfig(self: false, ack: false),
         );
         ch.subscribe((status, error) {
           if (status == RealtimeSubscribeStatus.subscribed &&
-              !joined.isCompleted) {
+              !joined!.isCompleted) {
             joined.complete();
           }
         });
@@ -13088,13 +13146,17 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
         if (_peerSendChannels.length > 20) {
           final oldestKey = _peerSendChannels.keys.first;
           final oldestCh = _peerSendChannels.remove(oldestKey);
+          _peerJoinCompleters.remove(oldestKey);
           if (oldestCh != null) {
             Supabase.instance.client.removeChannel(oldestCh);
           }
         }
-        // Wait for the WebSocket channel join to finish BEFORE sending the invite!
+      }
+      // Every concurrent caller (e.g. ringing + accept on cold-start) MUST wait
+      // until the WebSocket channel is actually subscribed before broadcasting.
+      if (!joined.isCompleted) {
         await joined.future.timeout(
-          const Duration(milliseconds: 1800),
+          const Duration(milliseconds: 2500),
           onTimeout: () {},
         );
       }
@@ -13111,17 +13173,18 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
     String targetUserId,
     Map<String, dynamic> payload,
   ) async {
-    if (!yanEnableFcmCallPush) return;
-    try {
-      await Supabase.instance.client.functions.invoke(
-        'send-call-push',
-        body: <String, dynamic>{
-          'target_user_id': targetUserId,
-          'signal': payload,
-        },
+    final action = (payload['action']?.toString() ?? '').trim();
+    if (action == 'invite') {
+      await PushNotificationService.instance.sendIncomingCallPush(
+        targetUserId: targetUserId,
+        callSignal: payload,
       );
-    } catch (e) {
-      debugPrint('FCM push invoke warning: $e');
+    } else if (action == 'cancel' || action == 'hangup') {
+      final callId = (payload['call_id']?.toString() ?? '').trim();
+      await PushNotificationService.instance.sendCallCancelPush(
+        targetUserId: targetUserId,
+        callId: callId,
+      );
     }
   }
 
@@ -13187,11 +13250,12 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
     //    and trigger FCM push notification on invite when enabled.
     if (targetProfileId.trim().isNotEmpty &&
         (action == 'invite' ||
+            action == 'accept' ||
             action == 'cancel' ||
             action == 'decline' ||
             action == 'hangup')) {
       await _writeSignalToProfileEnvelope(targetProfileId, payload);
-      if (action == 'invite') {
+      if (action == 'invite' || action == 'cancel' || action == 'hangup') {
         await _triggerFcmPushIfEnabled(targetProfileId, payload);
       }
     }
@@ -13270,12 +13334,16 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
   void handleIncomingSignalPayload(
     Map<String, dynamic> payload, {
     String? myUserIdOverride,
+    bool autoAcceptFromCallKit = false,
   }) {
     final myId = _resolveMyId(myUserIdOverride);
     if (myId.isEmpty) return;
 
     final callId = payload['call_id']?.toString() ?? '';
-    final action = payload['action']?.toString() ?? '';
+    final rawAction = payload['action']?.toString() ?? '';
+    final action = rawAction.isNotEmpty
+        ? rawAction
+        : (payload['type']?.toString() == 'incoming_call' ? 'invite' : '');
     final callerId = payload['caller_id']?.toString() ?? '';
     final calleeId = payload['callee_id']?.toString() ?? '';
 
@@ -13313,8 +13381,9 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
           payload['room_key']?.toString() ??
           _YanE2eeCryptoEngine.buildCanonicalRoomKey(myId, callerId);
 
-      // Immediately notify caller that our phone is ringing
-      dispatchCallSignal(
+      // Notify caller that our phone is ringing (skip if user already pressed Accept on CallKit)
+      if (!autoAcceptFromCallKit)
+        dispatchCallSignal(
         callId: callId,
         action: 'ringing',
         callerId: callerId,
@@ -13348,6 +13417,7 @@ class _YanGlobalCallCenter with WidgetsBindingObserver {
                     roomChannel: null,
                     isInitialVideo: isVideo,
                     isCaller: false,
+                    autoAccept: autoAcceptFromCallKit,
                     consultationId: payload['consultation_id']?.toString(),
                     consultationDeadlineAt: DateTime.tryParse(
                       payload['consultation_deadline_iso']?.toString() ?? '',
@@ -13376,6 +13446,7 @@ class _E2eeLiveCallScreen extends StatefulWidget {
   final RealtimeChannel? roomChannel;
   final bool isInitialVideo;
   final bool isCaller;
+  final bool autoAccept;
   final String? consultationId;
   final DateTime? consultationDeadlineAt;
 
@@ -13391,6 +13462,7 @@ class _E2eeLiveCallScreen extends StatefulWidget {
     required this.roomChannel,
     required this.isInitialVideo,
     required this.isCaller,
+    this.autoAccept = false,
     this.consultationId,
     this.consultationDeadlineAt,
   });
@@ -13486,7 +13558,14 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
       });
     } else {
       // Wait until the callee taps "Javob berish" (_acceptIncomingCall)
-      // before opening hardware camera & microphone to prevent permission dialog collisions.
+      // unless they already tapped "Javob berish" on the native CallKit lock screen.
+      if (widget.autoAccept) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_closed && _stage == _TelegramCallStage.incomingRinging) {
+            _acceptIncomingCall();
+          }
+        });
+      }
       _noAnswerTimeoutTimer = Timer(const Duration(seconds: 45), () {
         if (!_closed && _stage == _TelegramCallStage.incomingRinging) {
           _finishCallWithOutcome('missed');

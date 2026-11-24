@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../shared/user_profile.dart';
+import 'push_notification_service.dart';
 
 /// Supported process statuses for the Vertical Case Progress Stepper.
 enum CaseStepStatus {
@@ -459,6 +460,25 @@ class CaseProgressRepository {
     } catch (e) {
       debugPrint('CaseProgressRepository.upsertStep warning: $e');
     }
+    final statusUz = switch (step.status) {
+      CaseStepStatus.completed => 'Yakunlandi',
+      CaseStepStatus.successful => 'Muvaffaqiyatli',
+      CaseStepStatus.failed => 'Muvaffaqiyatsiz',
+      CaseStepStatus.postponed => 'Kechiktirildi',
+      CaseStepStatus.rejected => 'Rad etildi',
+      CaseStepStatus.inProgress => 'Jarayonda',
+      CaseStepStatus.upcoming => 'Kutilmoqda',
+    };
+    PushNotificationService.instance.notifyUser(
+      targetUserId: step.clientId,
+      title: 'Ish jarayoni yangilandi',
+      body: '${step.title} · $statusUz',
+      data: <String, String>{
+        'type': 'case_progress',
+        'case_key': step.caseKey,
+        'step_id': step.id,
+      },
+    );
     return null;
   }
 

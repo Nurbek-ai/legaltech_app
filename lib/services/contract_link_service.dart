@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../shared/user_profile.dart';
+import 'push_notification_service.dart';
 
 class ContractInvitation {
   final String id;
@@ -353,6 +354,13 @@ class ContractLinkRepository {
       ..insert(0, inv);
     invitations.value = updated;
     await _saveCache();
+    final targetId = senderRole == 'advocate' ? clientId : advocateId;
+    PushNotificationService.instance.notifyUser(
+      targetUserId: targetId,
+      title: 'Yangi shartnoma taklifi',
+      body: '$senderName sizga rasmiy shartnoma taklifini yubordi.',
+      data: <String, String>{'type': 'contract_invitation', 'id': inv.id},
+    );
     return inv;
   }
 
@@ -419,6 +427,12 @@ class ContractLinkRepository {
     links.value = nextLinks;
     await _saveCache();
     await refreshAll();
+    PushNotificationService.instance.notifyUser(
+      targetUserId: inv.senderId,
+      title: 'Shartnoma tasdiqlandi',
+      body: 'Shartnoma taklifingiz qabul qilindi.',
+      data: <String, String>{'type': 'contract_response', 'id': inv.id},
+    );
     return null;
   }
 
@@ -466,6 +480,12 @@ class ContractLinkRepository {
         .toList();
     await _saveCache();
     await refreshInvitations();
+    PushNotificationService.instance.notifyUser(
+      targetUserId: inv.senderId,
+      title: 'Shartnoma rad etildi',
+      body: 'Shartnoma taklifingiz rad etildi.',
+      data: <String, String>{'type': 'contract_response', 'id': inv.id},
+    );
     return null;
   }
 
