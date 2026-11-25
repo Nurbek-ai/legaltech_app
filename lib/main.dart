@@ -681,11 +681,26 @@ class _IntroScreenState extends State<IntroScreen>
               if (fromEnv.isNotEmpty) return fromEnv;
               return (profileRow[key]?.toString() ?? '').trim();
             }
-            savedRegion = pickStr('region');
-            savedDistrict = pickStr('district');
-            savedStreet = pickStr('street_address');
-            savedPassport = pickStr('passport_or_pinfl');
-            savedBirthDate = pickStr('birth_date');
+            // Read private PII from owner-only `user_private_profiles` table
+            try {
+              final privRow = await Supabase.instance.client
+                  .from('user_private_profiles')
+                  .select()
+                  .eq('user_id', user.id)
+                  .maybeSingle();
+              if (privRow != null) {
+                savedRegion = (privRow['region']?.toString() ?? '').trim();
+                savedDistrict = (privRow['district']?.toString() ?? '').trim();
+                savedStreet = (privRow['street_address']?.toString() ?? '').trim();
+                savedPassport = (privRow['passport_or_pinfl']?.toString() ?? '').trim();
+                savedBirthDate = (privRow['birth_date']?.toString() ?? '').trim();
+              }
+            } catch (_) {}
+            if (savedRegion.isEmpty) savedRegion = pickStr('region');
+            if (savedDistrict.isEmpty) savedDistrict = pickStr('district');
+            if (savedStreet.isEmpty) savedStreet = pickStr('street_address');
+            if (savedPassport.isEmpty) savedPassport = pickStr('passport_or_pinfl');
+            if (savedBirthDate.isEmpty) savedBirthDate = pickStr('birth_date');
             if (savedBirthDate.isEmpty) {
               savedBirthDate = (env['birth_date']?.toString() ?? '').trim();
             }
@@ -18556,13 +18571,53 @@ Future<void> syncCurrentUserProfileToSupabase(UserProfileData p) async {
       } catch (_) {}
     }
 
+    // 1. Store PRIVATE PII strictly in owner-only `user_private_profiles`
+    try {
+      await Supabase.instance.client.from('user_private_profiles').upsert(
+        <String, dynamic>{
+          'user_id': authUser.id,
+          'phone': p.phone.trim(),
+          'email': p.email.trim(),
+          'region': p.region.trim(),
+          'district': p.district.trim(),
+          'street_address': p.streetAddress.trim(),
+          'passport_or_pinfl': p.passportOrPinfl.trim(),
+          'birth_date': p.birthDate.trim(),
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        },
+        onConflict: 'user_id',
+      );
+    } catch (_) {}
+
+    // 2. Store PUBLIC professional fields in `public_advocate_directory` (for advocates)
+    if (p.roleType == UserRole.advokat) {
+      try {
+        await Supabase.instance.client.from('public_advocate_directory').upsert(
+          <String, dynamic>{
+            'id': authUser.id,
+            'full_name': p.displayName.trim(),
+            'region': p.region.trim(),
+            'specialization': p.lawyerSpecialization.trim(),
+            'license_number': p.lawyerLicenseNumber.trim(),
+            'experience_years': p.lawyerExperienceYears > 0
+                ? p.lawyerExperienceYears
+                : 0,
+            'bio': p.lawyerBio.trim(),
+            'birth_date': p.birthDate.trim(),
+            if (avatarB64.isNotEmpty) 'avatar_base64': avatarB64,
+            'is_online': true,
+            'last_seen_at': DateTime.now().toUtc().toIso8601String(),
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          },
+          onConflict: 'id',
+        );
+      } catch (_) {}
+    }
+
+    // 3. Keep ONLY non-private public fields in `profiles.public_key` (NO passport/street/district!)
     env['advocate_profile'] = <String, dynamic>{
       'full_name': p.displayName.trim(),
-      'phone': p.phone.trim(),
       'region': p.region.trim(),
-      'district': p.district.trim(),
-      'street_address': p.streetAddress.trim(),
-      'passport_or_pinfl': p.passportOrPinfl.trim(),
       'birth_date': p.birthDate.trim(),
       'specialization': p.lawyerSpecialization.trim(),
       'license_number': p.lawyerLicenseNumber.trim(),
