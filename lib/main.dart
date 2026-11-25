@@ -35,15 +35,11 @@ import 'shared/user_profile.dart';
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════
-// WebRTC TURN Server Configuration (For 3G/4G/5G Mobile Data & Strict Firewalls)
-// Get free credentials (no credit card) at: https://www.metered.ca/stun-turn
-// Option A (Recommended): Paste your Metered REST API URL (returns geo-nearest servers):
-//   e.g. 'https://yourapp.metered.live/api/v1/turn/credentials?apiKey=YOUR_API_KEY'
-// Option B: Or paste static username & credential from Metered Dashboard below.
+// WebRTC TURN Server Configuration (Served securely via Supabase Edge Function)
+// TURN credentials live in Supabase Edge Function Secrets (`TURN_USERNAME` /
+// `TURN_CREDENTIAL` or `METERED_TURN_API_URL`) and are fetched at call setup
+// via the authenticated `get-turn-credentials` Edge Function.
 // ═══════════════════════════════════════════════════════════════════════════
-const String yanMeteredTurnApiUrl = '';
-const String yanStaticTurnUsername = '';
-const String yanStaticTurnCredential = '';
 
 // Set to true once you deploy your Supabase Edge Function `send-call-push` + Firebase Cloud Messaging (FCM)
 const bool yanEnableFcmCallPush = false;
@@ -14237,7 +14233,7 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
   }
 
   Future<List<Map<String, dynamic>>> _resolveIceServers() async {
-    final servers = <Map<String, dynamic>>[
+    final fallbackStun = <Map<String, dynamic>>[
       <String, dynamic>{
         'urls': <String>[
           'stun:stun.l.google.com:19302',
@@ -14247,66 +14243,36 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
       },
     ];
 
-    // Option A: Fetch dynamic geo-nearest TURN servers from Metered REST API
-    final apiUrl = yanMeteredTurnApiUrl.trim();
-    if (apiUrl.isNotEmpty) {
-      HttpClient? client;
-      try {
-        client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
-        final request = await client
-            .getUrl(Uri.parse(apiUrl))
-            .timeout(const Duration(seconds: 3));
-        final response = await request.close().timeout(
-          const Duration(seconds: 3),
-        );
-        if (response.statusCode == 200) {
-          final body = await response.transform(utf8.decoder).join();
-          final decoded = jsonDecode(body);
-          if (decoded is List) {
-            for (final entry in decoded) {
-              if (entry is Map) {
-                servers.add(Map<String, dynamic>.from(entry));
-              }
-            }
-            return servers;
+    try {
+      final accessToken =
+          Supabase.instance.client.auth.currentSession?.accessToken.trim() ?? '';
+      if (accessToken.isEmpty) return fallbackStun;
+
+      final response = await Supabase.instance.client.functions
+          .invoke(
+            'get-turn-credentials',
+            headers: <String, String>{'Authorization': 'Bearer $accessToken'},
+          )
+          .timeout(const Duration(seconds: 5));
+
+      final rawData = response.data;
+      final dynamic rawList = rawData is Map ? rawData['iceServers'] : rawData;
+      if (rawList is List && rawList.isNotEmpty) {
+        final resolved = <Map<String, dynamic>>[];
+        for (final entry in rawList) {
+          if (entry is Map) {
+            resolved.add(Map<String, dynamic>.from(entry));
           }
         }
-      } catch (error) {
-        debugPrint('Metered TURN API fetch skipped (fallback to static/STUN): $error');
-      } finally {
-        client?.close(force: true);
+        if (resolved.isNotEmpty) {
+          return resolved;
+        }
       }
+    } catch (error) {
+      debugPrint('get-turn-credentials fetch skipped (fallback to STUN): $error');
     }
 
-    // Option B: Static Metered TURN credentials (UDP 80, TCP 80/443, TLS 443 for 3G/4G/5G)
-    final turnUser = yanStaticTurnUsername.trim();
-    final turnPass = yanStaticTurnCredential.trim();
-    if (turnUser.isNotEmpty && turnPass.isNotEmpty) {
-      servers.addAll(<Map<String, dynamic>>[
-        <String, dynamic>{
-          'urls': 'turn:global.relay.metered.ca:80',
-          'username': turnUser,
-          'credential': turnPass,
-        },
-        <String, dynamic>{
-          'urls': 'turn:global.relay.metered.ca:80?transport=tcp',
-          'username': turnUser,
-          'credential': turnPass,
-        },
-        <String, dynamic>{
-          'urls': 'turn:global.relay.metered.ca:443',
-          'username': turnUser,
-          'credential': turnPass,
-        },
-        <String, dynamic>{
-          'urls': 'turns:global.relay.metered.ca:443?transport=tcp',
-          'username': turnUser,
-          'credential': turnPass,
-        },
-      ]);
-    }
-
-    return servers;
+    return fallbackStun;
   }
 
   Future<RTCPeerConnection?> _ensurePeerConnectionCreated() async {

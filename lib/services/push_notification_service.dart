@@ -100,7 +100,7 @@ Future<void> yanFirebaseBackgroundHandler(RemoteMessage message) async {
 
 /// Manages Firebase Cloud Messaging (FCM) tokens, Android 13+/iOS permissions,
 /// foreground heads-up notifications, native lock-screen CallKit ringing, and
-/// Supabase Edge Function push delivery.
+/// authenticated Supabase Edge Function push delivery.
 class PushNotificationService {
   PushNotificationService._();
   static final PushNotificationService instance = PushNotificationService._();
@@ -370,7 +370,16 @@ class PushNotificationService {
     } catch (_) {}
   }
 
-  /// Sends a standard notification push via the Supabase `send-push` Edge Function.
+  /// Returns auth headers for the currently signed-in Supabase user.
+  /// Returns null when unauthenticated so we never make unauthenticated calls.
+  Map<String, String>? _authHeaders() {
+    final accessToken =
+        Supabase.instance.client.auth.currentSession?.accessToken.trim() ?? '';
+    if (accessToken.isEmpty) return null;
+    return <String, String>{'Authorization': 'Bearer $accessToken'};
+  }
+
+  /// Sends a standard notification push via the hardened `send-push` Edge Function.
   Future<void> notifyUser({
     required String targetUserId,
     required String title,
@@ -383,9 +392,13 @@ class PushNotificationService {
     final myId = Supabase.instance.client.auth.currentUser?.id ?? '';
     if (myId.isNotEmpty && myId == cleanTarget) return;
 
+    final headers = _authHeaders();
+    if (headers == null) return;
+
     try {
       await Supabase.instance.client.functions.invoke(
         'send-push',
+        headers: headers,
         body: <String, dynamic>{
           'target_user_id': cleanTarget,
           'title': title,
@@ -407,6 +420,9 @@ class PushNotificationService {
     final cleanTarget = targetUserId.trim();
     if (cleanTarget.isEmpty) return;
 
+    final headers = _authHeaders();
+    if (headers == null) return;
+
     final dataMap = <String, String>{
       'type': 'incoming_call',
       'call_id': (callSignal['call_id']?.toString() ?? '').trim(),
@@ -427,6 +443,7 @@ class PushNotificationService {
     try {
       await Supabase.instance.client.functions.invoke(
         'send-push',
+        headers: headers,
         body: <String, dynamic>{
           'target_user_id': cleanTarget,
           'data_only': true,
@@ -446,9 +463,14 @@ class PushNotificationService {
   }) async {
     final cleanTarget = targetUserId.trim();
     if (cleanTarget.isEmpty || callId.trim().isEmpty) return;
+
+    final headers = _authHeaders();
+    if (headers == null) return;
+
     try {
       await Supabase.instance.client.functions.invoke(
         'send-push',
+        headers: headers,
         body: <String, dynamic>{
           'target_user_id': cleanTarget,
           'data_only': true,

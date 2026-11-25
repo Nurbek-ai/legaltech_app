@@ -1,4 +1,4 @@
-package com.example.legaltech_app
+package com.yan360.app
 
 import io.flutter.embedding.android.FlutterActivity
 
