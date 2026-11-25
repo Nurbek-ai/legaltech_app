@@ -132,6 +132,7 @@ class UserProfileData {
     this.district = '',
     this.streetAddress = '',
     this.passportOrPinfl = '',
+    this.birthDate = '',
     this.role = 'Raqamli huquqiy profil',
     this.memberSince = '2026',
     this.isVerified = true,
@@ -162,6 +163,7 @@ class UserProfileData {
   final String district;
   final String streetAddress;
   final String passportOrPinfl;
+  final String birthDate;
   final String role;
   final String memberSince;
   final bool isVerified;
@@ -281,6 +283,7 @@ class UserProfileData {
       missing.add('Viloyat va tuman');
     }
     if (streetAddress.trim().isEmpty) missing.add('Yashash manzili');
+    if (birthDate.trim().isEmpty) missing.add('Tug‘ilgan sana');
     if (passportOrPinfl.trim().isEmpty && avatarFile == null && !hasPinCode) {
       missing.add('Pasport / JSHSHIR yoki PIN-kod');
     }
@@ -314,6 +317,7 @@ class UserProfileData {
     String? district,
     String? streetAddress,
     String? passportOrPinfl,
+    String? birthDate,
     String? role,
     String? memberSince,
     bool? isVerified,
@@ -349,6 +353,7 @@ class UserProfileData {
       district: district ?? this.district,
       streetAddress: streetAddress ?? this.streetAddress,
       passportOrPinfl: passportOrPinfl ?? this.passportOrPinfl,
+      birthDate: birthDate ?? this.birthDate,
       role: role ?? (roleType != null ? roleType.label : this.role),
       memberSince: memberSince ?? this.memberSince,
       isVerified: isVerified ?? this.isVerified,
@@ -387,6 +392,7 @@ class UserProfileData {
     'district': district,
     'streetAddress': streetAddress,
     'passportOrPinfl': passportOrPinfl,
+    'birthDate': birthDate,
     'role': role,
     'memberSince': memberSince,
     'isVerified': isVerified,
@@ -444,6 +450,7 @@ class UserProfileData {
       district: loadedDistrict,
       streetAddress: loadedStreet,
       passportOrPinfl: loadedPassport,
+      birthDate: json['birthDate']?.toString().trim() ?? '',
       role: json['role']?.toString() ?? parsedRole.label,
       memberSince: json['memberSince']?.toString() ?? '2026',
       isVerified: json['isVerified'] != false,
@@ -594,6 +601,7 @@ class LawyerDirectoryProfile {
     this.isOnline = false,
     this.avatarBase64 = '',
     this.avatarUrl = '',
+    this.birthDate = '',
   });
 
   final String id;
@@ -618,6 +626,7 @@ class LawyerDirectoryProfile {
   final bool isOnline;
   final String avatarBase64;
   final String avatarUrl;
+  final String birthDate;
 
   double get rankingScore => rating * 20.0 + (feedbackCount * 0.35);
 
@@ -639,6 +648,7 @@ class LawyerDirectoryProfile {
     bool? isOnline,
     String? avatarBase64,
     String? avatarUrl,
+    String? birthDate,
   }) {
     return LawyerDirectoryProfile(
       id: id,
@@ -663,6 +673,7 @@ class LawyerDirectoryProfile {
       isOnline: isOnline ?? this.isOnline,
       avatarBase64: avatarBase64 ?? this.avatarBase64,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      birthDate: birthDate ?? this.birthDate,
     );
   }
 
@@ -709,6 +720,7 @@ class LawyerDirectoryProfile {
       isOnline: row['is_online'] == true,
       avatarBase64: cleanText(row['avatar_base64']),
       avatarUrl: cleanText(row['avatar_url']),
+      birthDate: cleanText(row['birth_date']),
     );
   }
 }

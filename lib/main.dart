@@ -650,6 +650,7 @@ class _IntroScreenState extends State<IntroScreen>
       String savedDistrict = '';
       String savedStreet = '';
       String savedPassport = '';
+      String savedBirthDate = '';
       String savedSpec = '';
       String savedLicense = '';
       int savedExp = 0;
@@ -684,6 +685,10 @@ class _IntroScreenState extends State<IntroScreen>
             savedDistrict = pickStr('district');
             savedStreet = pickStr('street_address');
             savedPassport = pickStr('passport_or_pinfl');
+            savedBirthDate = pickStr('birth_date');
+            if (savedBirthDate.isEmpty) {
+              savedBirthDate = (env['birth_date']?.toString() ?? '').trim();
+            }
             savedSpec = pickStr('specialization');
             savedLicense = pickStr('license_number');
             savedBio = pickStr('bio');
@@ -708,6 +713,7 @@ class _IntroScreenState extends State<IntroScreen>
         district: savedDistrict,
         streetAddress: savedStreet,
         passportOrPinfl: savedPassport,
+        birthDate: savedBirthDate,
         roleType: resolvedRole,
         role: resolvedRole.label,
         lawyerSpecialization: savedSpec,
@@ -3188,14 +3194,6 @@ class _MainDashboardState extends State<MainDashboard>
                 bottom: false,
                 child: Column(
                   children: <Widget>[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 6, 18, 4),
-                      child: _RoleQuickStatusBar(
-                        profile: profile,
-                        onSwitchRoleTap: () =>
-                            _showRoleSwitcherModal(context, profile),
-                      ),
-                    ),
                     Expanded(
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 220),
@@ -10111,6 +10109,559 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
     );
   }
 
+  Future<void> _openPeerProfileAndDocumentsSheet() async {
+    final amIAdvocate = widget.profile.roleType == UserRole.advokat;
+    final peerIsAdvocate = !amIAdvocate;
+
+    String peerFullName = widget.lawyer.fullName;
+    String peerAvatarB64 = widget.lawyer.avatarBase64;
+    String peerBirthDate = widget.lawyer.birthDate.trim();
+    String peerSpec = widget.lawyer.specialization.trim();
+    String peerLicense = widget.lawyer.licenseNumber.trim();
+    int peerExpYears = widget.lawyer.experienceYears;
+    String peerBio = widget.lawyer.bio.trim();
+
+    // Collect all documents/files/arizas exchanged in this chat (both sides)
+    final sharedDocs = <Map<String, dynamic>>[];
+    for (final m in _messages) {
+      final isMine = YanRoleDataCatalog.isSameParticipant(m.senderId, _myUserId);
+      final arizaMeta = _ArizaFileDeliveryMeta.tryParse(m.mediaMeta, m.text);
+      if (arizaMeta != null) {
+        sharedDocs.add(<String, dynamic>{
+          'kind': 'ariza',
+          'name': arizaMeta.fileName.isNotEmpty
+              ? arizaMeta.fileName
+              : 'Rasmiy ariza hujjati',
+          'typeLabel': 'Ariza',
+          'isMine': isMine,
+          'senderLabel': isMine ? 'Siz yuborgansiz' : '$peerFullName yuborgan',
+          'sentAt': m.sentAt,
+          'arizaMeta': arizaMeta,
+        });
+        continue;
+      }
+      final fileMeta = _parseChatFileMeta(m.mediaMeta);
+      if (fileMeta != null &&
+          (m.mediaType == _ChatMediaType.document ||
+              m.mediaType == _ChatMediaType.image ||
+              m.mediaType == _ChatMediaType.video)) {
+        final rawName = (fileMeta['name'] ?? 'Hujjat').trim();
+        final lower = rawName.toLowerCase();
+        String typeLabel = 'Hujjat';
+        if (lower.endsWith('.pdf')) {
+          typeLabel = 'PDF';
+        } else if (lower.endsWith('.docx') || lower.endsWith('.doc')) {
+          typeLabel = 'DOCX';
+        } else if (m.mediaType == _ChatMediaType.image ||
+            lower.endsWith('.jpg') ||
+            lower.endsWith('.jpeg') ||
+            lower.endsWith('.png')) {
+          typeLabel = 'Rasm';
+        } else if (m.mediaType == _ChatMediaType.video) {
+          typeLabel = 'Video';
+        }
+        sharedDocs.add(<String, dynamic>{
+          'kind': 'chat_file',
+          'name': rawName,
+          'typeLabel': typeLabel,
+          'isMine': isMine,
+          'senderLabel': isMine ? 'Siz yuborgansiz' : '$peerFullName yuborgan',
+          'sentAt': m.sentAt,
+          'fileMeta': fileMeta,
+        });
+      }
+    }
+    sharedDocs.sort(
+      (a, b) => (b['sentAt'] as DateTime).compareTo(a['sentAt'] as DateTime),
+    );
+
+    String fmtExactDate(DateTime dt) {
+      final l = dt.toLocal();
+      final dd = l.day.toString().padLeft(2, '0');
+      final mm = l.month.toString().padLeft(2, '0');
+      final hh = l.hour.toString().padLeft(2, '0');
+      final mi = l.minute.toString().padLeft(2, '0');
+      return '$dd.$mm.${l.year} • $hh:$mi';
+    }
+
+    // Live-fetch latest non-private profile fields (including birth_date) from Supabase
+    Future<Map<String, dynamic>> fetchPeerPublicInfo() async {
+      try {
+        final row = await Supabase.instance.client
+            .from('profiles')
+            .select('full_name, public_key, role')
+            .eq('id', _peerUserId)
+            .maybeSingle();
+        if (row != null) {
+          final dbName = (row['full_name']?.toString() ?? '').trim();
+          if (dbName.isNotEmpty) peerFullName = dbName;
+          final pubKey = row['public_key']?.toString();
+          if (pubKey != null &&
+              pubKey.contains(_YanE2eeCryptoEngine._envelopeSeparator)) {
+            final env = _YanE2eeCryptoEngine.decodeProfileEnvelope(pubKey);
+            final advMeta = env['advocate_profile'] is Map
+                ? Map<String, dynamic>.from(env['advocate_profile'] as Map)
+                : const <String, dynamic>{};
+            final bd = (advMeta['birth_date']?.toString() ?? '').trim();
+            final topBd = (env['birth_date']?.toString() ?? '').trim();
+            if (bd.isNotEmpty) {
+              peerBirthDate = bd;
+            } else if (topBd.isNotEmpty) {
+              peerBirthDate = topBd;
+            }
+            final av = (advMeta['avatar_base64']?.toString() ?? '').trim();
+            if (av.isNotEmpty) peerAvatarB64 = av;
+            if (peerIsAdvocate) {
+              final sp = (advMeta['specialization']?.toString() ?? '').trim();
+              if (sp.isNotEmpty) peerSpec = sp;
+              final lic = (advMeta['license_number']?.toString() ?? '').trim();
+              if (lic.isNotEmpty) peerLicense = lic;
+              final bio = (advMeta['bio']?.toString() ?? '').trim();
+              if (bio.isNotEmpty) peerBio = bio;
+              final expRaw = advMeta['experience_years'];
+              if (expRaw is num && expRaw.toInt() > 0) {
+                peerExpYears = expRaw.toInt();
+              }
+            }
+          }
+        }
+      } catch (_) {}
+      return <String, dynamic>{
+        'name': peerFullName,
+        'avatar': peerAvatarB64,
+        'birthDate': peerBirthDate,
+        'spec': peerSpec,
+        'license': peerLicense,
+        'exp': peerExpYears,
+        'bio': peerBio,
+      };
+    }
+
+    final futureInfo = fetchPeerPublicInfo();
+    String selectedFilter = 'all'; // 'all' | 'mine' | 'peer'
+
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final filteredDocs = sharedDocs.where((d) {
+              if (selectedFilter == 'mine') return d['isMine'] == true;
+              if (selectedFilter == 'peer') return d['isMine'] == false;
+              return true;
+            }).toList(growable: false);
+
+            return FutureBuilder<Map<String, dynamic>>(
+              future: futureInfo,
+              builder: (context, snap) {
+                final info = snap.data;
+                final displayName = (info?['name'] as String?) ?? peerFullName;
+                final avatarB64 = (info?['avatar'] as String?) ?? peerAvatarB64;
+                final birthDate = (info?['birthDate'] as String?) ?? peerBirthDate;
+                final spec = (info?['spec'] as String?) ?? peerSpec;
+                final license = (info?['license'] as String?) ?? peerLicense;
+                final expYears = (info?['exp'] as int?) ?? peerExpYears;
+                final bio = (info?['bio'] as String?) ?? peerBio;
+
+                return Container(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.88,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        const SizedBox(height: 10),
+                        Container(
+                          width: 42,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFCBD5E1),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+                          child: Row(
+                            children: <Widget>[
+                              Expanded(
+                                child: Text(
+                                  peerIsAdvocate
+                                      ? 'Advokat profili va hujjatlar'
+                                      : 'Mijoz profili va hujjatlar',
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                    color: YanColors.primaryNavy,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () => Navigator.pop(sheetCtx),
+                                icon: const Icon(
+                                  Icons.close_rounded,
+                                  color: YanColors.mutedText,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1, color: Color(0xFFE8EFF7)),
+                        Expanded(
+                          child: ListView(
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                            children: <Widget>[
+                              // Public Profile Summary (NO location, NO phone, NO passport/private data)
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF5F8FC),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: YanColors.border),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Row(
+                                      children: <Widget>[
+                                        _LawyerAvatarPortrait(
+                                          initials: widget.lawyer.initials,
+                                          avatarBase64: avatarB64,
+                                          avatarUrl: widget.lawyer.avatarUrl,
+                                          isOnline: _isPeerOnline && _isMyAppInForeground,
+                                          size: 58,
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: <Widget>[
+                                              Row(
+                                                children: <Widget>[
+                                                  Flexible(
+                                                    child: Text(
+                                                      displayName,
+                                                      style: const TextStyle(
+                                                        fontSize: 17,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        color: YanColors
+                                                            .primaryNavy,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 5),
+                                                  const Icon(
+                                                    Icons.verified_rounded,
+                                                    size: 17,
+                                                    color:
+                                                        YanColors.primaryBlue,
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 9,
+                                                  vertical: 3,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFEAF3FC),
+                                                  borderRadius:
+                                                      BorderRadius.circular(999),
+                                                ),
+                                                child: Text(
+                                                  peerIsAdvocate
+                                                      ? 'Rasmiy advokat'
+                                                      : 'Mijoz',
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w800,
+                                                    color:
+                                                        YanColors.primaryBlue,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 14),
+                                    const Divider(
+                                      height: 1,
+                                      color: Color(0xFFDCE6F2),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _DetailInfoRow(
+                                      label: 'Tug‘ilgan sana',
+                                      value: birthDate.isEmpty
+                                          ? 'Kiritilmagan'
+                                          : birthDate,
+                                    ),
+                                    if (peerIsAdvocate && spec.isNotEmpty)
+                                      _DetailInfoRow(
+                                        label: 'Mutaxassisligi',
+                                        value: spec,
+                                      ),
+                                    if (peerIsAdvocate && expYears > 0)
+                                      _DetailInfoRow(
+                                        label: 'Ish tajribasi',
+                                        value: '$expYears yil',
+                                      ),
+                                    if (peerIsAdvocate && license.isNotEmpty)
+                                      _DetailInfoRow(
+                                        label: 'Litsenziya raqami',
+                                        value: license,
+                                      ),
+                                    if (peerIsAdvocate && bio.isNotEmpty) ...<Widget>[
+                                      const SizedBox(height: 8),
+                                      const Text(
+                                        'Advokat haqida',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: YanColors.mutedText,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        bio,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: YanColors.primaryNavy,
+                                          height: 1.45,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+
+                              // Shared Documents Header + Filter Pills
+                              Row(
+                                children: <Widget>[
+                                  const Icon(
+                                    Icons.folder_copy_outlined,
+                                    size: 18,
+                                    color: YanColors.primaryBlue,
+                                  ),
+                                  const SizedBox(width: 7),
+                                  Expanded(
+                                    child: Text(
+                                      'Yuborilgan hujjatlar (${sharedDocs.length})',
+                                      style: const TextStyle(
+                                        fontSize: 15.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: YanColors.primaryNavy,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: <Widget>[
+                                    for (final entry in const <(String, String)>[
+                                      ('all', 'Barchasi'),
+                                      ('mine', 'Men yuborgan'),
+                                      ('peer', 'Suhbatdosh yuborgan'),
+                                    ])
+                                      Padding(
+                                        padding: const EdgeInsets.only(right: 8),
+                                        child: GestureDetector(
+                                          onTap: () => setSheetState(
+                                            () => selectedFilter = entry.$1,
+                                          ),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 13,
+                                              vertical: 7,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: selectedFilter == entry.$1
+                                                  ? YanColors.primaryBlue
+                                                  : const Color(0xFFF5F8FC),
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              border: Border.all(
+                                                color: selectedFilter == entry.$1
+                                                    ? YanColors.primaryBlue
+                                                    : YanColors.border,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              entry.$2,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: selectedFilter == entry.$1
+                                                    ? Colors.white
+                                                    : YanColors.primaryNavy,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+
+                              if (filteredDocs.isEmpty)
+                                Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: YanColors.border),
+                                  ),
+                                  child: const Text(
+                                    'Hozircha yuborilgan hujjatlar yo‘q.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: YanColors.mutedText,
+                                    ),
+                                  ),
+                                )
+                              else
+                                ...filteredDocs.map((doc) {
+                                  final sentAt = doc['sentAt'] as DateTime;
+                                  final isAriza = doc['kind'] == 'ariza';
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 9),
+                                    child: InkWell(
+                                      onTap: () {
+                                        Navigator.pop(sheetCtx);
+                                        if (isAriza) {
+                                          final am = doc['arizaMeta']
+                                              as _ArizaFileDeliveryMeta;
+                                          final accepted = am
+                                              .isEffectivelyAccepted(DateTime.now());
+                                          _openArizaFileInPhoneViewer(
+                                            am,
+                                            forceWatermarked: !accepted,
+                                          );
+                                        } else {
+                                          _openChatFile(
+                                            doc['fileMeta'] as Map<String, String>,
+                                          );
+                                        }
+                                      },
+                                      borderRadius: BorderRadius.circular(15),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(13),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius:
+                                              BorderRadius.circular(15),
+                                          border: Border.all(
+                                            color: YanColors.border,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: <Widget>[
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 6,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: isAriza
+                                                    ? const Color(0xFFECFDF5)
+                                                    : const Color(0xFFEAF3FC),
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                              child: Text(
+                                                doc['typeLabel'] as String,
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: isAriza
+                                                      ? const Color(0xFF059669)
+                                                      : YanColors.primaryBlue,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 11),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: <Widget>[
+                                                  Text(
+                                                    doc['name'] as String,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: const TextStyle(
+                                                      fontSize: 13.5,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color:
+                                                          YanColors.primaryNavy,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 3),
+                                                  Text(
+                                                    '${doc['senderLabel']} • ${fmtExactDate(sentAt)}',
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: const TextStyle(
+                                                      fontSize: 11.5,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color:
+                                                          YanColors.mutedText,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            const Icon(
+                                              Icons.open_in_new_rounded,
+                                              size: 17,
+                                              color: YanColors.primaryBlue,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _openCallOptionsSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -11500,11 +12051,11 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
 
   String get _peerPresenceSubtitle {
     if (_isPeerOnline && _isMyAppInForeground) {
-      return 'Onlayn (Ilovada)';
+      return 'Onlayn';
     }
     final h = _peerLastSeen.hour.toString().padLeft(2, '0');
     final m = _peerLastSeen.minute.toString().padLeft(2, '0');
-    return 'Oflayn • Oxirgi faollik: $h:$m';
+    return 'Oxirgi faollik: $h:$m';
   }
 
   /// Renders the `#ariza` card controls:
@@ -12127,75 +12678,63 @@ class _AdvocateClientChatPageState extends State<AdvocateClientChatPage>
                 ),
                 const SizedBox(width: 9),
               ],
-              GestureDetector(
-                onTap: () {
-                  _requestPeerHistorySync();
-                  _syncOfflineMessagesFromProfilesEnvelopes();
-                },
-                child: _LawyerAvatarPortrait(
-                  initials: widget.lawyer.initials,
-                avatarBase64: widget.lawyer.avatarBase64,
-                avatarUrl: widget.lawyer.avatarUrl,
-                  isOnline: _isPeerOnline && _isMyAppInForeground,
-                  size: 42,
-                ),
-              ),
-              const SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        Flexible(
-                          child: Text(
-                            widget.lawyer.fullName,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: YanColors.primaryNavy,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _openPeerProfileAndDocumentsSheet,
+                  child: Row(
+                    children: <Widget>[
+                      _LawyerAvatarPortrait(
+                        initials: widget.lawyer.initials,
+                        avatarBase64: widget.lawyer.avatarBase64,
+                        avatarUrl: widget.lawyer.avatarUrl,
+                        isOnline: _isPeerOnline && _isMyAppInForeground,
+                        size: 42,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Row(
+                              children: <Widget>[
+                                Flexible(
+                                  child: Text(
+                                    widget.lawyer.fullName,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                      color: YanColors.primaryNavy,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.verified_rounded,
+                                  size: 15,
+                                  color: YanColors.primaryBlue,
+                                ),
+                              ],
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.verified_rounded,
-                          size: 15,
-                          color: YanColors.primaryBlue,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: <Widget>[
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: (_isPeerOnline && _isMyAppInForeground)
-                                ? YanColors.successGreen
-                                : YanColors.subtleText,
-                          ),
-                        ),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: Text(
-                            _peerPresenceSubtitle,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: (_isPeerOnline && _isMyAppInForeground)
-                                  ? YanColors.successGreen
-                                  : YanColors.mutedText,
+                            const SizedBox(height: 2),
+                            Text(
+                              _peerPresenceSubtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: (_isPeerOnline && _isMyAppInForeground)
+                                    ? YanColors.successGreen
+                                    : YanColors.mutedText,
+                              ),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 6),
@@ -13846,23 +14385,49 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
   Future<void> _attachRemoteTrack(RTCTrackEvent event) async {
     if (_closed || !mounted) return;
     try {
+      event.track.enabled = true;
       if (event.track.kind == 'audio') {
-        event.track.enabled = true;
         await _applyAudioOutputRouting();
       }
+
       if (event.streams.isNotEmpty) {
         final remoteStream = event.streams.first;
         for (final audioTrack in remoteStream.getAudioTracks()) {
           audioTrack.enabled = true;
         }
+        for (final videoTrack in remoteStream.getVideoTracks()) {
+          videoTrack.enabled = true;
+        }
         _remoteStream = remoteStream;
-        _remoteRenderer.srcObject = remoteStream;
+      } else {
+        _remoteStream ??= await createLocalMediaStream('remote_stream_${widget.callId}');
+        final alreadyHas = _remoteStream!
+            .getTracks()
+            .any((t) => t.id == event.track.id);
+        if (!alreadyHas) {
+          await _remoteStream!.addTrack(event.track);
+        }
       }
+
+      // Force RTCVideoRenderer to rebind its surface texture when a video track
+      // is added mid-call to an existing audio-only MediaStream.
+      if (_remoteStream != null) {
+        if (event.track.kind == 'video') {
+          _remoteRenderer.srcObject = null;
+        }
+        _remoteRenderer.srcObject = _remoteStream;
+      }
+
       final hasVideo =
           event.track.kind == 'video' ||
-          (_remoteRenderer.srcObject?.getVideoTracks().isNotEmpty ?? false);
+          (_remoteStream?.getVideoTracks().isNotEmpty ?? false);
       if (mounted && !_closed) {
-        setState(() => _hasRemoteVideoTrack = hasVideo);
+        setState(() {
+          _hasRemoteVideoTrack = hasVideo;
+          if (event.track.kind == 'video') {
+            _isPeerVideoEnabled = true;
+          }
+        });
       }
     } catch (error) {
       debugPrint('Attaching remote call track failed: $error');
@@ -14271,22 +14836,44 @@ class _E2eeLiveCallScreenState extends State<_E2eeLiveCallScreen>
           );
           final videoTrack = camStream.getVideoTracks().firstOrNull;
           if (videoTrack != null) {
+            videoTrack.enabled = true;
             if (_localStream == null) {
               _localStream = camStream;
-              _localRenderer.srcObject = camStream;
             } else {
               await _localStream!.addTrack(videoTrack);
-              _localRenderer.srcObject = _localStream;
             }
+            _localRenderer.srcObject = null;
+            _localRenderer.srcObject = _localStream;
+
+            if (mounted && !_closed) {
+              setState(() => _isVideoEnabled = true);
+            }
+
             if (_peerConnection != null && _localStream != null) {
-              final senders = await _peerConnection!.getSenders();
-              final videoSender = senders
-                  .where((s) => s.track?.kind == 'video')
-                  .firstOrNull;
-              if (videoSender != null) {
-                await videoSender.replaceTrack(videoTrack);
-              } else {
-                await _peerConnection!.addTrack(videoTrack, _localStream!);
+              bool attachedViaTransceiver = false;
+              try {
+                final transceivers = await _peerConnection!.getTransceivers();
+                for (final t in transceivers) {
+                  if (t.receiver.track?.kind == 'video' ||
+                      t.sender.track?.kind == 'video') {
+                    await t.setDirection(TransceiverDirection.SendRecv);
+                    await t.sender.replaceTrack(videoTrack);
+                    attachedViaTransceiver = true;
+                    break;
+                  }
+                }
+              } catch (_) {}
+
+              if (!attachedViaTransceiver) {
+                final senders = await _peerConnection!.getSenders();
+                final videoSender = senders
+                    .where((s) => s.track?.kind == 'video')
+                    .firstOrNull;
+                if (videoSender != null) {
+                  await videoSender.replaceTrack(videoTrack);
+                } else {
+                  await _peerConnection!.addTrack(videoTrack, _localStream!);
+                }
               }
               _webrtcOfferSent = false;
               await _startCallerWebRtcOffer();
@@ -17976,6 +18563,7 @@ Future<void> syncCurrentUserProfileToSupabase(UserProfileData p) async {
       'district': p.district.trim(),
       'street_address': p.streetAddress.trim(),
       'passport_or_pinfl': p.passportOrPinfl.trim(),
+      'birth_date': p.birthDate.trim(),
       'specialization': p.lawyerSpecialization.trim(),
       'license_number': p.lawyerLicenseNumber.trim(),
       'experience_years': p.lawyerExperienceYears > 0
@@ -17984,6 +18572,9 @@ Future<void> syncCurrentUserProfileToSupabase(UserProfileData p) async {
       'bio': p.lawyerBio.trim(),
       if (avatarB64.isNotEmpty) 'avatar_base64': avatarB64,
     };
+    if (p.birthDate.trim().isNotEmpty) {
+      env['birth_date'] = p.birthDate.trim();
+    }
     final newPubKey = _YanE2eeCryptoEngine.encodeProfileEnvelope(
       existingPubKey,
       env,
@@ -18104,6 +18695,7 @@ Future<List<LawyerDirectoryProfile>> fetchRegisteredLawyersFromSupabase() async 
                 'bio',
                 'avatar_base64',
                 'avatar_url',
+                'birth_date',
               ]) {
                 final val = (advMeta[k]?.toString() ?? '').trim();
                 if (val.isNotEmpty) {

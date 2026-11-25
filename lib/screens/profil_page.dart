@@ -119,6 +119,7 @@ class _ProfilPageState extends State<ProfilPage> {
     final phoneCtrl = TextEditingController(text: profile.phone);
     final emailCtrl = TextEditingController(text: profile.email);
     String selectedRegion = profile.region.trim();
+    String selectedBirthDate = profile.birthDate.trim();
     final districtCtrl = TextEditingController(text: profile.district);
     final streetCtrl = TextEditingController(text: profile.streetAddress);
     final pinflCtrl = TextEditingController(
@@ -447,6 +448,96 @@ class _ProfilPageState extends State<ProfilPage> {
                         const SizedBox(height: 12),
                       ],
                       const SizedBox(height: 9),
+                      const Text(
+                        'Tug‘ilgan sana',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: YanColors.primaryNavy,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      GestureDetector(
+                        onTap: () async {
+                          DateTime initial = DateTime(1995, 1, 1);
+                          final parts = selectedBirthDate.split('.');
+                          if (parts.length == 3) {
+                            final d = int.tryParse(parts[0]);
+                            final m = int.tryParse(parts[1]);
+                            final y = int.tryParse(parts[2]);
+                            if (d != null && m != null && y != null && y >= 1930) {
+                              initial = DateTime(y, m, d);
+                            }
+                          }
+                          final picked = await showDatePicker(
+                            context: sheetContext,
+                            initialDate: initial,
+                            firstDate: DateTime(1930),
+                            lastDate: DateTime.now(),
+                            builder: (ctx, child) => Theme(
+                              data: Theme.of(ctx).copyWith(
+                                colorScheme: const ColorScheme.light(
+                                  primary: Color(0xFF1677D2),
+                                  onPrimary: Colors.white,
+                                  surface: Colors.white,
+                                  onSurface: Color(0xFF102B50),
+                                ),
+                              ),
+                              child: child!,
+                            ),
+                          );
+                          if (picked != null) {
+                            final dd = picked.day.toString().padLeft(2, '0');
+                            final mm = picked.month.toString().padLeft(2, '0');
+                            setModalState(
+                              () => selectedBirthDate = '$dd.$mm.${picked.year}',
+                            );
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 13,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: YanColors.border),
+                          ),
+                          child: Row(
+                            children: <Widget>[
+                              const Icon(
+                                Icons.cake_outlined,
+                                size: 18,
+                                color: Color(0xFF1677D2),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  selectedBirthDate.isEmpty
+                                      ? 'Sanani tanlang (KK.OO.YYYY)'
+                                      : selectedBirthDate,
+                                  style: TextStyle(
+                                    fontSize: 13.8,
+                                    fontWeight: selectedBirthDate.isEmpty
+                                        ? FontWeight.w500
+                                        : FontWeight.w700,
+                                    color: selectedBirthDate.isEmpty
+                                        ? YanColors.mutedText
+                                        : YanColors.primaryNavy,
+                                  ),
+                                ),
+                              ),
+                              const Icon(
+                                Icons.calendar_today_outlined,
+                                size: 16,
+                                color: YanColors.mutedText,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 9),
                       _ProfileInputField(
                         label: 'Pasport seriya va raqami / JSHSHIR',
                         controller: pinflCtrl,
@@ -495,6 +586,7 @@ class _ProfilPageState extends State<ProfilPage> {
                                   district: districtCtrl.text.trim(),
                                   streetAddress: streetCtrl.text.trim(),
                                   passportOrPinfl: pinflCtrl.text.trim(),
+                                  birthDate: selectedBirthDate,
                                   lawyerSpecialization: isAdvocate
                                       ? selectedSpecs.join(', ')
                                       : profile.lawyerSpecialization,
@@ -677,47 +769,6 @@ class _ProfilPageState extends State<ProfilPage> {
                           ),
                           const SizedBox(height: 18),
 
-                          // 4. Faol Rol va Kabinet Rejimi (4-Role Switcher)
-                          const _SectionHeaderRow(
-                            title: 'Faol rol va kabinet rejimi',
-                            badgeText: '4 xil profil',
-                            icon: CupertinoIcons.person_2_square_stack_fill,
-                          ),
-                          const SizedBox(height: 10),
-                          LiquidGlassWindow(
-                            padding: const EdgeInsets.all(15),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Text(
-                                  profile.subscriptionStatusLabel,
-                                  style: const TextStyle(
-                                    color: YanColors.mutedText,
-                                    fontSize: 12.4,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: UserRole.values.map((role) {
-                                    final selected = profile.roleType == role;
-                                    return LiquidActionButton(
-                                      label: role.label,
-                                      icon: role.icon,
-                                      isPrimary: selected,
-                                      compact: true,
-                                      onPressed: () =>
-                                          userProfile.switchRole(role),
-                                    );
-                                  }).toList(),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-
                           // 5. Mening xizmatlarim va xavfsizlik
                           const _SectionHeaderRow(
                             title: 'Mening xizmatlarim va kabinetim',
@@ -729,41 +780,43 @@ class _ProfilPageState extends State<ProfilPage> {
                             padding: const EdgeInsets.all(15),
                             child: Column(
                               children: <Widget>[
-                                Row(
-                                  children: <Widget>[
-                                    Expanded(
-                                      child: LiquidActionButton(
-                                        label: 'Ariza yozdirish',
-                                        icon: CupertinoIcons.doc_text_fill,
-                                        isPrimary: false,
-                                        onPressed: () {
-                                          Navigator.of(context).push(
-                                            MaterialPageRoute<void>(
-                                              builder: (_) =>
-                                                  const LawyerDraftRequestPage(),
-                                            ),
-                                          );
-                                        },
+                                if (!isAdvocate) ...<Widget>[
+                                  Row(
+                                    children: <Widget>[
+                                      Expanded(
+                                        child: LiquidActionButton(
+                                          label: 'Ariza yozdirish',
+                                          icon: CupertinoIcons.doc_text_fill,
+                                          isPrimary: false,
+                                          onPressed: () {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute<void>(
+                                                builder: (_) =>
+                                                    const LawyerDraftRequestPage(),
+                                              ),
+                                            );
+                                          },
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: LiquidActionButton(
-                                        label: 'Advokat yollash',
-                                        icon: CupertinoIcons.briefcase_fill,
-                                        onPressed: () {
-                                          Navigator.of(context).push(
-                                            MaterialPageRoute<void>(
-                                              builder: (_) =>
-                                                  const AdvokatYollashPage(),
-                                            ),
-                                          );
-                                        },
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: LiquidActionButton(
+                                          label: 'Advokat yollash',
+                                          icon: CupertinoIcons.briefcase_fill,
+                                          onPressed: () {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute<void>(
+                                                builder: (_) =>
+                                                    const AdvokatYollashPage(),
+                                              ),
+                                            );
+                                          },
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                ],
                                 Row(
                                   children: <Widget>[
                                     Expanded(
@@ -1937,6 +1990,22 @@ class _CredentialsDetailCardState extends State<_CredentialsDetailCard> {
             value: contactText,
             onCopy: cleanPhone.isNotEmpty
                 ? () => widget.onCopy('Telefon', cleanPhone)
+                : widget.onEditTap,
+          ),
+          const Divider(height: 18, color: Color(0xFFEFF4FA)),
+          _CredentialTile(
+            icon: Icons.cake_rounded,
+            iconBg: const Color(0xFFEAF3FC),
+            iconColor: const Color(0xFF1677D2),
+            label: 'Tug‘ilgan sana',
+            value: widget.profile.birthDate.trim().isEmpty
+                ? 'Kiritilmagan — qo‘shish uchun bosing'
+                : widget.profile.birthDate.trim(),
+            onCopy: widget.profile.birthDate.trim().isNotEmpty
+                ? () => widget.onCopy(
+                      'Tug‘ilgan sana',
+                      widget.profile.birthDate.trim(),
+                    )
                 : widget.onEditTap,
           ),
           const Divider(height: 18, color: Color(0xFFEFF4FA)),
