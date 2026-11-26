@@ -46,3 +46,16 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# --- YAN360 Security: Never commit signing keys or push secrets ---
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+*.jks
+*.keystore
+android/key.properties
+ios/Runner/GoogleService-Info.plist
+android/app/google-services.json
+.env
+.env.*
